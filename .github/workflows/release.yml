@@ -1,0 +1,427 @@
+---
+# yaml-language-server: $schema=https://www.schemastore.org/github-workflow.json
+name: Release
+
+# Self-contained GHCR release train. On merge to main:
+#   bump-version — semver bump + tag derived from PR labels
+#                  (major/minor/patch/dont-release, created by labels.sh)
+#   binary       — goreleaser: archives + checksums + SBOMs + the GitHub Release
+#   image        — multi-arch image via bake, cosign-signed
+#   chart        — Helm chart at the tag-derived version, cosign-signed
+#   *-slsa       — SLSA provenance for image and chart
+#
+# Versions are lockstep: binary, image, and chart all carry the tag cut
+# by bump-version (the chart strips the leading v). Chart.yaml keeps a
+# 0.0.0-dev placeholder — `helm package --version/--app-version` stamps
+# the real version at publish time. A PR labeled `dont-release`
+# produces no tag, so nothing publishes.
+#
+# Also dispatchable for ad-hoc republishes: supply the tag; every job
+# is idempotent (existing GitHub release / chart version short-circuit,
+# the image push is a same-content overwrite).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to republish (e.g. v1.8.2). Binary, image, and chart versions all derive from it.'
+        type: string
+        required: false
+        default: ''
+      dry_run:
+        description: 'Package but do not push.'
+        type: boolean
+        required: false
+        default: false
+
+# contents: write — bump-version pushes the release tag.
+# actions: read — required by the nested SLSA generator jobs.
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+  issues: read
+  pull-requests: read
+  actions: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_REPO: ${{ github.repository }}
+  CHART_NAMESPACE: ${{ github.repository_owner }}/charts
+  CHART_NAME: ${{ github.event.repository.name }}
+
+jobs:
+  bump-version:
+    name: Bump Version
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    outputs:
+      tag: ${{ steps.bump.outputs.version }}
+      skipped: ${{ steps.bump.outputs.skipped }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: jefflinse/pr-semver-bump@v1.7.4
+        id: bump
+        name: Bump and Tag Version
+        with:
+          mode: bump
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          require-release-notes: false
+          major-label: major
+          minor-label: minor
+          patch-label: patch
+          noop-labels: "dont-release"
+          release-notes-prefix: "### RELEASE NOTES"
+          with-v: true
+
+  binary:
+    name: Release binary
+    runs-on: ubuntu-latest
+    needs: bump-version
+    if: >-
+      !cancelled() &&
+      needs.bump-version.result != 'failure' &&
+      ((github.event_name == 'workflow_dispatch' && inputs.tag != '') ||
+       (github.event_name == 'push' && needs.bump-version.outputs.skipped != 'true' &&
+        needs.bump-version.outputs.tag != ''))
+    env:
+      TAG: ${{ inputs.tag || needs.bump-version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      # goreleaser shells out to syft for the archive SBOMs.
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
+
+      # Idempotency: a dispatch republish of a tag whose GitHub release
+      # already exists skips goreleaser instead of failing on it.
+      - name: Check for existing release
+        id: exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release $TAG already exists, skipping."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run GoReleaser
+        if: steps.exists.outputs.exists != 'true' && inputs.dry_run != true
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  image:
+    name: Publish image
+    runs-on: ubuntu-latest
+    needs: bump-version
+    # Runs when a tag is available from either path: the dispatch input,
+    # or a non-skipped bump on push. !cancelled() lifts the implicit
+    # success() gate so the dispatch path survives bump-version skipping.
+    if: >-
+      !cancelled() &&
+      needs.bump-version.result != 'failure' &&
+      ((github.event_name == 'workflow_dispatch' && inputs.tag != '') ||
+       (github.event_name == 'push' && needs.bump-version.outputs.skipped != 'true' &&
+        needs.bump-version.outputs.tag != ''))
+    env:
+      TAG: ${{ inputs.tag || needs.bump-version.outputs.tag }}
+    outputs:
+      # digest/published are written by the Capture-image-digest step
+      # (id: digest), NOT the bake step — bake only outputs metadata.
+      digest: ${{ steps.digest.outputs.digest }}
+      published: ${{ steps.digest.outputs.published }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ env.TAG }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ env.TAG }}
+            type=raw,value=latest
+
+      # COMMIT from the checked-out tag (github.sha is the trigger
+      # commit, which differs on dispatch republishes of older tags).
+      - name: Resolve build metadata
+        run: |
+          echo "COMMIT_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+          echo "BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+
+      # env feeds the bake variables (VERSION/COMMIT/DATE), which
+      # _common forwards as build args — without this every released
+      # binary reports the 0.0.0-dev defaults.
+      - name: Build and push image
+        id: bake
+        if: inputs.dry_run != true
+        uses: docker/bake-action@v7
+        env:
+          VERSION: ${{ env.TAG }}
+          COMMIT: ${{ env.COMMIT_SHA }}
+          DATE: ${{ env.BUILD_DATE }}
+        with:
+          targets: release
+          source: .
+          files: |
+            docker-bake.hcl
+            ${{ steps.meta.outputs.bake-file-tags }}
+            ${{ steps.meta.outputs.bake-file-labels }}
+          set: |-
+            *.cache-from=type=gha
+            *.cache-to=type=gha,mode=max
+
+      - name: Capture image digest
+        id: digest
+        if: steps.bake.conclusion == 'success' && inputs.dry_run != true
+        # fromJSON runs in the expression layer, so only the 71-char
+        # digest ever reaches the process environment. Two prior shapes
+        # both broke a release:
+        #   - inlining ${{ steps.bake.outputs.metadata }} into the
+        #     run: script; a paren in the JSON broke shell quoting.
+        #   - passing the whole blob through env:. mode=max provenance
+        #     embeds the push event payload, which can carry the
+        #     squash-merge commit message once per build platform; the
+        #     metadata blob can exceed execve's 131,072-byte limit
+        #     ("Argument list too long"), so bash never starts and the
+        #     image publishes unsigned.
+        # Keep the value in env: rather than inlining it — the shell must
+        # never parse registry-derived text — but extract it first.
+        env:
+          DIGEST: ${{ fromJSON(steps.bake.outputs.metadata).release['containerimage.digest'] }}
+        run: |
+          if [ -z "${DIGEST}" ] || [ "${DIGEST}" = "null" ]; then
+            echo "ERROR: failed to capture image digest from bake metadata"
+            exit 1
+          fi
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "published=true" >> "$GITHUB_OUTPUT"
+
+      - name: Sign image with cosign
+        if: steps.digest.outputs.published == 'true'
+        run: |
+          cosign sign --yes \
+            "${REGISTRY}/${IMAGE_REPO}@${{ steps.digest.outputs.digest }}"
+
+      - name: Write image summary
+        if: always()
+        run: |
+          {
+            echo "## GHCR Image Publish"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Image | \`${REGISTRY}/${IMAGE_REPO}\` |"
+            echo "| Tag | \`${TAG}\` |"
+            echo "| Pushed | \`${{ steps.digest.outputs.published || 'false' }}\` |"
+            if [ -n "${{ steps.digest.outputs.digest }}" ]; then
+              echo "| Digest | \`${{ steps.digest.outputs.digest }}\` |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  image-slsa:
+    name: SLSA provenance (image)
+    needs: image
+    if: needs.image.outputs.published == 'true'
+    permissions:
+      id-token: write
+      packages: write
+      contents: read
+      actions: read
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
+    with:
+      # env context is not available in reusable-workflow inputs — derive
+      # the image ref from the github context directly.
+      image: ghcr.io/${{ github.repository }}
+      digest: ${{ needs.image.outputs.digest }}
+      registry-username: ${{ github.actor }}
+    secrets:
+      registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+  chart:
+    name: Publish chart
+    runs-on: ubuntu-latest
+    needs: bump-version
+    # Lockstep: the chart version derives from the release tag, so
+    # without a tag there is nothing to publish. The idempotency
+    # precheck keeps re-runs and dispatch republishes no-ops.
+    if: >-
+      !cancelled() &&
+      needs.bump-version.result != 'failure' &&
+      ((github.event_name == 'workflow_dispatch' && inputs.tag != '') ||
+       (github.event_name == 'push' && needs.bump-version.outputs.skipped != 'true' &&
+        needs.bump-version.outputs.tag != ''))
+    env:
+      TAG: ${{ inputs.tag || needs.bump-version.outputs.tag }}
+    outputs:
+      chart_version: ${{ steps.version.outputs.chart_version }}
+      digest: ${{ steps.push.outputs.digest }}
+      published: ${{ steps.push.outputs.published }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0
+
+      - uses: azure/setup-helm@v5
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+
+      - name: Login to GHCR (docker config — for cosign and helm)
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve chart directory
+        run: |
+          chart_dir=$(echo charts/*/)
+          chart_dir="${chart_dir%/}"
+          echo "CHART_DIR=${chart_dir}" >> "$GITHUB_ENV"
+
+      - uses: orhun/git-cliff-action@v4
+        with:
+          config: ${{ env.CHART_DIR }}/cliff.toml
+          args: --include-path "charts/**" --output ${{ env.CHART_DIR }}/CHANGELOG.md
+        env:
+          OUTPUT: ${{ env.CHART_DIR }}/CHANGELOG.md
+
+      # Lockstep version: chart version = the tag without its leading v,
+      # appVersion = the tag. Chart.yaml keeps its 0.0.0-dev placeholder
+      # — helm package stamps the real versions below.
+      - name: Derive chart version
+        id: version
+        run: |
+          chart_version="${TAG#v}"
+          echo "chart_version=${chart_version}" >> "$GITHUB_OUTPUT"
+          echo "Chart version: ${chart_version}"
+
+      - name: Check if version already published
+        id: idempotency
+        run: |
+          if helm pull \
+              "oci://${REGISTRY}/${CHART_NAMESPACE}/${CHART_NAME}" \
+              --version "${{ steps.version.outputs.chart_version }}" \
+              --destination /tmp 2>/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Chart ${{ steps.version.outputs.chart_version }} already published, skipping."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Helm registry login
+        if: steps.idempotency.outputs.exists != 'true'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | \
+            helm registry login "${REGISTRY}" \
+              --username "${{ github.actor }}" \
+              --password-stdin
+
+      - name: Package chart
+        if: steps.idempotency.outputs.exists != 'true'
+        run: |
+          helm package "${CHART_DIR}" \
+            --version "${{ steps.version.outputs.chart_version }}" \
+            --app-version "${TAG}"
+
+      - name: Upload chart artifact (dispatch only)
+        if: |
+          steps.idempotency.outputs.exists != 'true' &&
+          github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: chart-${{ steps.version.outputs.chart_version }}-ghcr
+          path: ${{ env.CHART_NAME }}-${{ steps.version.outputs.chart_version }}.tgz
+          retention-days: 14
+
+      - name: Push chart
+        id: push
+        if: |
+          steps.idempotency.outputs.exists != 'true' &&
+          inputs.dry_run != true
+        run: |
+          tgz="${CHART_NAME}-${{ steps.version.outputs.chart_version }}.tgz"
+          helm push "${tgz}" "oci://${REGISTRY}/${CHART_NAMESPACE}" 2>&1 | tee /tmp/push.log
+          digest=$(grep -oE 'sha256:[a-f0-9]{64}' /tmp/push.log | head -1)
+          if [ -z "${digest}" ]; then
+            echo "ERROR: failed to capture digest from helm push output"
+            exit 1
+          fi
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+          echo "published=true" >> "$GITHUB_OUTPUT"
+
+      - name: Sign chart with cosign
+        if: steps.push.outputs.published == 'true'
+        run: |
+          cosign sign --yes \
+            "${REGISTRY}/${CHART_NAMESPACE}/${CHART_NAME}@${{ steps.push.outputs.digest }}"
+
+      - name: Write chart summary
+        if: always()
+        run: |
+          {
+            echo "## GHCR Chart Publish"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Chart | \`${CHART_NAME}\` |"
+            echo "| Version | \`${{ steps.version.outputs.chart_version }}\` |"
+            echo "| Already published | \`${{ steps.idempotency.outputs.exists }}\` |"
+            echo "| Pushed | \`${{ steps.push.outputs.published || 'false' }}\` |"
+            if [ -n "${{ steps.push.outputs.digest }}" ]; then
+              ver="${{ steps.version.outputs.chart_version }}"
+              uri="oci://${REGISTRY}/${CHART_NAMESPACE}/${CHART_NAME}:${ver}"
+              echo "| Digest | \`${{ steps.push.outputs.digest }}\` |"
+              echo "| OCI URL | \`${uri}\` |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  chart-slsa:
+    name: SLSA provenance (chart)
+    needs: chart
+    if: needs.chart.outputs.published == 'true'
+    permissions:
+      id-token: write
+      packages: write
+      contents: read
+      actions: read
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
+    with:
+      image: ghcr.io/${{ github.repository_owner }}/charts/${{ github.event.repository.name }}
+      digest: ${{ needs.chart.outputs.digest }}
+      registry-username: ${{ github.actor }}
+    secrets:
+      registry-password: ${{ secrets.GITHUB_TOKEN }}

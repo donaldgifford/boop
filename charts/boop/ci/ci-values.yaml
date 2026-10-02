@@ -1,0 +1,16 @@
+---
+# Values for chart-testing (`ct install`) and the local k3d loop. The
+# real image may not be published yet when CI installs the chart, so run
+# a busybox stand-in and disable the HTTP probes.
+image:
+  repository: busybox
+  tag: latest
+
+command:
+  - sleep
+  - "900"
+
+livenessProbe: null
+readinessProbe: null
+
+resources: {}

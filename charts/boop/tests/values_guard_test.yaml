@@ -1,0 +1,58 @@
+---
+suite: env collision guard
+# `extraEnv`, `configMap.data`, and `secrets.stringData` may not
+# redeclare a chart-managed env var — explicit `env` beats `envFrom`,
+# so the operator's value would be silently shadowed at runtime. The
+# guard fails the render with the offender list instead.
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: fails when extraEnv shadows a chart-managed env var
+    set:
+      extraEnv:
+        - name: LISTEN_ADDR
+          value: ":9999"
+    asserts:
+      - failedTemplate:
+          errorPattern: "chart-managed env vars are shadowed: extraEnv\\[LISTEN_ADDR\\]"
+
+  - it: fails when configMap.data shadows a chart-managed env var
+    set:
+      configMap.data:
+        METRICS_ADDR: ":1"
+    asserts:
+      - failedTemplate:
+          errorPattern: "configMap.data\\[METRICS_ADDR\\]"
+
+  - it: fails when secrets.stringData shadows a chart-managed env var
+    set:
+      secrets.stringData:
+        LOG_LEVEL: debug
+    asserts:
+      - failedTemplate:
+          errorPattern: "secrets.stringData\\[LOG_LEVEL\\]"
+
+  - it: reports multiple offenders in one failure
+    set:
+      extraEnv:
+        - name: LISTEN_ADDR
+          value: ":9999"
+      configMap.data:
+        LOG_LEVEL: debug
+    asserts:
+      - failedTemplate:
+          errorPattern: "extraEnv\\[LISTEN_ADDR\\], configMap.data\\[LOG_LEVEL\\]"
+
+  - it: renders cleanly with non-colliding extras
+    set:
+      extraEnv:
+        - name: FEATURE_FLAG
+          value: "on"
+      configMap.data:
+        APP_MODE: standard
+      secrets.stringData:
+        API_TOKEN: hunter2
+    asserts:
+      - notFailedTemplate: {}
+      - isKind:
+          of: Deployment
