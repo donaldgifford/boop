@@ -100,6 +100,8 @@ body is written on the **a** option of each question.
 - Autoscaling workers. The spike runs a fixed replica count. Budget
   discovery and admission *are* in scope. The scaling mechanism (KEDA
   trigger, Deployment or Job per run) is a fast follow (ADR-0008, OQ9).
+- OpenBao, or any external holder of the App key. The spike mounts the key
+  in the `worker` and `runner` containers behind a `Minter` seam (OQ11).
 - GitHub Enterprise Server. The endpoint handling stays correct per
   renovate-operator INV-0004, but GHES is not tested.
 
@@ -190,7 +192,7 @@ One binary, `boopd`, with a role subcommand. The spike ships three roles
 | ------- | -------- | ------ |
 | `cmd/boopd` | flag parsing, role dispatch, signal handling | new (replaces `cmd/boop`) |
 | `internal/config` | config file types, loading, validation | new |
-| `internal/platform` | GitHub client: discovery, config probe, scoped token minting, App-level (JWT) client for installations | copied (renovate-operator) + additions |
+| `internal/platform` | GitHub client: discovery, config probe, App-level (JWT) client for installations; `Minter` interface (scoped mint, revoke) with the in-memory key implementation | copied (renovate-operator) + additions |
 | `internal/temporal` | client config, mTLS/OIDC, dial, worker options, versioning, `EnsureSchedule`, `DescribeBacklog` | copied (repo-guardian) |
 | `internal/runner` | the runner/executor protocol over a unix socket: client (runner side) and server (exec side) | new |
 | `internal/renovate` | process builder (env, `RENOVATE_CONFIG`), process supervisor, report parser, log scanner | new |
@@ -217,9 +219,11 @@ with its own filesystem and PID namespace. The `renovate` container runs
 socket on an `emptyDir` the two containers share:
 
 - The runner receives the activity task, mints a token scoped to the run's
-  repository (OQ2), and sends `{RunInput, token, redis URL}` to the executor
-  over the socket. The executor keeps them in memory and in the Renovate
-  process's environment only; nothing is written to disk.
+  repository (OQ2) through the `Minter` seam (OQ11), and sends
+  `{RunInput, token, redis URL}` to the executor over the socket. The
+  executor keeps them in memory and in the Renovate process's environment
+  only; nothing is written to disk. When the run ends the runner revokes
+  the token, so it is live for the run's length, not for the hour.
 - The executor streams `{log line | progress | result}` events back. The
   runner forwards logs, heartbeats progress, and reports the result to
   Temporal. A forged event from a malicious child can only misreport the
@@ -238,10 +242,11 @@ socket on an `emptyDir` the two containers share:
   and the Temporal UI stays readable. The token is minted at activity
   start, so none of its hour is spent in the queue.
 
-What remains in the Renovate container's reach is the run's own scoped,
-one-hour token and the Redis URL, both in Renovate's environment because
-Renovate needs them. That is the residual risk INV-0001 Observation 4
-accepted, narrowed by scoping (OQ2) and by Redis ACLs (OQ7).
+What remains in the Renovate container's reach is the run's own scoped
+token, live until the run ends, and the Redis URL, both in Renovate's
+environment because Renovate needs them. That is the residual risk INV-0001
+Observation 4 accepted, narrowed by scoping and revocation (OQ2) and by
+Redis ACLs (OQ7).
 
 A separate queue also keeps a later scaler pointed at Renovate runs alone
 (ADR-0008) and keeps the large image off the workflow pods.
@@ -539,7 +544,8 @@ flowchart TD
     H -- "soft deadline, cancel, shutdown" --> I["send cancel"]
     H -- result --> K["GET /rate_limit as RateAfter"]
     I --> K
-    K --> M["classify into RunResult"]
+    K --> L["DELETE /installation/token"]
+    L --> M["classify into RunResult"]
   end
   subgraph EX["renovate container: boopd exec, PID 1, no credentials at rest"]
     E1["workspace under /work, mode 0700"] --> E2["BuildEnv from an empty environment"]
@@ -627,7 +633,8 @@ type RateReadings map[string]RateReading // "core", "graphql"
 
 Steps, runner side:
 
-1. **Mint the token** with the App key held by the runner, scoped with
+1. **Mint the token** through the `Minter` (OQ11; in the spike, the App
+   key read into the runner's memory at start), scoped with
    `repository_ids` to the run's repository and the shared-preset repository
    (OQ2). The mint returns `expiresAt`, one hour out. An auth failure here is
    an infrastructure error. Do not assume a token length: GitHub is rolling
@@ -646,7 +653,11 @@ Steps, runner side:
    workflow treats it as `TimedOut` with the last heartbeat's progress
    (§ RepoWorkflow step 3), so an overrun costs nothing but the lease.
 6. **Rate reading** again (`RateAfter`).
-7. **Classify** the executor's result (table below).
+7. **Revoke the token** with `DELETE /installation/token`. GitHub fixes
+   installation tokens at one hour and offers no shorter lifetime, so
+   revocation is the only way to end one early. A failure here is logged
+   and counted, not an error; the token then expires on its own.
+8. **Classify** the executor's result (table below).
 
 Steps, executor side, for one run:
 
@@ -859,7 +870,8 @@ same version.
   - `boopd_renovate_desired_workers`: the sum of `boopd_budget_admitted_runs`
     over installations, published as one series because that is the shape a
     scaler reads (ADR-0008);
-  - `boopd_token_mints_total{role,outcome}`;
+  - `boopd_token_mints_total{role,outcome}` and
+    `boopd_token_revocations_total{outcome}`;
   - `boopd_worker_ready_seconds` (process start to first poll). Pod creation
     time is not visible to the process; the spike takes it from
     kube-state-metrics (`kube_pod_start_time`, container readiness).
@@ -938,7 +950,7 @@ There is no persistent store in the spike. All state is in Temporal:
 | Report parser / log scanner | real Renovate 44 report and log fixtures: tuples with manager recovered from `packageFiles`, problems, progress events live and dry-run, `Repository finished` fields | golden files |
 | Executor | process-group kill, cancel handling, cleanup, the kill sweep, the no-report classifications | a fake `renovate` shell script that sleeps, writes to the workspace, forks a daemon, ignores `SIGTERM`, exits with chosen codes |
 | Runner/executor protocol | run, stream, cancel, result; executor restart mid-run is an infrastructure error; one connection at a time; socket directory permissions | unit, socket in a temp dir |
-| Platform additions | `Repository.ID`/`NodeID`, `ListInstallations`, GraphQL probe batching and its REST fallback, scoped minting, limiter from the discovered limit | `httptest` servers, as in the copied tests |
+| Platform additions | `Repository.ID`/`NodeID`, `ListInstallations`, GraphQL probe batching and its REST fallback, scoped minting and revocation behind `Minter`, limiter from the discovered limit | `httptest` servers, as in the copied tests |
 | Workflows | due-time, recheck, absence → `CheckRepo` → end or continue, the full convergence table, `ScheduleToStart` release and re-acquire, heartbeat-timeout progress, ContinueAsNew carry; budget admission against the tightest resource, `retryAt`, limit changes between readings, lease close with and without readings | Temporal `testsuite` with mocked activities |
 | Determinism | workflow code changes | replay tests against recorded histories in CI |
 | Chart | the `renovate` container mounts no Secret and no service account token; `shareProcessNamespace` is false | helm-unittest |
@@ -956,6 +968,8 @@ Spike criteria added by this design:
   under 5% of the installation's hourly `graphql` limit.
 - **Scoped token.** A run whose token is scoped to its repository and the
   preset repository completes with the shared preset applied (OQ2).
+- **Token revoked.** A request made with the run's token after `RunResult`
+  is returned gets `401`.
 
 Fixtures for the isolation criteria:
 
@@ -1034,7 +1048,8 @@ worker and receive other runs' inputs.
 ### OQ2: What scope does the per-run token have?
 
 GitHub lets the mint call restrict a token with `repository_ids` (up to 500)
-and `permissions`.
+and `permissions`. Lifetime is fixed at one hour; the runner revokes the
+token when the run ends whichever option is chosen.
 
 - **a (recommended): scope to the run's repository plus the shared-preset
   repository.** A leaked token reaches one repository and a presets repo.
@@ -1168,6 +1183,34 @@ All of these are starting points for the spike to adjust.
 - **b: shorter runs** (`StartToClose` 30 min, rerun cap 8) so that a slow
   repository converges in more, smaller steps and holds a worker for less
   time at once.
+- **other:**
+
+### OQ11: Where does the App private key live?
+
+Today the key is a Kubernetes Secret mounted in the `worker` and `runner`
+containers. OpenBao could hold it instead and sign the App JWT without
+releasing it (Transit engine, RS256), with the mint and `repository_ids`
+scoping staying in `boopd`; the copied ghinstallation library already takes
+a custom signer. That does not change the pod shape: whatever credential
+talks to OpenBao must live outside the Renovate container, or a child could
+mint for the whole installation. It also cannot shorten tokens, which
+GitHub fixes at one hour; only revocation does that, and the runner does
+it itself.
+
+- **a (recommended): a `Minter` seam now, local key in the spike, OpenBao
+  Transit as a fast follow.** The interface is `Mint(ctx, installationID,
+  repoIDs) (token, expiresAt)` and `Revoke(ctx, token)`. The spike reads the
+  key into memory at start. OpenBao adds a critical-path dependency and
+  homelab setup (deploy, unseal, Kubernetes auth, key import) that changes
+  no spike measurement, so it waits.
+- **b: OpenBao Transit in the spike.** Key custody, audit and rotation from
+  day one; the same work lands before any run can happen, and an OpenBao
+  outage stops the fleet unless the runner caches a signer.
+- **c: the community GitHub secrets engine plugin** (Vault), with scoping
+  and lease revocation in OpenBao roles. Moves the mint logic out of
+  `boopd`; not verified to run under OpenBao.
+- **d: no seam; the key stays a mounted Secret.** Least code; retrofitting
+  OpenBao later touches every mint call site.
 - **other:**
 
 ## References

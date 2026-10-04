@@ -55,8 +55,8 @@ Option A, with these isolation rules:
 - **One activity slot per pod.** No concurrent neighbours.
 - **The token is minted per run, at activity start, by a runner sidecar**
   in the Renovate pod. It is scoped to the run's repository, handed to the
-  Renovate container over a unix socket, passed to Renovate by environment
-  and never written to disk.
+  Renovate container over a unix socket, passed to Renovate by environment,
+  never written to disk and revoked when the run ends.
 - **Renovate's script and env controls stay at their defaults:**
   `allowScripts=false`, `allowedCommands=[]`, `exposeAllEnv=false`.
 - **The container that runs Renovate holds no credential at rest.** A
