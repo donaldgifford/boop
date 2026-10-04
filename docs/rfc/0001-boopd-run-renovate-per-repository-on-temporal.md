@@ -77,9 +77,9 @@ A new service in its own repository (`donaldgifford/boop`), named `boopd`:
   rate budget, and a `DiscoveryWorkflow` runs on a Schedule
   ([ADR-0002](../adr/0002-one-entity-workflow-per-repository.md)).
 - **A worker pool execs Renovate.** Each worker pod runs one activity at a
-  time. The workflow mints a token for the run, the activity runs Renovate
-  for exactly one repository in fresh directories, and returns the parsed
-  report
+  time. The activity mints a repository-scoped token for the run, runs
+  Renovate for exactly one repository in fresh directories in a container
+  that holds no credential at rest, and returns the parsed report
   ([ADR-0003](../adr/0003-worker-pool-execs-the-renovate-cli.md)).
 - **Configuration is a file shipped with the chart**, with no CRDs
   ([ADR-0004](../adr/0004-no-crds-configuration-from-a-chart-shipped-file.md)).

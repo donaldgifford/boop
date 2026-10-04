@@ -53,22 +53,27 @@ Option A, with these isolation rules:
 - **Each activity gets fresh `baseDir` and `cacheDir`** on an `emptyDir`,
   deleted when the activity ends, along with anything under `/tmp`.
 - **One activity slot per pod.** No concurrent neighbours.
-- **The token is minted per run in the worker role**, reaches the activity
-  as encrypted input, is passed to Renovate by environment and is never
-  written to disk.
+- **The token is minted per run, at activity start, by a runner sidecar**
+  in the Renovate pod. It is scoped to the run's repository, handed to the
+  Renovate container over a unix socket, passed to Renovate by environment
+  and never written to disk.
 - **Renovate's script and env controls stay at their defaults:**
   `allowScripts=false`, `allowedCommands=[]`, `exposeAllEnv=false`.
-- **The App private key never enters the Renovate pod.** A package manager
-  runs as the same UID as the worker and can read any mounted Secret or the
-  parent's `/proc/<pid>/environ`. Tokens are minted in the worker role and
-  reach the Renovate pod as encrypted activity input (DESIGN-0001). The
-  one-hour installation token in Renovate's environment is the accepted
-  residual.
+- **The container that runs Renovate holds no credential at rest.** A
+  package manager runs as the same UID as `boopd` in that container and can
+  read any mounted Secret or the parent's `/proc/<pid>/environ`; a Temporal
+  client certificate there would let it poll the task queue as a worker. So
+  the Temporal worker for the Renovate queue is a `runner` sidecar with its
+  own image and UID. It holds the App key and the Temporal certificate,
+  mints the token and drives a credential-free executor in the Renovate
+  container (DESIGN-0001). The one-hour, repository-scoped token in
+  Renovate's environment is the accepted residual.
 
 The spike has to show that a package-manager step cannot leave readable state
 for the next activity, cannot see the token, `RENOVATE_*` variables or the
 Redis credentials in its inherited environment (INV-0001 § Spike, isolation
-criteria), and that no App key material exists anywhere in the Renovate pod.
+criteria), and that no App key material and no Temporal certificate exist
+anywhere in the Renovate container.
 If it can, switch to option B.
 
 ## Consequences

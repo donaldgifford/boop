@@ -26,9 +26,11 @@ Do not re-open these without a new document that says why:
   Temporal Schedule.
 - Execution option A: a worker pool that execs the Renovate CLI, one
   repository per activity, one activity slot per pod. Fallback is a
-  Kubernetes Job per repository if the isolation criteria fail. The App
-  private key never enters the Renovate pod; tokens are minted in the
-  worker role.
+  Kubernetes Job per repository if the isolation criteria fail. The
+  container that runs Renovate holds no credential at rest: a `runner`
+  sidecar (own image and UID) is the Temporal worker for that queue, holds
+  the App key, mints the run's repository-scoped token and drives a
+  credential-free executor over a unix socket (DESIGN-0001).
 - No CRDs. Config is a file shipped with the chart.
 - A repository is onboarded only if it contains the Renovate config file,
   which repo-guardian writes. Renovate's own onboarding is off.
