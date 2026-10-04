@@ -40,13 +40,18 @@ in `boopd`'s config would move the decision away from the repository
 
 - **Discovery** lists every repository the installation can see. For GitHub
   Apps that means `/installation/repositories`, per renovate-operator
-  INV-0004. It keeps only those where `HasRenovateConfig` finds one of
-  `platform.ConfigPaths` on the default branch, and only those get a
-  `RepoWorkflow`.
+  INV-0004. It keeps only those where the configured config path
+  (`renovate.configPath`, the file repo-guardian writes) exists on the
+  default branch, and only those get a `RepoWorkflow`. The probe runs in
+  GraphQL batches so a large installation stays inside its budget
+  (DESIGN-0001).
 - **Renovate runs with `onboarding: false` and `requireConfig: required`.**
   This is a second guard if discovery is stale.
-- **Removing the file takes the repository out of discovery.** The next
-  discovery pass signals its `RepoWorkflow` to end.
+- **Removing the file takes the repository out of discovery.** A
+  `RepoWorkflow` that discovery has not seen for three passes checks the
+  repository itself and ends when the file is gone; a run that Renovate
+  reports as `disabled-no-config` ends it at once (DESIGN-0001). Discovery
+  keeps no list to diff, and a discovery outage never ends the fleet.
 - **Pushes that add the file** are the first webhook worth handling once
   ingest exists. Until then the next discovery pass picks them up.
 
@@ -57,8 +62,9 @@ in `boopd`'s config would move the decision away from the repository
 - One owner for onboarding. Repository owners opt in or out by committing a
   file.
 - No onboarding PRs from `boop-bot`.
-- Discovery cost is bounded: one config probe per visible repository per
-  pass.
+- Discovery cost is bounded: one path probed per visible repository per
+  pass, batched through GraphQL at about one point per hundred
+  repositories.
 
 ### Negative
 

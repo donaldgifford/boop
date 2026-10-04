@@ -26,7 +26,9 @@ Do not re-open these without a new document that says why:
   Temporal Schedule.
 - Execution option A: a worker pool that execs the Renovate CLI, one
   repository per activity, one activity slot per pod. Fallback is a
-  Kubernetes Job per repository if the isolation criteria fail.
+  Kubernetes Job per repository if the isolation criteria fail. The App
+  private key never enters the Renovate pod; tokens are minted in the
+  worker role.
 - No CRDs. Config is a file shipped with the chart.
 - A repository is onboarded only if it contains the Renovate config file,
   which repo-guardian writes. Renovate's own onboarding is off.

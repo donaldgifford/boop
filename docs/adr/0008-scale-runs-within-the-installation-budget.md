@@ -69,7 +69,8 @@ compute.
 `InstallationWorkflow` before it schedules `RunRenovate` on the separate
 `boopd-renovate` task queue (DESIGN-0001). So that queue's backlog only ever
 holds work the budget has already admitted, and anything that scales workers on
-it stays inside the budget.
+it stays inside the budget. A `ScheduleToStart` timeout bounds how long a
+lease can wait in that queue, so a lease never outlives the queue.
 
 **Two ways to drive scaling.** repo-guardian v2 scales workers with KEDA's
 `temporal` trigger. That trigger cannot authenticate with OIDC, so
@@ -102,8 +103,8 @@ use the same trigger, or publish its own metric and let KEDA read that instead.
   them on real data:
   - `boopd-renovate` queue backlog;
   - `boopd_budget_admitted_runs{installation}`;
-  - `boopd_renovate_desired_workers`, computed by `boopd` from admitted runs
-    and runs in flight.
+  - `boopd_renovate_desired_workers`, the sum of admitted runs across
+    installations, published as one series for a scaler to read.
 - **Keep the doors open:**
   - `RunRenovate` runs on its own task queue;
   - the activity holds no state on the worker between runs;

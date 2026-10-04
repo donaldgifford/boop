@@ -53,15 +53,23 @@ Option A, with these isolation rules:
 - **Each activity gets fresh `baseDir` and `cacheDir`** on an `emptyDir`,
   deleted when the activity ends, along with anything under `/tmp`.
 - **One activity slot per pod.** No concurrent neighbours.
-- **The token is minted inside the activity**, passed by environment and
-  never written to disk.
+- **The token is minted per run in the worker role**, reaches the activity
+  as encrypted input, is passed to Renovate by environment and is never
+  written to disk.
 - **Renovate's script and env controls stay at their defaults:**
   `allowScripts=false`, `allowedCommands=[]`, `exposeAllEnv=false`.
+- **The App private key never enters the Renovate pod.** A package manager
+  runs as the same UID as the worker and can read any mounted Secret or the
+  parent's `/proc/<pid>/environ`. Tokens are minted in the worker role and
+  reach the Renovate pod as encrypted activity input (DESIGN-0001). The
+  one-hour installation token in Renovate's environment is the accepted
+  residual.
 
 The spike has to show that a package-manager step cannot leave readable state
-for the next activity, and cannot see the token, `RENOVATE_*` variables or the
-Redis credentials (INV-0001 § Spike, isolation criteria). If it can, switch to
-option B.
+for the next activity, cannot see the token, `RENOVATE_*` variables or the
+Redis credentials in its inherited environment (INV-0001 § Spike, isolation
+criteria), and that no App key material exists anywhere in the Renovate pod.
+If it can, switch to option B.
 
 ## Consequences
 
