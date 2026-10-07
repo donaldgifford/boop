@@ -1,7 +1,7 @@
 ---
 id: ADR-0003
 title: "Worker pool execs the Renovate CLI"
-status: Proposed
+status: Superseded
 author: Donald Gifford
 created: 2026-10-01
 ---
@@ -9,6 +9,11 @@ created: 2026-10-01
 <!-- markdownlint-disable-file MD025 MD041 -->
 
 # ADR-0003: Worker pool execs the Renovate CLI
+
+> **Superseded by [ADR-0009](0009-run-each-renovate-run-as-a-kubernetes-job.md)
+> on 2026-10-07.** Each run is now a Kubernetes Job created by the activity.
+> The isolation rules under § Decision carry over where they still apply;
+> the worker pool, the second task queue and the runner sidecar do not.
 
 <!--toc:start-->
 - [Summary](#summary)

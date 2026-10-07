@@ -10,6 +10,13 @@ created: 2026-10-01
 
 # ADR-0008: Scale runs within the installation budget; choose the scaling mechanism after the spike
 
+> **Amended by [ADR-0009](0009-run-each-renovate-run-as-a-kubernetes-job.md)
+> on 2026-10-07.** The third layer, "workers follow admitted runs", became
+> "Jobs are admitted runs": the activity creates one Job per run, so no
+> scaler is needed and the fast-follow investigation below is settled by the
+> last row of its table. Layers one and two are unchanged. A cluster-capacity
+> cap is DESIGN-0001 OQ12.
+
 <!--toc:start-->
 - [Summary](#summary)
 - [Context](#context)
@@ -34,8 +41,9 @@ created: 2026-10-01
 - **Renovate workers** follow the runs the budget has admitted.
 
 The budget rules are part of the spike. The mechanism that scales workers
-(KEDA trigger, Deployment or Job per run) is chosen in a fast follow after the
-spike. Until then workers run at a fixed replica count.
+(KEDA trigger, Deployment or Job per run) was to be chosen in a fast follow
+after the spike; ADR-0009 settled it as a Job per run, created by the
+activity, so admitted runs are the Jobs and nothing else scales.
 
 ## Context
 
@@ -98,7 +106,9 @@ use the same trigger, or publish its own metric and let KEDA read that instead.
   limit for secondary rate limits and cluster capacity, not a budget figure.
 - **Every installation of the App has its own `InstallationWorkflow`.**
   The fleet-wide ceiling is the sum across installations.
-- **Workers run at a fixed replica count.**
+- **Workers run at a fixed replica count.** *(Amended by ADR-0009: the
+  `boopd` worker still does, and there is no worker pool for runs; each
+  admitted run is a Job.)*
 - **Emit the signals a scaler would use**, so the fast follow can compare
   them on real data:
   - `boopd-renovate` queue backlog;

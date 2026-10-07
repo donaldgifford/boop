@@ -24,7 +24,7 @@ created: 2026-10-01
 ## Summary
 
 Build `boopd`, a service that runs Renovate one repository at a time, with
-Temporal as its control plane and a worker pool that execs the Renovate CLI.
+Temporal as its control plane and a Kubernetes Job per run.
 It is a second way to run Renovate next to `renovate-operator`, not its next
 version. The later goal is a product: a store of repositories, runs and
 proposed updates that automerge confidence and security prioritisation build
@@ -76,11 +76,12 @@ A new service in its own repository (`donaldgifford/boop`), named `boopd`:
   `RepoWorkflow`, each installation an `InstallationWorkflow` that gates on the
   rate budget, and a `DiscoveryWorkflow` runs on a Schedule
   ([ADR-0002](../adr/0002-one-entity-workflow-per-repository.md)).
-- **A worker pool execs Renovate.** Each worker pod runs one activity at a
-  time. The activity mints a repository-scoped token for the run, runs
-  Renovate for exactly one repository in fresh directories in a container
-  that holds no credential at rest, and returns the parsed report
-  ([ADR-0003](../adr/0003-worker-pool-execs-the-renovate-cli.md)).
+- **Each run is a Kubernetes Job.** The activity mints a repository-scoped
+  token, creates a Job from the upstream Renovate image with a pod spec and
+  Renovate overrides chosen by the repository's ecosystem profile, follows
+  its log, returns the parsed report and revokes the token
+  ([ADR-0009](../adr/0009-run-each-renovate-run-as-a-kubernetes-job.md),
+  superseding ADR-0003's worker pool).
 - **Configuration is a file shipped with the chart**, with no CRDs
   ([ADR-0004](../adr/0004-no-crds-configuration-from-a-chart-shipped-file.md)).
 - **Onboarding belongs to repo-guardian.** A repository takes part when it
@@ -95,10 +96,10 @@ A new service in its own repository (`donaldgifford/boop`), named `boopd`:
 - **Scaling follows the budget.** Workflows scale with the number of
   repositories. Concurrent Renovate runs are capped by each installation's
   rate budget, which is discovered from `/rate_limit` (REST and GraphQL), not
-  configured. Workers follow the runs the budget admits. The spike runs
-  workers at a fixed replica count. The scaling mechanism (KEDA trigger,
-  Deployment or Job per run) is a fast follow
-  ([ADR-0008](../adr/0008-scale-runs-within-the-installation-budget.md)).
+  configured. Admitted runs are Jobs, so nothing else scales; the `boopd`
+  worker runs a fixed, small replica count
+  ([ADR-0008](../adr/0008-scale-runs-within-the-installation-budget.md),
+  as amended by ADR-0009).
 
 ```mermaid
 flowchart TB
@@ -107,15 +108,18 @@ flowchart TB
   subgraph RN["boopd — one binary, several roles"]
     API["api (after spike)<br/>HTTP API · UI"]
     ING["ingest (later)<br/>webhook · SignalWithStart"]
-    WRK["worker · renovate ×N<br/>workflows · RunRenovate"]
+    WRK["worker<br/>workflows · RunRenovate"]
   end
+  JOB["Renovate Job per run<br/>upstream image · one scoped token"]
   DB[("Postgres (after spike)")]
   TS["Temporal cluster"]
   RG -->|config file PR| P
   P -->|webhooks| ING
   ING --> TS
   TS <-->|task queue| WRK
-  WRK -->|API, git| P
+  WRK -->|create, follow, delete| JOB
+  JOB -->|API, git| P
+  WRK -->|discovery, tokens| P
   WRK --> DB
   API --> DB
   API -->|signal, describe| TS
@@ -128,8 +132,9 @@ Temporal namespace; `boop-bot` is the GitHub App that opens PRs. `boop-bot` is u
 Delivery happens in two stages:
 
 1. **Spike** ([DESIGN-0001](../design/0001-boopd-spike-workflows-runrenovate-activity-and-worker.md)):
-   workers, workflows and the `RunRenovate` activity in the homelab, run
-   against INV-0001's success criteria. No store, API, UI or ingest.
+   the worker, the workflows, the `RunRenovate` activity and its Jobs in
+   the homelab, run against INV-0001's success criteria. No store, API, UI
+   or ingest.
 2. **v1 DESIGN**, written after the spike. It covers the store schema, API,
    the `x` extraction (Phase 0), and whatever the spike changes.
 

@@ -24,13 +24,13 @@ Do not re-open these without a new document that says why:
 - One `RepoWorkflow` per repository (ID `repo/<platform>/<repo id>`),
   one `InstallationWorkflow` per installation, a `DiscoveryWorkflow` on a
   Temporal Schedule.
-- Execution option A: a worker pool that execs the Renovate CLI, one
-  repository per activity, one activity slot per pod. Fallback is a
-  Kubernetes Job per repository if the isolation criteria fail. The
-  container that runs Renovate holds no credential at rest: a `runner`
-  sidecar (own image and UID) is the Temporal worker for that queue, holds
-  the App key, mints the run's repository-scoped token and drives a
-  credential-free executor over a unix socket (DESIGN-0001).
+- Execution: each run is a Kubernetes Job created by the `RunRenovate`
+  activity from the upstream Renovate image (ADR-0009, superseding
+  ADR-0003's worker pool). The Job pod holds one repository-scoped token
+  and nothing else; the worker holds the App key and a namespaced Role for
+  Jobs, Pods, logs and Secrets. An ecosystem profile (config, not a CRD)
+  picks the pod overlay and Renovate overrides per repository; Python gets
+  the strict one (DESIGN-0001).
 - No CRDs. Config is a file shipped with the chart.
 - A repository is onboarded only if it contains the Renovate config file,
   which repo-guardian writes. Renovate's own onboarding is off.
@@ -46,10 +46,8 @@ Do not re-open these without a new document that says why:
   - workflows scale with the repository count;
   - concurrent runs are capped by each installation's budget, discovered
     from `/rate_limit` for REST and GraphQL and never configured;
-  - workers follow admitted runs, at a fixed replica count in the spike.
-
-  The scaling mechanism (KEDA trigger, Deployment or Job per run) is a fast
-  follow.
+  - admitted runs are Jobs; nothing else scales. The `boopd` worker runs a
+    fixed, small replica count (ADR-0008 as amended by ADR-0009).
 - Shared code goes to `donaldgifford/x` (one Go module, versioned
   together) in Phase 0, after the spike. The spike copies.
 
@@ -62,11 +60,13 @@ Tracks INV-0001 § "First steps, in order":
 3. `internal/platform` copied from renovate-operator `0183661` — done.
    Changes: Forgejo client dropped, lint fixes (`%w: %w` wrapping,
    formatting).
-4. Process builder + behaviour tests — next.
+4. Process builder (copy renovate-operator `internal/jobspec`, adapt) +
+   behaviour tests — next.
 5. Temporal plumbing and budget entity from repo-guardian `v2` @ `278c7ec`.
 6. `RunRenovate`, `RepoWorkflow`, `InstallationWorkflow`,
    `DiscoveryWorkflow`.
-7. Worker image (Renovate full image + Go binary) and homelab deploy.
+7. Chart (Role, profiles, PodSecurity labels) and homelab deploy. No
+   custom Renovate image; Jobs run the upstream one.
 8. Run the success criteria; record results in a new investigation.
 
 Sibling checkouts used as sources: `~/code/renovate-operator`,
@@ -76,9 +76,9 @@ Sibling checkouts used as sources: `~/code/renovate-operator`,
 
 The rest of this file, along with the Dockerfile and the chart, comes
 from the generic service template. The distroless image and the
-`LISTEN_ADDR`/probe contract fit the API role. The spike's worker needs
-a Renovate-based image instead (INV-0001 § Spike), so expect the image
-and chart to change in step 7.
+`LISTEN_ADDR`/probe contract fit the worker and API roles. Renovate runs
+use the upstream image in Jobs (ADR-0009), so the image stays; the chart
+gains RBAC and profiles in step 7.
 
 The container image and the chart are published together as OCI
 artifacts on every release.
