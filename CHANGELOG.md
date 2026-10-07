@@ -10,6 +10,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Review DESIGN-0001 and align ADRs with the spike design
 - Rewrite DESIGN-0001 with diagrams, verified facts and lettered open questions
 - Add OQ11 (App key custody, OpenBao deferred) and token revocation to DESIGN-0001
+- ADR-0009 runs each Renovate run as a Kubernetes Job; rework DESIGN-0001 around it
 
 ### Miscellaneous Tasks
 
