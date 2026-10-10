@@ -41,6 +41,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(boopd)* Worker role with readiness, schedules and graceful stop
 - *(chart)* Rename to boopd; the Deployment runs the worker role
 - *(chart)* Render boopd.hcl from values into a mounted ConfigMap
+- *(chart)* Worker Role and RoleBinding in the runs namespace
 
 ### Documentation
 
