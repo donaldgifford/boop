@@ -31,7 +31,12 @@ Do not re-open these without a new document that says why:
   Jobs, Pods, logs and Secrets. An ecosystem profile (config, not a CRD)
   picks the pod overlay and Renovate overrides per repository; Python gets
   the strict one (DESIGN-0001).
-- No CRDs. Config is a file shipped with the chart.
+- No CRDs. Config is an HCL file shipped with the chart, decoded with
+  `hclkit` (`github.com/donaldgifford/hclkit` today, `x/hclkit` after
+  ADR-0007's Phase 0) (IMPL-0001 OQ2).
+- Tests lean on end-to-end runs: a k3d cluster locally (`just e2e`) and
+  in CI, with stub Renovate and GitHub images. Mocks and unit tests cover
+  what e2e cannot reach cheaply (IMPL-0001 OQ3).
 - A repository is onboarded only if it contains the Renovate config file,
   which repo-guardian writes. Renovate's own onboarding is off.
 - Postgres store behind an HTTP API and UI, but not in the spike. Where

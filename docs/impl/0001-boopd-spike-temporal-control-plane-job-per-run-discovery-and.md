@@ -30,7 +30,7 @@ created: 2026-10-10
   - [Phase 3: Config and profiles](#phase-3-config-and-profiles)
     - [Tasks](#tasks-3)
     - [Success Criteria](#success-criteria-3)
-  - [Phase 4: Kubernetes and Renovate packages](#phase-4-kubernetes-and-renovate-packages)
+  - [Phase 4: Kubernetes and Renovate packages, and the e2e harness](#phase-4-kubernetes-and-renovate-packages-and-the-e2e-harness)
     - [Tasks](#tasks-4)
     - [Success Criteria](#success-criteria-4)
   - [Phase 5: Activities](#phase-5-activities)
@@ -119,6 +119,9 @@ Everything in DESIGN-0001 § Non-Goals:
 - A custom Renovate image.
 - GitHub Enterprise Server testing.
 - The v1 DESIGN that follows the spike.
+- A GitHub test organisation with repositories created and deleted per
+  e2e run (OQ10). The spike's scratch repositories are made by hand; what
+  CI needs long term is decided after the spike.
 
 ## Pre-implementation audit (2026-10-10)
 
@@ -158,8 +161,14 @@ flowchart LR
 
 Phases 2, 3 and 4 are independent of each other and can run in any order
 or in parallel branches. Phase 5 needs all three. Each phase is one PR
-unless OQ5 decides otherwise, and every phase leaves `just check`, the
-integration tests and the chart tests green.
+from `main` (OQ5), and every phase leaves `just check`, the integration
+tests, the e2e tests and the chart tests green.
+
+Testing leans on end-to-end runs (OQ3): Phase 4 brings up the k3d harness
+and a stub Renovate image, and every later phase adds its own e2e
+scenario to it, locally through `just e2e` and in CI. Mocks and unit
+tests cover the branches an e2e run cannot reach cheaply, not the main
+path.
 
 ## Implementation Phases
 
@@ -329,65 +338,82 @@ OQ11; INV-0001 § Renovate behaviours to reproduce).
 ### Phase 3: Config and profiles
 
 The config file (ADR-0004, DESIGN-0001 § API / Interface Changes) and the
-profile resolver (DESIGN-0001 § Ecosystem profiles, OQ1, OQ9).
+profile resolver (DESIGN-0001 § Ecosystem profiles, OQ1, OQ9). The file is
+HCL, decoded with `hclkit` (OQ2): `github.com/donaldgifford/hclkit`
+`pkg/hclkit` today, `github.com/donaldgifford/x/hclkit` once ADR-0007's
+Phase 0 moves it.
 
 #### Tasks
 
-- [ ] 3.1 `internal/config`: typed structs for `renovate`, `runs`,
-  `profiles`, `order`, `defaultProfile`, `unknownProfile`, `profileRules`
-  and `apps[]` (with `discovery`, `cadence`, `budget`), loaded from YAML
-  (OQ2), unknown fields rejected, durations parsed, defaults applied
-  (`pendingTimeout` 10m, `cadence` 24h, `discovery.every` 6h,
-  `budget.reserveFraction` 0.10, `maxConcurrentRuns` 10,
-  `defaultEstimate` {core 300, graphql 150}).
-- [ ] 3.2 Validation: the image is pinned by digest; `configPath` is a
-  relative file path; `sharedPreset` passes `jobspec`'s preset check; every
-  profile named in `order`, `defaultProfile`, `unknownProfile` and
-  `profileRules` exists; `order` lists every profile exactly once;
-  profile `renovate` overrides contain no forbidden option (reuse the
-  `jobspec` validator); `reserveFraction` in [0, 0.5]; Secret refs have
-  name and key; App ids and keys present; installations allowlist entries
-  are positive ints.
+- [ ] 3.1 `internal/config`: the HCL grammar for the design's example,
+  block for block: `renovate {}`, `runs {}`, `profile "<name>" {}` with
+  nested `pod {}` and `renovate {}`, top-level `order`, `default_profile`,
+  `unknown_profile`, `profile_rule {}`, and `app "<name>" {}` with nested
+  `discovery {}` and `budget {}`. Decoded into typed structs through
+  `hclkit.Loader.LoadFile` with `ctytypes.Duration` for every interval,
+  `ctytypes.Enum` for `discovery.probe` and `dry_run`, and `hclkit`'s
+  `env()` function for the few values an operator may want from the
+  environment; unknown attributes and blocks are errors; every diagnostic
+  carries the file, line and column.
+- [ ] 3.2 Defaults and validation: `pending_timeout` 10m, `cadence` 24h,
+  `discovery.every` 6h, `budget.reserve_fraction` 0.10,
+  `max_concurrent_runs` 10, `default_estimate` {core 300, graphql 150};
+  the image is pinned by digest; `config_path` is a relative file path;
+  `shared_preset` passes `jobspec`'s preset check; every profile named in
+  `order`, `default_profile`, `unknown_profile` and `profile_rule` exists
+  (`validate.NewRefValidator`); `order` lists every profile exactly once
+  (`validate.NewUniqueValidator` plus a count check); profile `renovate`
+  overrides contain no forbidden option (reuse the `jobspec` validator);
+  `reserve_fraction` in [0, 0.5]; Secret refs have name and key; App ids
+  and keys present; allowlist entries are positive ints. Errors are
+  `hclkit.Diagnostics` written GCC-style, all of them, not the first.
 - [ ] 3.3 Secret-backed values: the App private key and the Redis URL are
   read from the mounted files named by the refs at start, never from env;
   a missing file fails startup with the path in the error.
 - [ ] 3.4 `internal/profiles`: `Resolve(extends []string, managers
-  []string) string` applies `profileRules` (preset substrings and manager
+  []string) string` applies `profile_rule`s (preset substrings and manager
   names), takes the strictest match by `order`, falls back to
-  `defaultProfile` when `extends` is known but matches nothing and to
-  `unknownProfile` when `extends` is empty; managers only ever tighten.
+  `default_profile` when `extends` is known but matches nothing and to
+  `unknown_profile` when `extends` is empty; managers only ever tighten.
 - [ ] 3.5 `jobspec.Profile` and `jobspec.App` are built from the config
   types by one constructor, so the chart's config file is the only
-  source.
-- [ ] 3.6 Tests: a golden config matching the design's example; every
-  validation rule with a failing case; the resolver's table including the
-  Python tightening and the unknown case.
+  source. `boopd config validate <file>` loads and validates without
+  starting anything, for the chart's CI and for operators.
+- [ ] 3.6 Tests: a golden config under `internal/config/testdata`
+  matching the design's example; every validation rule with a failing
+  case asserting the diagnostic's position; the resolver's table including
+  the Python tightening and the unknown case; `examples/boopd.hcl` kept
+  loadable by a test.
 
 #### Success Criteria
 
-- The design's example config loads unchanged and renders the same
-  `BuildInput` the `jobspec` tests use.
-- Every validation rule has a test that fails without it.
+- The design's example config, written as HCL, loads unchanged and
+  renders the same `BuildInput` the `jobspec` tests use.
+- Every validation rule has a test that fails without it, and the
+  diagnostic names the offending line.
 - `Resolve` is a pure function with a table test; `python` from either
   `extends` or `managers` yields the Python profile.
+- `boopd config validate examples/boopd.hcl` exits 0; with one attribute
+  misspelled it exits 1 and prints the line.
 
 ---
 
-### Phase 4: Kubernetes and Renovate packages
+### Phase 4: Kubernetes and Renovate packages, and the e2e harness
 
 The Job lifecycle (DESIGN-0001 § RunRenovate activity steps 3 to 11,
-§ Job spec) and the report parser and log scanner (§ Process builder,
-OQ8).
+§ Job spec), the report parser and log scanner (§ Process builder, OQ8),
+and the k3d end-to-end harness every later phase extends (OQ3).
 
 #### Tasks
 
-- [ ] 4.1 `internal/kube`: in-cluster client (OQ3) with the namespace from
-  config; a `Runner` with `CreateSuspended(job)`, `CreateSecret(secret)`,
-  `Unsuspend(name)`, `WaitRunning(name, timeout)` by watching the Job's
-  pod, `FollowLog(name, since)` streaming `pods/{pod}/log` with
-  `follow=true&timestamps=true`, `ExitCode(name)` from the container's
-  terminated state (incl. `OOMKilled` and `DeadlineExceeded` reasons),
-  `Delete(name)` with foreground propagation and a bounded wait.
+- [ ] 4.1 `internal/kube`: in-cluster client, or `KUBECONFIG` when set,
+  with the namespace from config; a `Runner` with `CreateSuspended(job)`,
+  `CreateSecret(secret)`, `Unsuspend(name)`, `WaitRunning(name, timeout)`
+  by watching the Job's pod, `FollowLog(name, since)` streaming
+  `pods/{pod}/log` with `follow=true&timestamps=true`, `ExitCode(name)`
+  from the container's terminated state (incl. `OOMKilled` and
+  `DeadlineExceeded` reasons), `Delete(name)` with foreground propagation
+  and a bounded wait.
 - [ ] 4.2 Log follower resilience: on a broken stream, reconnect with
   `sinceTime` from the last line's timestamp and drop lines at or before
   it; bounded retries; a line callback that receives the raw line and its
@@ -404,23 +430,48 @@ OQ8).
   `packageFiles`, `Managers`, `Problems`; `reportMissing` when the line is
   absent or fails to parse, with tuples reconstructed from branch and PR
   events.
-- [ ] 4.5 Fixtures: a real Renovate 44 log from a scratch repository run
-  in `dryRun: full` and one live, sanitized, under
-  `internal/renovate/testdata` (OQ11); the exact `msg` strings are pinned
-  by them, so a Renovate change fails the parser's test, not a run.
-- [ ] 4.6 Tests: `kube` against the client-go fake clientset for the
-  create-suspended → Secret → unsuspend order, the pending timeout, the
-  foreground delete and the exit-code reasons; the follower against an
-  `httptest` server that drops the stream mid-line and replays (OQ3);
-  `renovate` golden tests over the fixtures, including a truncated report
-  line.
+- [ ] 4.5 Fixtures (OQ11): run the upstream Renovate 44 image locally with
+  Docker against one scratch repository, once in `dryRun: full` and once
+  live, `RENOVATE_REPORT_TYPE=logging`; commit the sanitized logs under
+  `internal/renovate/testdata` with the command that produced them. The
+  exact `msg` strings are pinned by them, so a Renovate change fails the
+  parser's test, not a run.
+- [ ] 4.6 Stub Renovate image, `test/stub-renovate/`: a small static Go
+  binary on a distroless base that replays a fixture log line by line
+  with a configurable delay, exit code and report size, can hang on
+  request (for the stall and deadline scenarios) and can write marker
+  files (for the isolation scenario). Built by bake as
+  `ghcr.io/donaldgifford/boopd-stub-renovate:dev`; never published.
+- [ ] 4.7 e2e harness, `test/e2e/` behind the `e2e` build tag: `just e2e`
+  runs `k3d-up`, builds and imports the stub image, creates a namespace
+  per test run, and runs `go test -tags e2e ./test/e2e/...` with
+  `KUBECONFIG` from k3d; `just e2e-down` deletes the cluster. A CI job
+  "E2E Tests" does the same on a runner with k3d installed at the
+  `mise.toml` pin, gated like the Go jobs. The harness exposes the
+  namespace, the clientset and the stub image to tests.
+- [ ] 4.8 e2e scenarios for `kube`: the whole lifecycle against the real
+  API server and kubelet with the stub image (suspended Job, Secret,
+  unsuspend, `Running`, log follow to the end, exit code, foreground
+  delete leaves no pod and no Secret); a 1 MB report line arrives whole;
+  a non-zero exit code is read; a hung stub under a short
+  `activeDeadlineSeconds` reports `DeadlineExceeded`; a pod that cannot
+  schedule (impossible node selector) hits the pending timeout and is
+  deleted.
+- [ ] 4.9 Unit tests for what e2e cannot reach cheaply: the follower
+  against an `httptest` log server that drops the stream mid-line and
+  replays (dedupe by timestamp); `renovate` golden tests over the
+  fixtures, including a truncated report line; the fake clientset for
+  the create-suspended → Secret → unsuspend order and the request-metric
+  wrapper.
 
 #### Success Criteria
 
-- The fake-clientset tests prove the Secret exists before the Job is
-  unsuspended and that deleting the Job is the only delete the package
-  issues.
-- The follower test reconnects once and yields every line exactly once.
+- `just e2e` passes locally and the "E2E Tests" CI job passes on the PR.
+- The e2e lifecycle scenario proves the Secret exists before the Job is
+  unsuspended, the log arrives whole and in order, and deleting the Job
+  is the only delete the package issues.
+- The follower unit test reconnects once and yields every line exactly
+  once.
 - The parser turns the live fixture into tuples whose count equals the
   report's `branches[].upgrades[]` total, each with a non-empty `Manager`.
 
@@ -469,19 +520,25 @@ stall).
   `boopd_token_revocations_total`).
 - [ ] 5.7 `Activities` struct wiring the clients, the `Minter`, the config
   and the registry; `Register` under the `workflows` names.
-- [ ] 5.8 Tests: each activity against fakes (`kube` fake, `httptest`
-  GitHub, a scripted log stream) through the SDK's
-  `TestActivityEnvironment`; `RunRenovate` scenarios for the happy path,
-  pending timeout, soft deadline, broken log stream, missing report,
-  revoke failure, and cancellation mid-run.
+- [ ] 5.8 e2e: `RunRenovate` end to end in the k3d harness with the stub
+  image and an in-process `httptest` GitHub (mint, `/rate_limit`, revoke):
+  the happy path returns the fixture's `RunResult`; the pending timeout
+  deletes the Job and fails `pending`; the soft deadline deletes a hung
+  stub and classifies `TimedOut` with the scanner's progress; a missing
+  report sets `reportMissing` with reconstructed tuples; a revoke failure
+  is counted, not an error; cancelling the activity context deletes the
+  Job with foreground propagation before it returns.
+- [ ] 5.9 Unit tests: the classification table row by row; the discovery
+  activity's paging, heartbeat and resume against `httptest` GitHub; the
+  other activities through the SDK's `TestActivityEnvironment` over
+  fakes.
 
 #### Success Criteria
 
-- `RunRenovate` against the fakes returns a `RunResult` whose `Tuples`,
+- `RunRenovate` in the k3d harness returns a `RunResult` whose `Tuples`,
   `Managers`, `Problems`, `Progress`, `RateBefore` and `RateAfter` match
-  the fixture, and the fake API server saw create Job, create Secret,
-  patch suspend, watch, log, delete Job, in that order, and no other
-  write.
+  the fixture, the fake GitHub saw one mint and one revoke, and the
+  namespace holds no Job, pod or Secret afterwards.
 - Every row of the classification table has a passing test.
 - Cancelling the activity context deletes the Job with foreground
   propagation before the activity returns.
@@ -532,21 +589,28 @@ contract).
 - [ ] 6.5 Search attributes registered on the namespace at start
   (idempotent), with a clear error when the namespace lacks the
   permission.
-- [ ] 6.6 Tests: `RepoWorkflow` in the `testsuite` with fakes for every
-  row of the convergence table, `pending` release and re-acquire,
+- [ ] 6.6 e2e: the `worker` role in the k3d harness with the Temporal
+  dev server (`temporaltest`), the stub image and `httptest` GitHub
+  serving installations, repositories, the probe and `/rate_limit`: the
+  discovery schedule fires once, a `RepoWorkflow` starts for every
+  repository with the file and none for those without, the first run
+  acquires a lease, creates a Job, forwards the log with the correlation
+  fields, logs `run_complete`, reports to the budget and sets the next
+  due time; a `recheck` signal runs again at `PriorityHigh`; `SIGTERM`
+  with a run in flight stops polling and keeps the activity to its soft
+  deadline.
+- [ ] 6.7 Workflow tests in the `testsuite` with fakes for every row of
+  the convergence table, `pending` release and re-acquire,
   heartbeat-timeout progress, absence → `CheckRepo` → end or continue,
   managers merge, ContinueAsNew carry; `DiscoveryWorkflow` fan-out and
-  suspend signalling; a replay test scaffold (OQ8); an integration test
-  on the dev server that starts the worker role with fake activities and
-  sees a `discovered` signal start a `RepoWorkflow` that acquires a lease.
+  suspend signalling. No replay tests in the spike (OQ8).
 
 #### Success Criteria
 
 - Every row of the convergence table has a passing workflow test.
-- `boopd worker` against the dev server and a stub Kubernetes API starts,
-  promotes its build, ensures the schedule and reports ready; `SIGTERM`
-  with a run in flight stops polling and keeps the activity until its
-  soft deadline.
+- The worker e2e scenario passes: the schedule, the discovery pass, one
+  full run from lease to `run_complete`, the recheck and the graceful
+  stop, all against k3d and the dev server.
 - `go test -race ./...` and the integration tag pass; the metric names
   test pins the set from DESIGN-0001 § Observability.
 
@@ -564,10 +628,11 @@ and the first real environment.
   name (OQ1); the Deployment becomes the worker with two replicas,
   `terminationGracePeriodSeconds` above StartToClose, the `worker`
   subcommand and `--config`.
-- [ ] 7.2 Config file: a ConfigMap rendered from values matching
-  `internal/config`, mounted read-only; a JSON schema in
-  `values.schema.json` that mirrors the validation rules so `helm lint`
-  catches what `boopd` would reject.
+- [ ] 7.2 Config file: a ConfigMap carrying `boopd.hcl` rendered from
+  values that mirror `internal/config`'s blocks, mounted read-only; a
+  JSON schema in `values.schema.json` for the value shapes; the chart's
+  CI renders the ConfigMap and runs `boopd config validate` on it (task
+  3.5), so a bad value fails before a deploy.
 - [ ] 7.3 RBAC: ServiceAccount, Role and RoleBinding with exactly the
   design's verbs (`jobs` create/get/list/watch/delete; `pods`
   get/list/watch; `pods/log` get; `secrets` create/get/delete, no `list`).
@@ -590,21 +655,33 @@ and the first real environment.
   still fail; ServiceMonitor and PrometheusRule carry the run and budget
   alerts (`disk-space`, `OOMKilled`, `onboarding` result, stalled
   repositories).
-- [ ] 7.8 `just k3d-install` brings up the chart against the Temporal dev
-  server or a k3d-hosted Temporal and a Redis; a smoke run against one
-  scratch repository completes in `dryRun: full`.
-- [ ] 7.9 Homelab: the `boopd` Temporal namespace with fairness enabled
-  (OQ6), a `boop-bot` GitHub App installed on the homelab organisation
-  with the private key in a Secret, Redis per OQ7, Loki labels from the
-  correlation fields; the first release `0.1.0` cut by the release train
-  (OQ5) and deployed.
+- [ ] 7.8 Stub GitHub, `test/stub-github/`: the `httptest` GitHub from
+  Phases 5 and 6 as an image, so a worker running in-cluster has
+  something to talk to. Chart e2e in the harness: `helm upgrade --install`
+  with the stub Renovate image as `renovate.image`, the stub GitHub as
+  the App endpoint, Temporal from the harness and the Redis subchart;
+  the worker pod becomes ready, the Role suffices (no forbidden-verb
+  errors in its log), one discovery pass runs, and one Job completes
+  with its log forwarded. The same scenario is the CI chart gate.
+- [ ] 7.9 `just k3d-install` for the developer loop against the real
+  Renovate image and one of your scratch repositories (OQ10) in
+  `dryRun: full`, with the App key from a local file. Not in CI.
+- [ ] 7.10 Homelab: a `boopd` namespace on repo-guardian's reference
+  Temporal cluster with its own client identity (OQ6), a `boop-bot`
+  GitHub App installed on the homelab organisation with the private key
+  in a Secret, the Redis subchart or an existing instance (OQ7), Loki
+  labels from the correlation fields; the first release `0.1.0` cut by
+  the release train (OQ5) and deployed.
 
 #### Success Criteria
 
 - `just helm-test` passes; the Role test fails if any verb is added.
-- `just k3d-install` followed by one `recheck` signal produces a Job, a
-  pod log forwarded with correlation fields, a `run_complete` line and a
-  deleted Job, with no Secret left behind.
+- The chart e2e scenario passes in CI: an in-cluster worker under the
+  chart's RBAC completes one run against the stubs with no Secret left
+  behind.
+- `just k3d-install` followed by one `recheck` signal against a scratch
+  repository produces a Job, a forwarded pod log with correlation fields,
+  a `run_complete` line and a deleted Job.
 - The homelab worker is ready, its build is the deployment's current
   version, the discovery schedule exists, and one full discovery pass
   starts a `RepoWorkflow` for every repository that has the config file
@@ -620,13 +697,14 @@ Strategy, run in the homelab, with the fixtures the design describes
 
 #### Tasks
 
-- [ ] 8.1 Fixtures (OQ10): the isolation repository whose package-manager
-  step writes markers into `cacheDir`, `baseDir` and `/tmp`, dumps its
-  environment, walks `/proc` and the filesystem for key material and
-  forks a background process; a second repository that looks for the
-  markers; the Python repository with an sdist-only dependency whose
-  `setup.py` would write a marker; a many-updates repository for the
-  convergence run.
+- [ ] 8.1 Fixtures (OQ10, made by hand, named in INV-0002): the
+  isolation repository whose package-manager step writes markers into
+  `cacheDir`, `baseDir` and `/tmp`, dumps its environment, walks `/proc`
+  and the filesystem for key material and forks a background process; a
+  second repository that looks for the markers; the Python repository
+  with an sdist-only dependency whose `setup.py` would write a marker; a
+  many-updates repository for the convergence run. This document lists
+  what each must contain so they can be rebuilt.
 - [ ] 8.2 Comparison with renovate-operator v0.1.x, both in `dryRun: full`,
   over the homelab's repositories: report tuple sets equal, or every
   difference explained by a release or age boundary (INV-0001
@@ -683,57 +761,71 @@ Strategy, run in the homelab, with the fixtures the design describes
 | File | Action | Description |
 | ---- | ------ | ----------- |
 | `internal/platform/platform.go`, `github/*.go` | Modify | `ID`/`NodeID`, App client, `ListInstallations`, installation-scoped `Discover`, GraphQL probe, `ReadRateLimit`, `CheckRepo`, `Minter` (Phase 2) |
-| `internal/config/` | Create | config types, loading, validation, Secret-backed values (Phase 3) |
+| `internal/config/` | Create | HCL grammar and structs, `hclkit` loading, validation, Secret-backed values (Phase 3) |
+| `examples/boopd.hcl` | Create | the design's example config in HCL, loaded by a test (Phase 3) |
 | `internal/profiles/` | Create | profile resolution (Phase 3) |
 | `internal/kube/` | Create | Job lifecycle, log follower, request metrics (Phase 4) |
 | `internal/renovate/` | Create | log scanner, report parser, fixtures (Phase 4) |
+| `test/stub-renovate/`, `test/stub-github/` | Create | stub images for the e2e harness (Phases 4 and 7) |
+| `test/e2e/` | Create | k3d harness and the e2e scenarios, build tag `e2e` (Phase 4 onward) |
+| `justfile`, `.github/workflows/ci.yml` | Modify | `e2e` and `e2e-down` recipes; the "E2E Tests" job (Phase 4) |
 | `internal/activities/` | Modify | `ListInstallations`, `DiscoverInstallation`, `CheckRepo`, `ReadRateLimit`, `RunRenovate`, wiring (Phase 5) |
 | `internal/workflows/` | Modify | `RepoWorkflow`, `DiscoveryWorkflow`, run options, search attributes (Phase 6) |
 | `internal/observability/` | Create | slog, meter provider and Prometheus exporter, health endpoints (Phase 6) |
-| `cmd/boopd/` | Create (rename) | `worker` subcommand; `cmd/boop` removed (Phase 6, OQ1) |
+| `cmd/boopd/` | Create (rename) | `worker` and `config validate` subcommands; `cmd/boop` removed (Phase 6, OQ1) |
 | `Dockerfile`, `docker-bake.hcl`, `.goreleaser.yaml`, `justfile` | Modify | binary and image name `boopd` (Phase 6) |
-| `charts/boopd/` | Create (rename) | worker Deployment, config ConfigMap, RBAC, Secrets, Temporal and Redis values, posture objects, tests (Phase 7) |
+| `charts/boopd/` | Create (rename) | worker Deployment, `boopd.hcl` ConfigMap, RBAC, Secrets, Temporal and Redis values, posture objects, tests (Phase 7) |
 | `.golangci.yml` | Modify | depguard entries for `internal/kube` once it exists (Phase 4) |
 | `docs/investigation/0002-*.md` | Create | spike results (Phase 8) |
 | `CLAUDE.md` | Modify | step status per phase; layout entries for the new packages |
 
 ## Testing Plan
 
-Per DESIGN-0001 § Testing Strategy, by layer:
+Per DESIGN-0001 § Testing Strategy, with the e2e emphasis from OQ3: the
+main path of every layer is proven in the k3d harness, and unit tests
+cover the branches an e2e run cannot reach cheaply.
 
 - [ ] Process builder and Job spec: table and golden tests (Phase 1, done).
 - [ ] Platform additions: `httptest` servers, no network (Phase 2).
-- [ ] Config and profiles: golden config, one failing case per rule, resolver
-  table (Phase 3).
-- [ ] Job lifecycle: client-go fake clientset for ordering, timeouts and
-  deletes; an `httptest` log server for follow, reconnect and dedupe
-  (Phase 4, OQ3).
-- [ ] Report parser and scanner: golden files from real Renovate 44 logs
-  (Phase 4, OQ11).
-- [ ] Activities: `TestActivityEnvironment` over fakes; the classification
-  table row by row (Phase 5).
-- [ ] Workflows: `testsuite` with fakes for the convergence table and the
-  budget interplay; determinism by replay once histories exist (Phase 6,
-  OQ8).
-- [ ] Integration (build tag `integration`): the dev server for the
-  Temporal paths, already in CI (Phase 1, done); the worker role end to end
-  with fake activities (Phase 6).
+- [ ] Config and profiles: golden HCL, one failing case per rule with its
+  diagnostic position, resolver table (Phase 3).
+- [ ] e2e harness in k3d with the stub Renovate image, `just e2e` locally
+  and the "E2E Tests" job in CI; scenarios added per phase: the Job
+  lifecycle (Phase 4), `RunRenovate` (Phase 5), the worker role with the
+  Temporal dev server (Phase 6), the chart with an in-cluster worker and
+  the stub GitHub (Phase 7).
+- [ ] Unit tests beside the e2e: the log follower's reconnect against an
+  `httptest` log server; the report parser and scanner over real Renovate
+  44 fixtures (Phase 4, OQ11); the classification table (Phase 5); the
+  convergence table and the budget interplay in the Temporal `testsuite`
+  (Phase 6). No replay tests in the spike (OQ8).
+- [ ] Integration (build tag `integration`): the Temporal dev server for
+  the client, versioning, schedules and the budget entity, already in CI
+  (Phase 1, done).
 - [ ] Chart: helm-unittest for the Role's verbs, the config render, the
-  posture objects and the alerts (Phase 7).
-- [ ] Spike: the criteria in the homelab, recorded in INV-0002 (Phase 8).
+  posture objects and the alerts, plus `boopd config validate` on the
+  rendered config and the chart e2e scenario (Phase 7).
+- [ ] Spike: the criteria in the homelab against your scratch
+  repositories, recorded in INV-0002 (Phase 8).
 
 ## Dependencies
 
 - A Temporal server at 1.31 or later with fairness enabled: the Temporal CLI
   dev server `v1.9.1` for tests, repo-guardian's `contrib/temporal`
   reference cluster for the homelab (OQ6).
-- A Redis reachable from the Job pods (OQ7).
+- A Redis reachable from the Job pods: the chart's Valkey subchart in k3d
+  and the homelab, or an existing instance (OQ7).
+- `github.com/donaldgifford/hclkit` v0.2.0 (`pkg/hclkit`, `ctytypes`,
+  `validate`), moving to `github.com/donaldgifford/x/hclkit` in ADR-0007's
+  Phase 0 (OQ2).
+- k3d 5.8.3 (pinned in `mise.toml`) locally and on the CI runner, and
+  Docker to build the stub images (OQ3).
 - The `boop-bot` GitHub App: id, private key, and an installation on the
   homelab organisation that includes the `renovate-config` preset
   repository (DESIGN-0001 OQ2).
 - The Renovate 44 image digest, kept current by Renovate in this repository.
-- Scratch repositories for the fixtures (OQ10) and a renovate-operator
-  v0.1.x deployment for the comparison run.
+- Scratch repositories for the fixtures, made by hand (OQ10), and a
+  renovate-operator v0.1.x deployment for the comparison run.
 - Loki for the log-correlation criterion.
 - Sibling checkouts: `~/code/renovate-operator`, `~/code/repo-guardian`
   (`feat/impl-0028-controls-foundations`).
@@ -741,10 +833,12 @@ Per DESIGN-0001 § Testing Strategy, by layer:
 ## Open Questions
 
 Implementation choices DESIGN-0001 leaves open. Each is numbered, with
-lettered options; **a** is the recommendation and the phases above are
-written on it.
+lettered options; **a** was the recommendation. All eleven were decided
+on 2026-10-10 and the phases above are written on the decisions.
 
 ### OQ1: When does `cmd/boop` become `cmd/boopd`?
+
+**Decision (2026-10-10): a.**
 
 CLAUDE.md fixes the service name as `boopd` for the binary, image, chart
 and Temporal namespace, but the template left `cmd/boop`, goreleaser's
@@ -766,6 +860,13 @@ names.
 
 ### OQ2: How is the config file loaded?
 
+**Decision (2026-10-10): c, with `hclkit`.** The import path today is
+`github.com/donaldgifford/hclkit` (`pkg/hclkit`, v0.2.0, Apache-2.0); it
+becomes `github.com/donaldgifford/x/hclkit` when ADR-0007's Phase 0 moves
+the shared packages, and the spike pins the current path. Phase 3 is
+written on it; the chart renders HCL (task 7.2) and `boopd config
+validate` guards the render.
+
 ADR-0004 fixes a file shipped with the chart; the design shows YAML. The
 loader needs typed structs, durations, unknown-field rejection and clear
 errors with paths.
@@ -785,6 +886,11 @@ errors with paths.
 - **other:**
 
 ### OQ3: How is the Job lifecycle tested below the homelab?
+
+**Decision (2026-10-10): c.** End-to-end tests are the emphasis: a k3d
+cluster locally and in CI, with a stub Renovate image, is the price and
+it is accepted. Unit tests and mocks stay for what e2e cannot reach
+cheaply. Phases 4 to 7 each add their scenario to the harness.
 
 The design names the client-go fake clientset and `envtest`. `envtest`
 runs a real `kube-apiserver` but no kubelet, so `pods/log` and pod phase
@@ -807,6 +913,8 @@ be exercised.
 
 ### OQ4: One metrics registry or two?
 
+**Decision (2026-10-10): a.**
+
 `temporal.Dial` reports SDK metrics on an OTel meter and `MetricViews()`
 fixes the SDK's histogram buckets; `boopd`'s own metrics are listed in
 DESIGN-0001 § Observability.
@@ -824,6 +932,10 @@ DESIGN-0001 § Observability.
 - **other:**
 
 ### OQ5: Branches, PRs and the first release
+
+**Decision (2026-10-10): a.** PR #1 merges when Phase 2 starts; one PR
+per phase from `main`, `dont-release` through Phase 6; Phase 7 is
+`minor` and cuts `0.1.0`.
 
 PR #1 (`chore/bootstrap`, `dont-release`) holds Phases 0 and 1 and is not
 to be merged until you say so. The release train cuts a version on every
@@ -843,6 +955,8 @@ merge to `main` with a semver label.
 
 ### OQ6: Which Temporal does the homelab use?
 
+**Decision (2026-10-10): a.**
+
 - **a (recommended): repo-guardian's reference cluster
   (`contrib/temporal`, server 1.32, fairness on), with a new `boopd`
   namespace created by its namespace job and its own client identity (an
@@ -856,6 +970,8 @@ merge to `main` with a semver label.
 - **other:**
 
 ### OQ7: Redis: chart dependency or external reference?
+
+**Decision (2026-10-10): a.**
 
 DESIGN-0001 OQ7 decided one Redis per `boopd` install with `AUTH`,
 `maxmemory`, `allkeys-lru` and an ACL user; the chart section leaves the
@@ -872,6 +988,9 @@ packaging open.
 - **other:**
 
 ### OQ8: Replay tests from recorded histories
+
+**Decision (2026-10-10): c.** No replay tests in the spike; revisit for
+v1 once the workflow code settles.
 
 DESIGN-0001 § Testing Strategy lists replay tests against recorded
 histories in CI. No histories exist until a worker has run.
@@ -891,6 +1010,14 @@ histories in CI. No histories exist until a worker has run.
 
 ### OQ9: What does `/readyz` mean for the worker?
 
+**Decision (2026-10-10): a.** Readiness means "ready to run work" and
+liveness means "the process is up", which is the Kubernetes meaning for
+a worker with no inbound traffic: a failing `/readyz` holds a rollout
+and marks the pod not ready, a failing `/healthz` restarts the pod. So
+`/healthz` must depend on nothing outside the process (a Temporal outage
+must not restart every worker), and `/readyz` carries the three
+dependency checks in option a.
+
 - **a (recommended): Temporal health check passes, the build is the
   deployment's current version (`RequireCurrentVersion`), and the
   Kubernetes API answers a `SelfSubjectAccessReview` for creating Jobs
@@ -903,6 +1030,11 @@ histories in CI. No histories exist until a worker has run.
 - **other:**
 
 ### OQ10: Where do the scratch fixture repositories live?
+
+**Decision (2026-10-10): c.** You make the scratch repositories by hand
+for the spike; task 8.1 lists what each must contain and INV-0002 names
+them. A test organisation with repositories created and deleted per e2e
+run is a question for after the spike (out of scope above).
 
 Phase 8 needs an isolation repository, a marker-checking repository, a
 Python sdist repository and a many-updates repository, each a real GitHub
@@ -921,6 +1053,8 @@ repository the `boop-bot` installation can see.
 - **other:**
 
 ### OQ11: Where does the Renovate 44 log fixture come from?
+
+**Decision (2026-10-10): a.**
 
 The scanner and parser pin exact `msg` strings and the report shape from
 a real run, and Phase 4 lands before the homelab exists.
@@ -952,5 +1086,8 @@ a real run, and Phase 4 lands before the homelab exists.
   DESIGN-0028, IMPL-0028
 - renovate-operator `0183661`: `internal/platform/`, `internal/jobspec/`;
   INV-0003, INV-0004, INV-0005
+- [hclkit](https://github.com/donaldgifford/hclkit): `pkg/hclkit` Loader,
+  `ctytypes`, `validate`
+- [k3d](https://k3d.io/)
 - [Temporal Go SDK: testing](https://docs.temporal.io/develop/go/testing-suite)
 - [client-go fake clientset](https://pkg.go.dev/k8s.io/client-go/kubernetes/fake)
