@@ -355,7 +355,7 @@ Phase 0 moves it.
   `env()` function for the few values an operator may want from the
   environment; unknown attributes and blocks are errors; every diagnostic
   carries the file, line and column.
-- [ ] 3.2 Defaults and validation: `pending_timeout` 10m, `cadence` 24h,
+- [x] 3.2 Defaults and validation: `pending_timeout` 10m, `cadence` 24h,
   `discovery.every` 6h, `budget.reserve_fraction` 0.10,
   `max_concurrent_runs` 10, `default_estimate` {core 300, graphql 150};
   the image is pinned by digest; `config_path` is a relative file path;

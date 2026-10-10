@@ -43,9 +43,21 @@ import (
 	ctyjson "github.com/zclconf/go-cty/cty/json"
 
 	"github.com/donaldgifford/boop/internal/jobspec"
+	"github.com/donaldgifford/boop/internal/platform"
+	"github.com/donaldgifford/boop/internal/workflows"
 	"github.com/donaldgifford/hclkit/pkg/hclkit"
 	"github.com/donaldgifford/hclkit/pkg/hclkit/ctytypes"
 	"github.com/donaldgifford/hclkit/pkg/hclkit/funcs"
+)
+
+// Defaults (DESIGN-0001 § API / Interface Changes, OQ4, OQ10).
+const (
+	DefaultSecretsDir     = "/etc/boopd/secrets" //nolint:gosec // G101: a mount path, not a credential
+	DefaultEndpoint       = "https://api.github.com"
+	DefaultLogLevel       = "info"
+	DefaultPendingTimeout = 10 * time.Minute
+	DefaultCadence        = 24 * time.Hour
+	DefaultDiscoveryEvery = 6 * time.Hour
 )
 
 // Probe modes for discovery.probe (DESIGN-0001 OQ3).
@@ -210,6 +222,7 @@ func Parse(filename string, src []byte, opts ...Option) (*Config, hclkit.Diagnos
 
 	b := &builder{ctx: ctx, filename: filename}
 	cfg := b.build(&raw)
+	b.validate(cfg, &raw)
 	all := append(slices.Clone(diags.Diagnostics), b.diags...)
 	if all.HasErrors() {
 		return nil, hclkit.NewDiagnostics(all, parser.Files())
@@ -241,9 +254,7 @@ func (b *builder) build(raw *fileSchema) *Config {
 		DefaultProfile: raw.DefaultProfile,
 		UnknownProfile: raw.UnknownProfile,
 	}
-	if raw.SecretsDir != nil {
-		cfg.SecretsDir = *raw.SecretsDir
-	}
+	cfg.SecretsDir = derefOr(raw.SecretsDir, DefaultSecretsDir)
 	cfg.Profiles = b.profiles(raw.Profiles)
 	for i := range raw.ProfileRules {
 		r := &raw.ProfileRules[i]
@@ -262,11 +273,11 @@ func (b *builder) build(raw *fileSchema) *Config {
 func (b *builder) renovate(r *renovateBlock) Renovate {
 	out := Renovate{
 		Image:     r.Image,
-		LogLevel:  b.enum(logLevelEnum, r.LogLevel),
-		DryRun:    b.enum(dryRunEnum, r.DryRun),
+		LogLevel:  b.enum(logLevelEnum, r.LogLevel, DefaultLogLevel),
+		DryRun:    b.enum(dryRunEnum, r.DryRun, ""),
 		GitAuthor: deref(r.GitAuthor),
 	}
-	out.ConfigPath = deref(r.ConfigPath)
+	out.ConfigPath = derefOr(r.ConfigPath, platform.DefaultConfigPath)
 	out.SharedPreset = deref(r.SharedPreset)
 	if r.Global != nil {
 		out.Global = b.options(r.Global, "global")
@@ -280,7 +291,7 @@ func (b *builder) renovate(r *renovateBlock) Renovate {
 func (b *builder) runs(r *runsBlock) Runs {
 	out := Runs{
 		Namespace:      r.Namespace,
-		PendingTimeout: b.duration(r.PendingTimeout),
+		PendingTimeout: b.duration(r.PendingTimeout, DefaultPendingTimeout),
 	}
 	if r.MaxConcurrent != nil {
 		out.MaxConcurrent = *r.MaxConcurrent
@@ -291,46 +302,58 @@ func (b *builder) runs(r *runsBlock) Runs {
 func (b *builder) app(a *appBlock) *App {
 	out := &App{
 		Name:     a.Name,
-		Endpoint: deref(a.Endpoint),
+		Endpoint: derefOr(a.Endpoint, DefaultEndpoint),
 		AppID:    a.AppID,
 		PrivateKeySecretRef: SecretRef{
 			Name: a.PrivateKeySecretRef.Name,
 			Key:  a.PrivateKeySecretRef.Key,
 		},
 		Installations: b.intList(a.Installations),
-		Cadence:       b.duration(a.Cadence),
+		Cadence:       b.duration(a.Cadence, DefaultCadence),
 	}
-	if d := a.Discovery; d != nil {
-		out.Discovery = Discovery{
-			Every:        b.duration(d.Every),
-			Probe:        b.enum(probeEnum, d.Probe),
-			SkipForks:    derefOr(d.SkipForks, true),
-			SkipArchived: derefOr(d.SkipArchived, true),
-		}
-	} else {
-		out.Discovery = Discovery{SkipForks: true, SkipArchived: true}
+	d := a.Discovery
+	if d == nil {
+		d = &discoveryBlock{}
 	}
-	if bg := a.Budget; bg != nil {
-		out.Budget.ReserveFraction = derefOr(bg.ReserveFraction, -1)
-		out.Budget.MaxConcurrentRuns = derefOr(bg.MaxConcurrentRuns, -1)
-		out.Budget.DefaultEstimate = bg.DefaultEstimate
-	} else {
-		out.Budget = Budget{ReserveFraction: -1, MaxConcurrentRuns: -1}
+	out.Discovery = Discovery{
+		Every:        b.duration(d.Every, DefaultDiscoveryEvery),
+		Probe:        b.enum(probeEnum, d.Probe, ProbeGraphQL),
+		SkipForks:    derefOr(d.SkipForks, true),
+		SkipArchived: derefOr(d.SkipArchived, true),
+	}
+	bg := a.Budget
+	if bg == nil {
+		bg = &budgetBlock{}
+	}
+	out.Budget = Budget{
+		ReserveFraction:   derefOr(bg.ReserveFraction, workflows.DefaultReserveFraction),
+		MaxConcurrentRuns: derefOr(bg.MaxConcurrentRuns, workflows.DefaultMaxConcurrentRuns),
+		DefaultEstimate: mergeMap(map[string]int{
+			workflows.ResourceCore:    workflows.DefaultEstimateCore,
+			workflows.ResourceGraphQL: workflows.DefaultEstimateGraphQL,
+		}, bg.DefaultEstimate),
 	}
 	return out
 }
 
-// duration evaluates an optional duration attribute: zero when absent.
-func (b *builder) duration(expr hcl.Expression) time.Duration {
+// duration evaluates an optional duration attribute: def when absent.
+// A set value must be positive; "0s" is not a way to ask for the default.
+func (b *builder) duration(expr hcl.Expression, def time.Duration) time.Duration {
+	if isNull(expr, b.ctx) {
+		return def
+	}
 	d, diags := ctytypes.DecodeDuration(expr, b.ctx)
 	b.diags = append(b.diags, diags...)
+	if !diags.HasErrors() && d <= 0 {
+		b.errorf(expr.Range(), "Invalid duration", "The duration must be positive; omit the attribute for the default.")
+	}
 	return d
 }
 
-// enum evaluates an optional closed-set attribute: "" when absent.
-func (b *builder) enum(e ctytypes.EnumType, expr hcl.Expression) string {
+// enum evaluates an optional closed-set attribute: def when absent.
+func (b *builder) enum(e ctytypes.EnumType, expr hcl.Expression, def string) string {
 	if isNull(expr, b.ctx) {
-		return ""
+		return def
 	}
 	s, diags := e.DecodeExpr(expr, b.ctx)
 	b.diags = append(b.diags, diags...)
@@ -342,25 +365,34 @@ func (b *builder) stringList(expr hcl.Expression) []string {
 	vals := b.listValues(expr, cty.String)
 	out := make([]string, 0, len(vals))
 	for _, v := range vals {
-		out = append(out, v.AsString())
+		out = append(out, v.val.AsString())
 	}
 	return out
 }
 
-// intList evaluates a list of whole numbers element by element.
+// intList evaluates a list of positive whole numbers (installation ids)
+// element by element.
 func (b *builder) intList(expr hcl.Expression) []int64 {
-	var out []int64
-	for _, v := range b.listValues(expr, cty.Number) {
-		n, acc := v.AsBigFloat().Int64()
-		if !v.AsBigFloat().IsInt() || acc != 0 {
-			continue // validation reports non-integers with their position
+	elems := b.listValues(expr, cty.Number)
+	out := make([]int64, 0, len(elems))
+	for _, e := range elems {
+		bf := e.val.AsBigFloat()
+		n, acc := bf.Int64()
+		if !bf.IsInt() || acc != 0 || n <= 0 {
+			b.errorf(e.rng, "Invalid installation id", "Installation ids are positive whole numbers.")
+			continue
 		}
 		out = append(out, n)
 	}
 	return out
 }
 
-func (b *builder) listValues(expr hcl.Expression, want cty.Type) []cty.Value {
+type listElem struct {
+	val cty.Value
+	rng hcl.Range
+}
+
+func (b *builder) listValues(expr hcl.Expression, want cty.Type) []listElem {
 	if isNull(expr, b.ctx) {
 		return nil
 	}
@@ -369,7 +401,7 @@ func (b *builder) listValues(expr hcl.Expression, want cty.Type) []cty.Value {
 		b.diags = append(b.diags, diags...)
 		return nil
 	}
-	out := make([]cty.Value, 0, len(elems))
+	out := make([]listElem, 0, len(elems))
 	for _, e := range elems {
 		v, vd := e.Value(b.ctx)
 		b.diags = append(b.diags, vd...)
@@ -380,7 +412,7 @@ func (b *builder) listValues(expr hcl.Expression, want cty.Type) []cty.Value {
 			b.errorf(e.Range(), "Invalid list element", "Each element must be a %s.", want.FriendlyName())
 			continue
 		}
-		out = append(out, v)
+		out = append(out, listElem{val: v, rng: e.Range()})
 	}
 	return out
 }
@@ -403,6 +435,10 @@ func (b *builder) options(fb *freeBlock, where string) map[string]any {
 		val, err := ctyToAny(v)
 		if err != nil {
 			b.errorf(attr.Expr.Range(), "Invalid Renovate option", "%s.%s: %v.", where, name, err)
+			continue
+		}
+		if err := jobspec.ValidateOptions(where, map[string]any{name: val}); err != nil {
+			b.errorf(attr.NameRange, "Forbidden Renovate option", "%v.", err)
 			continue
 		}
 		out[name] = val
