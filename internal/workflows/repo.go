@@ -235,7 +235,7 @@ func (r *repo) checkRepo(ctx workflow.Context) (gone bool) {
 		workflow.GetLogger(ctx).Info("offboarded", "repo_id", r.s.RepoID, "state", res.State)
 		return true
 	default:
-		workflow.GetMetricsHandler(ctx).Counter("boopd_discovery_missed").Inc(1)
+		workflow.GetMetricsHandler(ctx).Counter(MetricDiscoveryMissed).Inc(1)
 		if res.Slug != "" {
 			r.s.Slug, r.s.DefaultBranch = res.Slug, res.DefaultBranch
 		}
@@ -444,7 +444,7 @@ func (r *repo) decide(ctx workflow.Context, a attempt, start time.Time) (rerun, 
 			r.s.ConsecutiveReruns++
 			return true, false
 		case progressed:
-			metrics.Counter("boopd_repos_incomplete").Inc(1)
+			metrics.Counter(MetricReposIncomplete).Inc(1)
 			workflow.GetLogger(ctx).Info("incomplete: rerun cap reached", "repo_id", r.s.RepoID)
 			cadence()
 		case r.s.StallCount < StallLimit:
@@ -452,7 +452,7 @@ func (r *repo) decide(ctx workflow.Context, a attempt, start time.Time) (rerun, 
 			r.s.ConsecutiveReruns++
 			return true, false
 		default:
-			metrics.Counter("boopd_repos_stalled").Inc(1)
+			metrics.Counter(MetricReposStalled).Inc(1)
 			workflow.GetLogger(ctx).Warn("stalled: no progress", "repo_id", r.s.RepoID, "stall_count", r.s.StallCount)
 			cadence()
 		}

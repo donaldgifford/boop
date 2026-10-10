@@ -101,3 +101,16 @@ func DiscoveryScheduleID(app string) string {
 func DiscoveryWorkflowID() string {
 	return "discovery/" + Platform
 }
+
+// Metrics workflow code emits through the SDK's metrics handler
+// (DESIGN-0001 § Observability); internal/observability defines the
+// rest of the boopd set.
+const (
+	MetricBudgetLimit        = "boopd_budget_limit"
+	MetricBudgetRemaining    = "boopd_budget_remaining"
+	MetricBudgetAdmittedRuns = "boopd_budget_admitted_runs"
+	MetricRateSpendPerRun    = "boopd_rate_spend_per_run"
+	MetricDiscoveryMissed    = "boopd_discovery_missed"
+	MetricReposStalled       = "boopd_repos_stalled"
+	MetricReposIncomplete    = "boopd_repos_incomplete"
+)

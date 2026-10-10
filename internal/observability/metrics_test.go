@@ -11,10 +11,14 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/donaldgifford/boop/internal/activities"
+	"github.com/donaldgifford/boop/internal/kube"
 	"github.com/donaldgifford/boop/internal/observability"
 )
 
-var _ activities.Metrics = (*observability.Metrics)(nil)
+var (
+	_ activities.Metrics   = (*observability.Metrics)(nil)
+	_ kube.RequestRecorder = (*observability.Metrics)(nil)
+)
 
 func collect(t *testing.T, reader *sdkmetric.ManualReader) map[string]metricdata.Metrics {
 	t.Helper()
@@ -46,6 +50,7 @@ func TestMetrics_Names(t *testing.T) {
 	m.TokenMint("success")
 	m.TokenRevocation("failure")
 	m.ProbeCost(1, "graphql", 3)
+	m.RecordRequest("create", "jobs", "201")
 
 	got := collect(t, reader)
 	names := make([]string, 0, len(got))
@@ -55,6 +60,7 @@ func TestMetrics_Names(t *testing.T) {
 	slices.Sort(names)
 	want := []string{
 		"boopd_discovery_probe_cost",
+		"boopd_kube_requests_total",
 		"boopd_run_duration_seconds",
 		"boopd_run_overhead_seconds",
 		"boopd_run_pending_timeouts_total",

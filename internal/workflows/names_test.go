@@ -64,3 +64,22 @@ func TestRegister(t *testing.T) {
 		t.Errorf("Register registered %v, want %s", r.names, InstallationWorkflowName)
 	}
 }
+
+// TestMetricNames pins the metrics workflow code emits (DESIGN-0001
+// § Observability).
+func TestMetricNames(t *testing.T) {
+	t.Parallel()
+	for got, want := range map[string]string{
+		MetricBudgetLimit:        "boopd_budget_limit",
+		MetricBudgetRemaining:    "boopd_budget_remaining",
+		MetricBudgetAdmittedRuns: "boopd_budget_admitted_runs",
+		MetricRateSpendPerRun:    "boopd_rate_spend_per_run",
+		MetricDiscoveryMissed:    "boopd_discovery_missed",
+		MetricReposStalled:       "boopd_repos_stalled",
+		MetricReposIncomplete:    "boopd_repos_incomplete",
+	} {
+		if got != want {
+			t.Errorf("metric %q, want %q", got, want)
+		}
+	}
+}

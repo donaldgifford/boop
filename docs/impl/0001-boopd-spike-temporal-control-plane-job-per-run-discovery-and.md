@@ -577,7 +577,7 @@ contract).
   100 iterations or the SDK's suggestion; the `state` query; search
   attributes `InstallationID`, `Profile`, `Phase`, `LastOutcome`,
   `NextDue`.
-- [ ] 6.3 `internal/observability`: slog JSON with level from `LOG_LEVEL`;
+- [x] 6.3 `internal/observability`: slog JSON with level from `LOG_LEVEL`;
   an OTel meter provider with the Prometheus exporter on `METRICS_ADDR`
   carrying `temporal.MetricViews()` (OQ4); the boopd metric set from the
   design registered once and pinned by a names test; `/healthz` and

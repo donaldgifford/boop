@@ -45,13 +45,16 @@ const (
 	TokenMintsTotal       = "boopd_token_mints_total"       //nolint:gosec // G101: a metric name
 	TokenRevocationsTotal = "boopd_token_revocations_total" //nolint:gosec // G101: a metric name
 	DiscoveryProbeCost    = "boopd_discovery_probe_cost"
+	KubeRequestsTotal     = "boopd_kube_requests_total"
 )
 
 // runBuckets span a pod start of seconds to a run of the full hour.
 var runBuckets = []float64{1, 5, 10, 30, 60, 120, 300, 600, 1200, 1800, 2700, 3600}
 
 // Metrics records the boopd metric set. It implements
-// activities.Metrics.
+// activities.Metrics and kube.RequestRecorder. The budget gauges and
+// the repository counters come from workflow code through the
+// Temporal SDK's metrics handler (internal/workflows).
 type Metrics struct {
 	runs        metric.Int64Counter
 	active      metric.Int64UpDownCounter
@@ -62,6 +65,7 @@ type Metrics struct {
 	mints       metric.Int64Counter
 	revocations metric.Int64Counter
 	probeCost   metric.Int64Counter
+	kube        metric.Int64Counter
 }
 
 // NewMetrics creates the instruments on mp's boopd meter. Call it once
@@ -94,6 +98,7 @@ func NewMetrics(mp metric.MeterProvider) (*Metrics, error) {
 	out.mints = counter(TokenMintsTotal, "Run token mints by outcome.")
 	out.revocations = counter(TokenRevocationsTotal, "Run token revocations by outcome.")
 	out.probeCost = counter(DiscoveryProbeCost, "Discovery config-probe spend by installation and resource.")
+	out.kube = counter(KubeRequestsTotal, "Kubernetes API requests by verb, resource and status code.")
 	if err := errors.Join(errs...); err != nil {
 		return nil, err
 	}
@@ -144,4 +149,10 @@ func (m *Metrics) TokenRevocation(outcome string) {
 func (m *Metrics) ProbeCost(installationID int64, resource string, cost int) {
 	m.probeCost.Add(context.Background(), int64(cost), metric.WithAttributes(
 		attribute.String("installation", strconv.FormatInt(installationID, 10)), attribute.String("resource", resource)))
+}
+
+// RecordRequest implements kube.RequestRecorder.
+func (m *Metrics) RecordRequest(verb, resource, code string) {
+	m.kube.Add(context.Background(), 1, metric.WithAttributes(
+		attribute.String("verb", verb), attribute.String("resource", resource), attribute.String("code", code)))
 }
