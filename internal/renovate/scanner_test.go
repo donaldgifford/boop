@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/donaldgifford/boop/internal/renovate"
 )
@@ -168,5 +169,46 @@ func TestScanner_ExitCodeField(t *testing.T) {
 	s.Feed(`{"msg":"Repository finished","repository":"boop-bot/scratch","result":"external-host-error","exitCode":7}`)
 	if f := s.Result().Finished; f == nil || f.ExitCode != 7 || f.Result != "external-host-error" {
 		t.Errorf("Finished = %+v, want external-host-error / 7", f)
+	}
+}
+
+func TestScanner_SecondaryLimit(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		line  string
+		hit   bool
+		after time.Duration
+	}{
+		{
+			name:  "429 with retry-after",
+			line:  `{"msg":"GitHub request failed","repository":"acme/app","err":{"statusCode":429,"headers":{"retry-after":"90"}}}`,
+			hit:   true,
+			after: 90 * time.Second,
+		},
+		{
+			name: "403 secondary rate limit without retry-after",
+			line: `{"msg":"GitHub request failed","err":{"statusCode":403,"message":"You have exceeded a secondary rate limit"}}`,
+			hit:  true,
+		},
+		{
+			name: "403 that is not a rate limit",
+			line: `{"msg":"GitHub request failed","err":{"statusCode":403,"message":"Resource not accessible by integration"}}`,
+		},
+		{
+			name: "another repository's 429",
+			line: `{"msg":"GitHub request failed","repository":"acme/other","err":{"statusCode":429}}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s := renovate.NewScanner("acme/app")
+			s.Feed(tt.line)
+			got := s.Result()
+			if got.SecondaryLimit != tt.hit || got.RetryAfter != tt.after {
+				t.Errorf("SecondaryLimit=%v RetryAfter=%v, want %v %v", got.SecondaryLimit, got.RetryAfter, tt.hit, tt.after)
+			}
+		})
 	}
 }

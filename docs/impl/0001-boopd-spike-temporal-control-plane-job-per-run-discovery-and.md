@@ -512,7 +512,7 @@ stall).
   deadline `min(start + 50 min, expiresAt − 3 min)` or on cancellation by
   foreground delete, read the exit code, `RateAfter`, revoke (logged and
   counted on failure), delete the Job, classify.
-- [ ] 5.5 Classification: the design's table as one function with a table
+- [x] 5.5 Classification: the design's table as one function with a table
   test per row, including the exit-code cross-check and the `OOMKilled`
   and `DeadlineExceeded` reasons; `rate-limit-exceeded` and a
   secondary-limit `403`/`429` in the log yield an activity error carrying

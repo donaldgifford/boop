@@ -27,9 +27,11 @@ package renovate
 
 import (
 	"encoding/json"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Messages the scanner matches (DESIGN-0001 § Process builder).
@@ -97,16 +99,24 @@ type Result struct {
 	// ReportMissing is true when the report line was absent or did not
 	// parse; Tuples then come from branch and PR events.
 	ReportMissing bool
+	// SecondaryLimit is true when a request in the run hit a GitHub
+	// secondary rate limit (a 429, or a 403 naming the rate limit);
+	// RetryAfter is the largest retry-after it carried, zero when none
+	// did (DESIGN-0001 OQ5).
+	SecondaryLimit bool
+	RetryAfter     time.Duration
 }
 
 // Scanner consumes a run's log lines. It is not safe for concurrent use;
 // feed it from the one goroutine following the log.
 type Scanner struct {
-	slug     string
-	progress Progress
-	finished *Finished
-	version  string
-	report   *report
+	slug       string
+	progress   Progress
+	finished   *Finished
+	version    string
+	report     *report
+	secondary  bool
+	retryAfter time.Duration
 	// events, in order of first sight, for rebuilding tuples.
 	branches []string
 	prs      map[string]int
@@ -147,6 +157,7 @@ func (s *Scanner) Feed(text string) {
 	if l.Repository != "" && s.slug != "" && l.Repository != s.slug {
 		return
 	}
+	s.rateLimit(text)
 	switch l.Msg {
 	case msgStarted:
 		s.version = l.RenovateVersion
@@ -163,6 +174,30 @@ func (s *Scanner) Feed(text string) {
 		}
 	default:
 		s.change(&l)
+	}
+}
+
+// retryAfterRe finds a retry-after header value in an error line.
+var retryAfterRe = regexp.MustCompile(`"retry-after":\s*"?(\d+)`)
+
+// rateLimit records a secondary-limit response. Renovate logs the
+// failed request's error with its statusCode and headers; only lines
+// that carry a statusCode are examined.
+func (s *Scanner) rateLimit(text string) {
+	if !strings.Contains(text, `"statusCode"`) {
+		return
+	}
+	lower := strings.ToLower(text)
+	hit := strings.Contains(lower, `"statuscode":429`) ||
+		(strings.Contains(lower, `"statuscode":403`) && strings.Contains(lower, "rate limit"))
+	if !hit {
+		return
+	}
+	s.secondary = true
+	if m := retryAfterRe.FindStringSubmatch(lower); m != nil {
+		if n, err := strconv.Atoi(m[1]); err == nil {
+			s.retryAfter = max(s.retryAfter, time.Duration(n)*time.Second)
+		}
 	}
 }
 
@@ -216,7 +251,10 @@ func (s *Scanner) pr(branch string, n int, result string) {
 
 // Result returns what the scanner has seen so far.
 func (s *Scanner) Result() *Result {
-	out := &Result{RenovateVersion: s.version, Progress: s.progress, Finished: s.finished}
+	out := &Result{
+		RenovateVersion: s.version, Progress: s.progress, Finished: s.finished,
+		SecondaryLimit: s.secondary, RetryAfter: s.retryAfter,
+	}
 	if rep := s.report.repository(s.slug); rep != nil {
 		out.Tuples, out.Managers, out.Problems = rep.tuples(), rep.managers(), rep.problemList()
 		return out
