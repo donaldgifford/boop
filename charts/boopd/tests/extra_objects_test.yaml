@@ -1,0 +1,16 @@
+---
+suite: extra objects
+templates:
+  - templates/extra-objects.yaml
+tests:
+  - it: renders extraObjects through tpl
+    set:
+      extraObjects:
+        - apiVersion: v1
+          kind: Secret
+          metadata:
+            name: "{{ .Release.Name }}-key"
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-key

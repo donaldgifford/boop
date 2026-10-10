@@ -2,7 +2,7 @@
 # https://git-cliff.org/docs/configuration
 #
 # Generated for the whole repo. The chart-only changelog is at
-# charts/boop/cliff.toml and is invoked with
+# charts/boopd/cliff.toml and is invoked with
 # --include-path 'charts/**'.
 
 [changelog]

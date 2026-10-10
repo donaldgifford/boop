@@ -208,8 +208,10 @@ func InstallationWorkflow(ctx workflow.Context, in *InstallationWorkflowInput) e
 	if err := workflow.SetUpdateHandlerWithOptions(ctx, AcquireUpdate,
 		func(ctx workflow.Context, req *AcquireRequest) (*AcquireResult, error) {
 			b.handled++
+			res := b.acquire(workflow.Now(ctx), req)
+			b.gauges(ctx)
 
-			return b.acquire(workflow.Now(ctx), req), nil
+			return res, nil
 		},
 		workflow.UpdateHandlerOptions{Validator: validateAcquire},
 	); err != nil {
@@ -240,6 +242,7 @@ func InstallationWorkflow(ctx workflow.Context, in *InstallationWorkflowInput) e
 
 			b.handled++
 			b.report(&r)
+			b.gauges(ctx)
 		}
 	})
 
@@ -265,6 +268,7 @@ func InstallationWorkflow(ctx workflow.Context, in *InstallationWorkflowInput) e
 		now = workflow.Now(ctx)
 		b.finishRefresh(ctx, now)
 		b.sweep(now)
+		b.gauges(ctx)
 
 		if done() {
 			return b.continueAsNew(ctx, reports, suspends)
@@ -597,4 +601,23 @@ func earliest(a, b time.Time) time.Time {
 	}
 
 	return a
+}
+
+// gauges publishes the budget through the SDK's metrics handler, which
+// stays silent during replay (DESIGN-0001 § Observability).
+func (b *budget) gauges(ctx workflow.Context) {
+	m := workflow.GetMetricsHandler(ctx).WithTags(map[string]string{
+		"installation": strconv.FormatInt(b.in.InstallationID, 10),
+	})
+	m.Gauge(MetricBudgetAdmittedRuns).Update(float64(len(b.in.State.Leases)))
+	for _, name := range TrackedResources {
+		r, ok := b.in.State.Resources[name]
+		if !ok {
+			continue
+		}
+		rm := m.WithTags(map[string]string{"resource": name})
+		rm.Gauge(MetricBudgetLimit).Update(float64(r.Limit))
+		rm.Gauge(MetricBudgetRemaining).Update(float64(r.Remaining))
+		rm.Gauge(MetricRateSpendPerRun).Update(r.Estimate)
+	}
 }

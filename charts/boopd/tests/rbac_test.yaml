@@ -1,0 +1,62 @@
+---
+suite: rbac
+templates:
+  - templates/rbac.yaml
+tests:
+  - it: grants exactly the design's verbs and nothing else
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: Role
+      - equal:
+          path: rules
+          value:
+            - apiGroups: ["batch"]
+              resources: ["jobs"]
+              verbs: ["create", "get", "list", "watch", "patch", "delete"]
+            - apiGroups: [""]
+              resources: ["pods"]
+              verbs: ["get", "list", "watch"]
+            - apiGroups: [""]
+              resources: ["pods/log"]
+              verbs: ["get"]
+            - apiGroups: [""]
+              resources: ["secrets"]
+              verbs: ["create", "get", "delete"]
+
+  - it: never lists secrets
+    documentIndex: 0
+    asserts:
+      - notContains:
+          path: rules[3].verbs
+          content: list
+
+  - it: binds the worker ServiceAccount
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: RoleBinding
+      - equal:
+          path: roleRef.name
+          value: RELEASE-NAME-boopd
+      - equal:
+          path: subjects[0]
+          value:
+            kind: ServiceAccount
+            name: RELEASE-NAME-boopd
+            namespace: NAMESPACE
+
+  - it: lives in the runs namespace when it differs from the release
+    set:
+      boopd.runs.namespace: boopd-runs
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: boopd-runs
+
+  - it: renders nothing when rbac.create is false
+    set:
+      rbac.create: false
+    asserts:
+      - hasDocuments:
+          count: 0

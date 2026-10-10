@@ -222,7 +222,7 @@ pod can be used *for* is the profile's job.
 
 | Resource | Verbs | Why |
 | -------- | ----- | --- |
-| `batch/jobs` | create, get, list, watch, delete | the run |
+| `batch/jobs` | create, get, list, watch, patch, delete | the run; `patch` unsuspends it (RunRenovate step 4) |
 | `pods` | get, list, watch | find the Job's pod, read its phase and exit code |
 | `pods/log` | get | progress and the report |
 | `secrets` | create, get, delete | the per-run token Secret; no `list`, so the worker cannot enumerate other Secrets |

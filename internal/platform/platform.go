@@ -14,10 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package platform defines the small Client interface used to enumerate
-// repos, check for Renovate config files and mint access tokens. The
-// GitHub implementation lives in internal/platform/github; boopd is
-// GitHub-only (RFC-0001).
+// Package platform defines the platform-neutral types boopd's activities
+// use: Repository, Installation, RepoState, the Client and Minter
+// interfaces and the error sentinels. The GitHub implementation lives in
+// internal/platform/github; boopd is GitHub-only (RFC-0001).
 //
 // Copied from renovate-operator internal/platform at 0183661 (INV-0001,
 // Observation 7), with the Forgejo client dropped. Comments below that
@@ -35,6 +35,15 @@ import (
 // reads are surfaced; richer metadata stays inside the platform-specific
 // client.
 type Repository struct {
+	// ID is the platform's numeric repository id. It is stable across
+	// renames and transfers, so it names the repository's workflow
+	// (ADR-0002: repo/github/<id>).
+	ID int64
+
+	// NodeID is the platform's global node id, the handle the GraphQL
+	// config probe passes to nodes(ids:) (DESIGN-0001 § DiscoveryWorkflow).
+	NodeID string
+
 	// Slug is the platform-qualified path ("owner/repo"). The same string
 	// flows into RENOVATE_REPOSITORIES.
 	Slug string
@@ -51,6 +60,60 @@ type Repository struct {
 
 	// Topics are the repo's GitHub topics.
 	Topics []string
+}
+
+// Installation is one installation of the GitHub App, as listed by
+// GET /app/installations (DESIGN-0001 § DiscoveryWorkflow).
+type Installation struct {
+	// ID is the installation id; it names the InstallationWorkflow.
+	ID int64
+
+	// Account is the login of the user or organisation the App is
+	// installed on.
+	Account string
+
+	// SuspendedAt is when the installation was suspended; zero when it
+	// is active. Suspended installations are not discovered.
+	SuspendedAt time.Time
+
+	// RepositorySelection is "all" or "selected".
+	RepositorySelection string
+}
+
+// Suspended reports whether the installation is suspended.
+func (i *Installation) Suspended() bool { return !i.SuspendedAt.IsZero() }
+
+// RepoState is CheckRepo's answer about one repository (DESIGN-0001
+// § RepoWorkflow). The fourth answer, "could not tell", is an error, so
+// an outage never looks like an offboarding.
+type RepoState int
+
+const (
+	// RepoUnknown is the zero value; CheckRepo never returns it without
+	// an error.
+	RepoUnknown RepoState = iota
+	// RepoGone means the installation can no longer see the repository,
+	// or it is archived.
+	RepoGone
+	// RepoNoConfig means the repository is there but its default branch
+	// lacks the config file.
+	RepoNoConfig
+	// RepoPresent means the repository is there with the config file.
+	RepoPresent
+)
+
+// String implements fmt.Stringer.
+func (s RepoState) String() string {
+	switch s {
+	case RepoGone:
+		return "gone"
+	case RepoNoConfig:
+		return "no-config"
+	case RepoPresent:
+		return "present"
+	default:
+		return "unknown"
+	}
 }
 
 // DiscoveryFilter is the platform-agnostic shape of a Scan's spec.discovery.
@@ -85,10 +148,10 @@ type Client interface {
 	// assigning shards.
 	Discover(ctx context.Context, filter DiscoveryFilter) ([]Repository, error)
 
-	// HasRenovateConfig returns true when the repo has at least one of:
-	// renovate.json, .renovaterc, .renovaterc.json, .github/renovate.json,
-	// .gitlab/renovate.json on its default branch.
-	HasRenovateConfig(ctx context.Context, repo Repository) (bool, error)
+	// HasRenovateConfig returns true when the repo has the configured
+	// Renovate config file (DefaultConfigPath unless overridden) on its
+	// default branch.
+	HasRenovateConfig(ctx context.Context, repo *Repository) (bool, error)
 
 	// MintAccessToken returns a token that can authenticate to the platform's
 	// git API. For GitHub App auth this is a freshly-minted installation
@@ -102,16 +165,24 @@ type Client interface {
 	MintAccessToken(ctx context.Context) (token string, expiresAt time.Time, err error)
 }
 
-// ConfigPaths is the ordered list of files HasRenovateConfig probes. First
-// 200 OK wins. Exposed so tests can match the same set without duplicating
-// the constants.
-var ConfigPaths = []string{
-	"renovate.json",
-	".renovaterc",
-	".renovaterc.json",
-	".github/renovate.json",
-	".gitlab/renovate.json",
+// Minter mints and revokes repository-scoped installation tokens for
+// runs (DESIGN-0001 § RunRenovate activity steps 1 and 10, OQ2, OQ11).
+// The spike's implementation holds the App key in memory; OpenBao
+// Transit can sit behind the same seam later.
+type Minter interface {
+	// Mint returns an installation token restricted to repoIDs and its
+	// expiry. Callers must not assume a token length.
+	Mint(ctx context.Context, installationID int64, repoIDs []int64) (token string, expiresAt time.Time, err error)
+
+	// Revoke ends token before its expiry.
+	Revoke(ctx context.Context, token string) error
 }
+
+// DefaultConfigPath is the Renovate config file a repository must carry
+// to be onboarded (ADR-0005). repo-guardian writes it; config may name a
+// different single path, and every probe checks only that one path
+// (DESIGN-0001 OQ3).
+const DefaultConfigPath = "renovate.json"
 
 // Error sentinels. Reconcilers distinguish transient (worth a retry) from
 // permanent (set Ready=False with a clear reason and stop) so they can

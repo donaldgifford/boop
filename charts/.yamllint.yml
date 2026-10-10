@@ -16,4 +16,5 @@ rules:
     check-keys: false
   empty-values: disable
 ignore: |-
-  charts/boop/templates
+  charts/boopd/templates
+  charts/boopd/charts/redis/templates

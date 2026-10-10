@@ -19,6 +19,14 @@ limitations under the License.
 // Topology and packages). Workflows execute them by the names in the
 // workflows package, so neither side imports the other's
 // implementation.
+//
+// Activities (New, Register) holds ListInstallations,
+// DiscoverInstallation, CheckRepo, ReadRateLimit and RunRenovate; Budget
+// holds AcquireBudget. GitHub is reached through the consumer-side
+// GitHub, AppAPI and InstallationAPI interfaces, with cached real
+// clients by default (NewGitHub). RunRenovate drives one Kubernetes Job
+// per run through internal/kube and classifies the run with the
+// design's table (classify.go).
 package activities
 
 import "go.temporal.io/sdk/activity"

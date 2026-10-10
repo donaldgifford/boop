@@ -7,6 +7,6 @@ coverage:
         target: 60%
         threshold: 40%
 ignore:
-  - "cmd/boop/main.go"
+  - "cmd/boopd/main.go"
   - "docs"
   - "scripts"

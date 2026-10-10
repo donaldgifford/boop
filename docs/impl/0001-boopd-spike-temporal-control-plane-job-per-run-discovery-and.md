@@ -281,15 +281,15 @@ OQ11; INV-0001 § Renovate behaviours to reproduce).
 
 #### Tasks
 
-- [ ] 2.1 `Repository` gains `ID int64` and `NodeID string` from the REST
+- [x] 2.1 `Repository` gains `ID int64` and `NodeID string` from the REST
   response (ADR-0002: the numeric id is the workflow ID; the probe needs
   the node id). `toRepo` fills them; the copied tests assert them.
-- [ ] 2.2 An App-level client: `NewAppClient(appID, key, endpoint)` on
+- [x] 2.2 An App-level client: `NewAppClient(appID, key, endpoint)` on
   `ghinstallation.NewAppsTransport`, with `ListInstallations` paging
   `GET /app/installations` at 100 per page and returning id, account
   login, `suspended_at` and the `repository_selection`. Filtered by the
   optional allowlist in the caller.
-- [ ] 2.3 `Minter` interface: `Mint(ctx, installationID, repoIDs) (token,
+- [x] 2.3 `Minter` interface: `Mint(ctx, installationID, repoIDs) (token,
   expiresAt, error)` and `Revoke(ctx, token) error`. The in-memory
   implementation holds the parsed key, mints with
   `POST /app/installations/{id}/access_tokens` and `repository_ids`
@@ -297,29 +297,29 @@ OQ11; INV-0001 § Renovate behaviours to reproduce).
   revokes with `DELETE /installation/token`. Never assume a token length.
   `MintAccessToken` on the installation client stays for discovery's
   own token.
-- [ ] 2.4 Installation-scoped discovery: `Discover` for an installation
+- [x] 2.4 Installation-scoped discovery: `Discover` for an installation
   pages `GET /installation/repositories` (INV-0004: never the owner
   endpoints) with `skipForks` and `skipArchived`, 100 per page, and
   exposes paging so `DiscoverInstallation` can probe and signal per page
   and heartbeat the page number.
-- [ ] 2.5 Config probe (OQ3 `a`): `ProbeConfig(ctx, nodeIDs, path)` sends
+- [x] 2.5 Config probe (OQ3 `a`): `ProbeConfig(ctx, nodeIDs, path)` sends
   the GraphQL query from the design, one query per 100 repositories,
   reads `rateLimit.cost` and returns, per repository, whether the file
   exists and its `extends` list parsed from `text` (JSON and JSON5-free
   JSON only; above 64 KB or unparseable yields an empty list). The REST
   fallback `GET /repos/{slug}/contents/{path}` behind `discovery.probe:
   rest`. `ConfigPaths` collapses to the configured path.
-- [ ] 2.6 `ReadRateLimit(ctx) (*workflows.Readings, error)` on the
+- [x] 2.6 `ReadRateLimit(ctx) (*workflows.Readings, error)` on the
   installation client: `GET /rate_limit`, reading `resources.core` and
   `resources.graphql` only, with `ObservedAt` from the response `Date`.
-- [ ] 2.7 Limiter from the discovered limit: a `WithRateLimit` value derived
+- [x] 2.7 Limiter from the discovered limit: a `WithRateLimit` value derived
   as `limit / 3600` per second, burst 10, replacing the copied 4,500/hr
   default once a reading exists.
-- [ ] 2.8 `CheckRepo(ctx, repoID)`: repository visible to the installation,
+- [x] 2.8 `CheckRepo(ctx, repoID)`: repository visible to the installation,
   not archived, config file present on the default branch; distinguishes
   gone, no config, present and error (an outage must never look like an
   offboarding).
-- [ ] 2.9 Tests with `httptest` servers as in the copied tests: paging,
+- [x] 2.9 Tests with `httptest` servers as in the copied tests: paging,
   the GraphQL batch and its cost, `extends` parsing edge cases, scoped
   mint and revoke request bodies, the REST fallback, the limiter value,
   `CheckRepo`'s four answers.
@@ -345,7 +345,7 @@ Phase 0 moves it.
 
 #### Tasks
 
-- [ ] 3.1 `internal/config`: the HCL grammar for the design's example,
+- [x] 3.1 `internal/config`: the HCL grammar for the design's example,
   block for block: `renovate {}`, `runs {}`, `profile "<name>" {}` with
   nested `pod {}` and `renovate {}`, top-level `order`, `default_profile`,
   `unknown_profile`, `profile_rule {}`, and `app "<name>" {}` with nested
@@ -355,7 +355,7 @@ Phase 0 moves it.
   `env()` function for the few values an operator may want from the
   environment; unknown attributes and blocks are errors; every diagnostic
   carries the file, line and column.
-- [ ] 3.2 Defaults and validation: `pending_timeout` 10m, `cadence` 24h,
+- [x] 3.2 Defaults and validation: `pending_timeout` 10m, `cadence` 24h,
   `discovery.every` 6h, `budget.reserve_fraction` 0.10,
   `max_concurrent_runs` 10, `default_estimate` {core 300, graphql 150};
   the image is pinned by digest; `config_path` is a relative file path;
@@ -367,19 +367,19 @@ Phase 0 moves it.
   `reserve_fraction` in [0, 0.5]; Secret refs have name and key; App ids
   and keys present; allowlist entries are positive ints. Errors are
   `hclkit.Diagnostics` written GCC-style, all of them, not the first.
-- [ ] 3.3 Secret-backed values: the App private key and the Redis URL are
+- [x] 3.3 Secret-backed values: the App private key and the Redis URL are
   read from the mounted files named by the refs at start, never from env;
   a missing file fails startup with the path in the error.
-- [ ] 3.4 `internal/profiles`: `Resolve(extends []string, managers
+- [x] 3.4 `internal/profiles`: `Resolve(extends []string, managers
   []string) string` applies `profile_rule`s (preset substrings and manager
   names), takes the strictest match by `order`, falls back to
   `default_profile` when `extends` is known but matches nothing and to
   `unknown_profile` when `extends` is empty; managers only ever tighten.
-- [ ] 3.5 `jobspec.Profile` and `jobspec.App` are built from the config
+- [x] 3.5 `jobspec.Profile` and `jobspec.App` are built from the config
   types by one constructor, so the chart's config file is the only
   source. `boopd config validate <file>` loads and validates without
   starting anything, for the chart's CI and for operators.
-- [ ] 3.6 Tests: a golden config under `internal/config/testdata`
+- [x] 3.6 Tests: a golden config under `internal/config/testdata`
   matching the design's example; every validation rule with a failing
   case asserting the diagnostic's position; the resolver's table including
   the Python tightening and the unknown case; `examples/boopd.hcl` kept
@@ -406,7 +406,7 @@ and the k3d end-to-end harness every later phase extends (OQ3).
 
 #### Tasks
 
-- [ ] 4.1 `internal/kube`: in-cluster client, or `KUBECONFIG` when set,
+- [x] 4.1 `internal/kube`: in-cluster client, or `KUBECONFIG` when set,
   with the namespace from config; a `Runner` with `CreateSuspended(job)`,
   `CreateSecret(secret)`, `Unsuspend(name)`, `WaitRunning(name, timeout)`
   by watching the Job's pod, `FollowLog(name, since)` streaming
@@ -414,14 +414,14 @@ and the k3d end-to-end harness every later phase extends (OQ3).
   from the container's terminated state (incl. `OOMKilled` and
   `DeadlineExceeded` reasons), `Delete(name)` with foreground propagation
   and a bounded wait.
-- [ ] 4.2 Log follower resilience: on a broken stream, reconnect with
+- [x] 4.2 Log follower resilience: on a broken stream, reconnect with
   `sinceTime` from the last line's timestamp and drop lines at or before
   it; bounded retries; a line callback that receives the raw line and its
   timestamp.
-- [ ] 4.3 `boopd_kube_requests_total{verb,resource,code}` through a
+- [x] 4.3 `boopd_kube_requests_total{verb,resource,code}` through a
   client-go transport wrapper (the metric registry arrives in Phase 6;
   the wrapper takes an interface).
-- [ ] 4.4 `internal/renovate`: the log scanner matching `msg` exactly for
+- [x] 4.4 `internal/renovate`: the log scanner matching `msg` exactly for
   the branch, PR, end and report events, live and `dryRun: full`,
   carrying `repository` and `branch`; `Progress` counters; the
   `Repository finished` fields (`result`, `status`, `exitCode`,
@@ -436,20 +436,24 @@ and the k3d end-to-end harness every later phase extends (OQ3).
   `internal/renovate/testdata` with the command that produced them. The
   exact `msg` strings are pinned by them, so a Renovate change fails the
   parser's test, not a run.
-- [ ] 4.6 Stub Renovate image, `test/stub-renovate/`: a small static Go
+  **Deferred - human required:** needs a scratch repository and a token
+  (OQ10 `c`: the fixture repositories are made by hand). The parser
+  tests run over synthetic fixtures in `internal/renovate/testdata`
+  until then; its README has the steps.
+- [x] 4.6 Stub Renovate image, `test/stub-renovate/`: a small static Go
   binary on a distroless base that replays a fixture log line by line
   with a configurable delay, exit code and report size, can hang on
   request (for the stall and deadline scenarios) and can write marker
   files (for the isolation scenario). Built by bake as
   `ghcr.io/donaldgifford/boopd-stub-renovate:dev`; never published.
-- [ ] 4.7 e2e harness, `test/e2e/` behind the `e2e` build tag: `just e2e`
+- [x] 4.7 e2e harness, `test/e2e/` behind the `e2e` build tag: `just e2e`
   runs `k3d-up`, builds and imports the stub image, creates a namespace
   per test run, and runs `go test -tags e2e ./test/e2e/...` with
   `KUBECONFIG` from k3d; `just e2e-down` deletes the cluster. A CI job
   "E2E Tests" does the same on a runner with k3d installed at the
   `mise.toml` pin, gated like the Go jobs. The harness exposes the
   namespace, the clientset and the stub image to tests.
-- [ ] 4.8 e2e scenarios for `kube`: the whole lifecycle against the real
+- [x] 4.8 e2e scenarios for `kube`: the whole lifecycle against the real
   API server and kubelet with the stub image (suspended Job, Secret,
   unsuspend, `Running`, log follow to the end, exit code, foreground
   delete leaves no pod and no Secret); a 1 MB report line arrives whole;
@@ -457,7 +461,7 @@ and the k3d end-to-end harness every later phase extends (OQ3).
   `activeDeadlineSeconds` reports `DeadlineExceeded`; a pod that cannot
   schedule (impossible node selector) hits the pending timeout and is
   deleted.
-- [ ] 4.9 Unit tests for what e2e cannot reach cheaply: the follower
+- [x] 4.9 Unit tests for what e2e cannot reach cheaply: the follower
   against an `httptest` log server that drops the stream mid-line and
   replays (dedupe by timestamp); `renovate` golden tests over the
   fixtures, including a truncated report line; the fake clientset for
@@ -485,10 +489,10 @@ stall).
 
 #### Tasks
 
-- [ ] 5.1 `ListInstallations`: the App client's list, filtered by the
+- [x] 5.1 `ListInstallations`: the App client's list, filtered by the
   config allowlist, returning ids and `suspended` flags; the workflow
   signals `suspend` to each installation's budget accordingly.
-- [ ] 5.2 `DiscoverInstallation`: one installation per activity; pages
+- [x] 5.2 `DiscoverInstallation`: one installation per activity; pages
   repositories, probes each page (GraphQL or REST), `SignalWithStart`s
   `repo/github/<id>` with `discovered {slug, defaultBranch,
   installationID, discoveryInterval, extends}` for every repository with
@@ -496,9 +500,9 @@ stall).
   heartbeat's page on retry; reads `/rate_limit` before each page and
   sleeps to the reset while heartbeating if a tracked resource is under
   the reserve; records `boopd_discovery_probe_cost`; returns a summary.
-- [ ] 5.3 `CheckRepo` and `ReadRateLimit`: thin wrappers over Phase 2, the
+- [x] 5.3 `CheckRepo` and `ReadRateLimit`: thin wrappers over Phase 2, the
   latter already named by `InstallationWorkflow`.
-- [ ] 5.4 `RunRenovate`: the twelve steps of the design's flowchart with
+- [x] 5.4 `RunRenovate`: the twelve steps of the design's flowchart with
   the `RunInput` and `RunResult` types as specified: mint (scoped to the
   run's and the preset repository), `RateBefore`, build and create the
   suspended Job from the profile, Secret then unsuspend, wait `Running`
@@ -508,19 +512,19 @@ stall).
   deadline `min(start + 50 min, expiresAt − 3 min)` or on cancellation by
   foreground delete, read the exit code, `RateAfter`, revoke (logged and
   counted on failure), delete the Job, classify.
-- [ ] 5.5 Classification: the design's table as one function with a table
+- [x] 5.5 Classification: the design's table as one function with a table
   test per row, including the exit-code cross-check and the `OOMKilled`
   and `DeadlineExceeded` reasons; `rate-limit-exceeded` and a
   secondary-limit `403`/`429` in the log yield an activity error carrying
   `retryAt` from `retry-after` or one minute.
-- [ ] 5.6 One structured `run_complete` log line per result and the run
+- [x] 5.6 One structured `run_complete` log line per result and the run
   metrics (`boopd_runs_total`, `boopd_run_duration_seconds`,
   `boopd_run_pod_start_seconds`, `boopd_run_overhead_seconds`,
   `boopd_run_pending_timeouts_total`, `boopd_token_mints_total`,
   `boopd_token_revocations_total`).
-- [ ] 5.7 `Activities` struct wiring the clients, the `Minter`, the config
+- [x] 5.7 `Activities` struct wiring the clients, the `Minter`, the config
   and the registry; `Register` under the `workflows` names.
-- [ ] 5.8 e2e: `RunRenovate` end to end in the k3d harness with the stub
+- [x] 5.8 e2e: `RunRenovate` end to end in the k3d harness with the stub
   image and an in-process `httptest` GitHub (mint, `/rate_limit`, revoke):
   the happy path returns the fixture's `RunResult`; the pending timeout
   deletes the Job and fails `pending`; the soft deadline deletes a hung
@@ -528,7 +532,7 @@ stall).
   report sets `reportMissing` with reconstructed tuples; a revoke failure
   is counted, not an error; cancelling the activity context deletes the
   Job with foreground propagation before it returns.
-- [ ] 5.9 Unit tests: the classification table row by row; the discovery
+- [x] 5.9 Unit tests: the classification table row by row; the discovery
   activity's paging, heartbeat and resume against `httptest` GitHub; the
   other activities through the SDK's `TestActivityEnvironment` over
   fakes.
@@ -554,12 +558,12 @@ contract).
 
 #### Tasks
 
-- [ ] 6.1 `DiscoveryWorkflow`: `ListInstallations`, then one
+- [x] 6.1 `DiscoveryWorkflow`: `ListInstallations`, then one
   `DiscoverInstallation` per installation in parallel with the design's
   heartbeat timeout; suspend signals to budgets; a summary result.
   `EnsureSchedule` per configured App (`discovery/<app>`, interval
   `discovery.every`, overlap skip) at worker start.
-- [ ] 6.2 `RepoWorkflow` with `RepoState` and the loop: the selector over
+- [x] 6.2 `RepoWorkflow` with `RepoState` and the loop: the selector over
   `NextDue`, `recheck` (runs now at `PriorityHigh`), `discovered`
   (refreshes slug, `Extends`, `LastSeen`) and the absence timer at
   `LastSeen + 3 × DiscoveryInterval` → `CheckRepo` → end on gone or no
@@ -573,12 +577,12 @@ contract).
   100 iterations or the SDK's suggestion; the `state` query; search
   attributes `InstallationID`, `Profile`, `Phase`, `LastOutcome`,
   `NextDue`.
-- [ ] 6.3 `internal/observability`: slog JSON with level from `LOG_LEVEL`;
+- [x] 6.3 `internal/observability`: slog JSON with level from `LOG_LEVEL`;
   an OTel meter provider with the Prometheus exporter on `METRICS_ADDR`
   carrying `temporal.MetricViews()` (OQ4); the boopd metric set from the
   design registered once and pinned by a names test; `/healthz` and
   `/readyz` on `LISTEN_ADDR` (OQ9).
-- [ ] 6.4 `cmd/boopd worker --config <file>`: load config, build the
+- [x] 6.4 `cmd/boopd worker --config <file>`: load config, build the
   clients and the `Minter`, dial Temporal from `TEMPORAL_*`, check the
   server version floor, register workflows and activities, start the
   worker with `WorkerStopTimeout` = StartToClose, `PromoteBuild`, ensure
@@ -586,10 +590,10 @@ contract).
   stop polling and let runs reach their soft deadlines. Rename `cmd/boop`
   to `cmd/boopd` with the binary, image, goreleaser, bake and justfile
   names (OQ1).
-- [ ] 6.5 Search attributes registered on the namespace at start
+- [x] 6.5 Search attributes registered on the namespace at start
   (idempotent), with a clear error when the namespace lacks the
   permission.
-- [ ] 6.6 e2e: the `worker` role in the k3d harness with the Temporal
+- [x] 6.6 e2e: the `worker` role in the k3d harness with the Temporal
   dev server (`temporaltest`), the stub image and `httptest` GitHub
   serving installations, repositories, the probe and `/rate_limit`: the
   discovery schedule fires once, a `RepoWorkflow` starts for every
@@ -599,7 +603,7 @@ contract).
   due time; a `recheck` signal runs again at `PriorityHigh`; `SIGTERM`
   with a run in flight stops polling and keeps the activity to its soft
   deadline.
-- [ ] 6.7 Workflow tests in the `testsuite` with fakes for every row of
+- [x] 6.7 Workflow tests in the `testsuite` with fakes for every row of
   the convergence table, `pending` release and re-acquire,
   heartbeat-timeout progress, absence → `CheckRepo` → end or continue,
   managers merge, ContinueAsNew carry; `DiscoveryWorkflow` fan-out and
@@ -624,38 +628,42 @@ and the first real environment.
 
 #### Tasks
 
-- [ ] 7.1 Chart rename and shape: `boopd` as the chart, image and binary
+- [x] 7.1 Chart rename and shape: `boopd` as the chart, image and binary
   name (OQ1); the Deployment becomes the worker with two replicas,
   `terminationGracePeriodSeconds` above StartToClose, the `worker`
   subcommand and `--config`.
-- [ ] 7.2 Config file: a ConfigMap carrying `boopd.hcl` rendered from
+- [x] 7.2 Config file: a ConfigMap carrying `boopd.hcl` rendered from
   values that mirror `internal/config`'s blocks, mounted read-only; a
   JSON schema in `values.schema.json` for the value shapes; the chart's
   CI renders the ConfigMap and runs `boopd config validate` on it (task
   3.5), so a bad value fails before a deploy.
-- [ ] 7.3 RBAC: ServiceAccount, Role and RoleBinding with exactly the
+- [x] 7.3 RBAC: ServiceAccount, Role and RoleBinding with exactly the
   design's verbs (`jobs` create/get/list/watch/delete; `pods`
   get/list/watch; `pods/log` get; `secrets` create/get/delete, no `list`).
-- [ ] 7.4 Secrets: App private key, Redis URL and Temporal client
+  Jobs also get `patch`: RunRenovate step 4 unsuspends the Job with a
+  patch, which the design's Role table had left out (table corrected).
+- [x] 7.4 Secrets: App private key, Redis URL and Temporal client
   certificate or OIDC client secret mounted as files in the worker only;
   `existingSecret` for each; the Temporal values block copied from
   repo-guardian's chart (`temporal.address`, `namespace`, `taskQueue`,
   `tls.*`, `auth.oidc.*`).
-- [ ] 7.5 Namespace posture: the PodSecurity `restricted` labels on the
+- [x] 7.5 Namespace posture: the PodSecurity `restricted` labels on the
   namespace (documented for the operator or rendered when
   `namespace.create`); an optional `ResourceQuota` on Job pods sized from
   `runs.maxConcurrent` (OQ12); optional NetworkPolicies keyed on
   `boopd.dev/egress`; an optional `RuntimeClass` name for the Python
   profile.
-- [ ] 7.6 Redis: a chart dependency with `AUTH`, `maxmemory`,
+- [x] 7.6 Redis: a chart dependency with `AUTH`, `maxmemory`,
   `allkeys-lru` and an ACL user limited to Renovate's key prefix, or an
-  external reference through the Secret (OQ7).
-- [ ] 7.7 helm-unittest: the Role's verbs exactly and no `list` on
+  external reference through the Secret (OQ7). The dependency is a local
+  subchart (`charts/boopd/charts/redis`) on the official image, not
+  Bitnami's, whose versioned images moved to `bitnamilegacy`.
+- [x] 7.7 helm-unittest: the Role's verbs exactly and no `list` on
   secrets; the config file renders the golden example; env collisions
   still fail; ServiceMonitor and PrometheusRule carry the run and budget
   alerts (`disk-space`, `OOMKilled`, `onboarding` result, stalled
   repositories).
-- [ ] 7.8 Stub GitHub, `test/stub-github/`: the `httptest` GitHub from
+- [x] 7.8 Stub GitHub, `test/stub-github/`: the `httptest` GitHub from
   Phases 5 and 6 as an image, so a worker running in-cluster has
   something to talk to. Chart e2e in the harness: `helm upgrade --install`
   with the stub Renovate image as `renovate.image`, the stub GitHub as
@@ -666,12 +674,19 @@ and the first real environment.
 - [ ] 7.9 `just k3d-install` for the developer loop against the real
   Renovate image and one of your scratch repositories (OQ10) in
   `dryRun: full`, with the App key from a local file. Not in CI.
+  **Deferred - human required:** the recipe is ready
+  (`just k3d-install values=dev/values.yaml app_key=<pem>`); the run
+  needs the `boop-bot` App key, a scratch repository and a Temporal
+  frontend reachable from k3d.
 - [ ] 7.10 Homelab: a `boopd` namespace on repo-guardian's reference
   Temporal cluster with its own client identity (OQ6), a `boop-bot`
   GitHub App installed on the homelab organisation with the private key
   in a Secret, the Redis subchart or an existing instance (OQ7), Loki
   labels from the correlation fields; the first release `0.1.0` cut by
   the release train (OQ5) and deployed.
+  **Deferred - human required:** the homelab cluster, the Temporal
+  client identity, the GitHub App registration and the release merge
+  are outside this repository.
 
 #### Success Criteria
 
@@ -705,44 +720,91 @@ Strategy, run in the homelab, with the fixtures the design describes
   with an sdist-only dependency whose `setup.py` would write a marker; a
   many-updates repository for the convergence run. This document lists
   what each must contain so they can be rebuilt.
+  **Deferred - human required:** the repositories are created by hand on
+  the homelab organisation. Each carries `renovate.json` extending the
+  shared preset, so discovery onboards it. Code runs only where a
+  manager's artifact update executes repository code, so each fixture
+  routes its probe through one. The findings leave as the step's stderr,
+  which Renovate logs as an artifact error (nothing is pushed in
+  `dryRun: full`).
+  - `isolation`: a Gradle project with an outdated wrapper and a
+    `build.gradle` whose top-level block, run by Renovate's wrapper
+    update, writes `boopd-marker` files into `RENOVATE_CACHE_DIR` (or
+    `cacheDir` from `RENOVATE_CONFIG`), the repository's parent
+    (`baseDir`) and `/tmp`; prints the inherited environment; reads
+    every `/proc/*/environ` and `/proc/*/cmdline` it can and greps the
+    filesystem for `BEGIN .*PRIVATE KEY`, `ghs_` and `redis://`;
+    starts `nohup sleep 3600 &`; and exits non-zero with the findings.
+  - `isolation-probe`: the same Gradle shape, run after `isolation`,
+    reporting any `boopd-marker` under those paths and any `sleep`
+    process it can see.
+  - `python-sdist`: `requirements.txt` pinning an old version of a
+    package published only as an sdist (from a local index or a
+    `git+` URL to a repository whose `setup.py` writes
+    `/tmp/boopd-sdist-marker` and prints it); the `python` profile's
+    `PIP_ONLY_BINARY=:all:` should make the lock update fail first.
+  - `many-updates`: a `package.json` and lockfile pinning about fifty
+    dependencies at old majors, so an uninterrupted run takes well over
+    the forced two-minute soft deadline.
 - [ ] 8.2 Comparison with renovate-operator v0.1.x, both in `dryRun: full`,
   over the homelab's repositories: report tuple sets equal, or every
   difference explained by a release or age boundary (INV-0001
   Observation 11).
+  **Deferred - human required:** runs in the homelab against the 8.1
+  fixtures and real GitHub.
 - [ ] 8.3 Overhead: seconds per repository with a warm Redis versus a cold
   one, and `boopd_run_pod_start_seconds` and `boopd_run_overhead_seconds`
   distributions.
+  **Deferred - human required:** runs in the homelab against the 8.1
+  fixtures and real GitHub.
 - [ ] 8.4 Worker death: kill a worker pod mid-run; the Job finishes or is
   reaped by `activeDeadlineSeconds` and `ttlSecondsAfterFinished`, the
   activity times out on heartbeat, and the workflow treats it as
   `TimedOut` with the last progress.
+  **Deferred - human required:** runs in the homelab against the 8.1
+  fixtures and real GitHub.
 - [ ] 8.5 Token lifetime and scope: no `401` across a full pass; a run
   scoped to its repository and the preset repository applies the shared
   preset; the token answers `401` after `RunResult` is returned.
+  **Deferred - human required:** runs in the homelab against the 8.1
+  fixtures and real GitHub.
 - [ ] 8.6 Convergence and stall: with the soft deadline forced to two
   minutes, the many-updates repository reaches the same report as an
   uninterrupted run within the rerun cap with no duplicate or broken
   branches; a hung package manager is marked `stalled` after three
   attempts and stops until its next due time.
+  **Deferred - human required:** runs in the homelab against the 8.1
+  fixtures and real GitHub.
 - [ ] 8.7 Budget signal: with four concurrent runs on one installation,
   `boopd_rate_spend_per_run` is stable enough to drive the EWMA, and
   admission never dips under the reserve.
+  **Deferred - human required:** runs in the homelab against the 8.1
+  fixtures and real GitHub.
 - [ ] 8.8 Isolation and profile enforcement: the isolation fixture finds
   the scoped token and the Redis URL and nothing else; the second
   repository finds no markers; the Python fixture ends `Failed` with a
   lockfile error and its marker is absent.
+  **Deferred - human required:** runs in the homelab against the 8.1
+  fixtures and real GitHub.
 - [ ] 8.9 Discovery cost: `boopd_discovery_probe_cost` for a full pass is
   under 5% of the installation's hourly `graphql` limit.
+  **Deferred - human required:** runs in the homelab against the 8.1
+  fixtures and real GitHub.
 - [ ] 8.10 Result capture and log correlation: `run_complete` plus the
   report answers what each run did; Renovate lines in Loki carry
   repository and workflow ID labels.
+  **Deferred - human required:** runs in the homelab against the 8.1
+  fixtures and real GitHub.
 - [ ] 8.11 INV-0002: one section per criterion with the measurement, the
   pass or fail, and the profile and timeout adjustments the numbers
   justify (DESIGN-0001 OQ7, OQ10 are "starting points for the spike to
   adjust").
+  **Deferred - human required:** written from the 8.2-8.10 results.
 - [ ] 8.12 Close the loop: DESIGN-0001 to Implemented with a results
   pointer; ADR-0001 to ADR-0009 from Proposed to Accepted where still
   Proposed; this document to Completed; CLAUDE.md step 8 done.
+  **Deferred - human required:** follows INV-0002; the statuses move
+  only on recorded results.
 
 #### Success Criteria
 

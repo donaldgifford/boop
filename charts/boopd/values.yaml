@@ -1,0 +1,343 @@
+---
+# -- Worker replicas. A fixed, small count (ADR-0008 as amended by
+# ADR-0009): runs are Jobs, so the worker never scales with load.
+replicaCount: 2
+
+# -- Seconds Kubernetes waits after SIGTERM. Must exceed the RunRenovate
+# StartToClose (58m) so a draining worker lets in-flight runs reach their
+# soft deadlines (DESIGN-0001 § Worker shutdown).
+terminationGracePeriodSeconds: 3600
+
+# -- Number of old ReplicaSets retained for rollback. Defaults to 3 to
+# keep the kubectl `get rs` view tidy; bump if you need more rollback
+# headroom. Kubernetes default is 10.
+revisionHistoryLimit: 3
+
+image:
+  # -- Container image repository
+  repository: ghcr.io/donaldgifford/boopd
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Overrides the image tag (default: appVersion)
+  tag: ""
+
+# -- Image pull secrets
+imagePullSecrets: []
+# -- Override the chart name
+nameOverride: ""
+# -- Override the full release name
+fullnameOverride: ""
+
+# -- Override the container command (default: image entrypoint)
+command: []
+# -- Container args. The default runs the worker role against the
+# chart-rendered config file.
+args:
+  - worker
+  - --config
+  - /etc/boopd/boopd.hcl
+
+config:
+  # -- Container HTTP port (published to the container as LISTEN_ADDR)
+  port: 8080
+  # -- Container metrics port (published as METRICS_ADDR)
+  metricsPort: 9090
+  # -- Log level (published as LOG_LEVEL)
+  logLevel: info
+
+# -- boopd.hcl, rendered into the `<fullname>-config` ConfigMap and
+# mounted read-only at /etc/boopd/boopd.hcl. The keys mirror the config
+# file's blocks in camelCase (examples/boopd.hcl is the annotated
+# reference); an empty or absent key leaves the file's default.
+# @default -- See values.yaml
+boopd:
+  # Where the chart mounts the Secrets the config names: <dir>/<name>/<key>.
+  secretsDir: /etc/boopd/secrets
+  renovate:
+    # Must be pinned by digest; Renovate keeps the tag and digest current.
+    image: ghcr.io/renovatebot/renovate:44-full@sha256:fc07a2877ce78abcaba5ac19e5bebb47b228785b6a74bf9834ff6119112bf260
+    configPath: renovate.json
+    sharedPreset: ""
+    logLevel: info
+    dryRun: ""
+    gitAuthor: ""
+    # Merged into RENOVATE_CONFIG; an explicit false is preserved.
+    global: {}
+    # An external Redis: the Secret holding its URL ({name, key}). Empty
+    # with redis.enabled uses the subchart's <release>-redis-auth.
+    redisSecretRef: {}
+  runs:
+    # Where Jobs are created; empty means the release namespace.
+    namespace: ""
+    pendingTimeout: 10m
+    # Cluster-capacity cap across installations; 0 means no cap.
+    maxConcurrent: 20
+  # Profiles by name. `pod` and `renovate` follow the config file's
+  # profile blocks.
+  profiles:
+    baseline:
+      pod:
+        labels:
+          boopd.dev/egress: baseline
+        resources:
+          requests: {cpu: "1", memory: 2Gi}
+          limits: {cpu: "2", memory: 4Gi}
+    node:
+      inherit: baseline
+    python:
+      inherit: baseline
+      pod:
+        # The Python profile's RuntimeClass (gVisor, Kata): set to the
+        # cluster's sandboxing runtime, if it has one.
+        runtimeClassName: ""
+        labels:
+          boopd.dev/egress: python
+        resources:
+          limits: {memory: 6Gi}
+      renovate:
+        customEnvVariables:
+          PIP_ONLY_BINARY: ":all:"
+          UV_NO_BUILD: "1"
+    strict:
+      inherit: python
+  # Ascending strictness.
+  order: [baseline, node, python, strict]
+  defaultProfile: baseline
+  unknownProfile: strict
+  # Every matching rule contributes; the strictest wins.
+  profileRules: []
+  # GitHub Apps by name. At least one is required. Each
+  # privateKeySecretRef names an existing Secret, mounted read-only at
+  # <secretsDir>/<name>/<key> in the worker only (the same holds for
+  # renovate.redisSecretRef):
+  #   boop-bot:
+  #     appId: 123456
+  #     privateKeySecretRef: {name: boop-bot-app, key: private-key.pem}
+  #     discovery: {every: 6h, probe: graphql}
+  #     budget: {reserveFraction: 0.10, maxConcurrentRuns: 10}
+  apps: {}
+
+# Renovate's datasource cache (IMPL-0001 OQ7): the local redis subchart,
+# a cache with no persistence. AUTH is an ACL user limited to keyPrefix
+# and barred from dangerous commands; the default user is off. Set
+# enabled: false and boopd.renovate.redisSecretRef for an external Redis.
+redis:
+  # -- Run the redis subchart.
+  enabled: true
+  # -- Memory cap; keys are evicted least-recently-used beyond it.
+  maxmemory: 256mb
+  # -- Key prefix the ACL user is limited to; also Renovate's
+  # `redisPrefix` unless boopd.renovate.global sets one.
+  keyPrefix: "renovate:"
+  # -- Resources; keep the memory limit above maxmemory.
+  resources:
+    requests: {cpu: 50m, memory: 300Mi}
+    limits: {cpu: 500m, memory: 300Mi}
+
+temporal:
+  # -- Frontend `host:port`. Required.
+  address: ""
+  # -- Temporal namespace.
+  namespace: boopd
+  # -- Task queue the worker polls.
+  taskQueue: boopd
+  tls:
+    # -- Secret with `tls.crt`, `tls.key` and (optionally) `ca.crt` for
+    # mTLS. Mounted into the worker only.
+    existingSecret: ""
+    # -- Server name to verify the frontend certificate against.
+    serverName: ""
+    # -- Secret with only `ca.crt`: verify the frontend's certificate
+    # without presenting one, for `auth.oidc` against a private CA.
+    # Empty with OIDC uses the system roots.
+    caSecret: ""
+    # -- Plaintext to the frontend (TEMPORAL_TLS_DISABLED). Only for a
+    # cluster-internal frontend that serves no TLS; with `auth.oidc`
+    # the bearer token is then readable on the wire, and the worker
+    # logs a warning.
+    disabled: false
+  auth:
+    # -- Authenticate with a bearer token from an OAuth2
+    # client-credentials grant (Keycloak and the like) instead of mTLS.
+    # The token is cached and renewed a minute before it expires.
+    oidc:
+      # -- The IdP's token endpoint, e.g.
+      # `https://keycloak/realms/<realm>/protocol/openid-connect/token`.
+      tokenUrl: ""
+      # -- OAuth2 client ID.
+      clientId: ""
+      # -- Secret holding the client secret under `client-secret`.
+      # Mounted as a file, never an env var.
+      existingSecret: ""
+      # -- Scopes to request.
+      scopes: []
+      # -- `audience` parameter, for IdPs that take one. Keycloak sets
+      # the audience with a client-scope mapper instead.
+      audience: ""
+
+worker:
+  # -- Worker deployment build ID (TEMPORAL_BUILD_ID); empty uses
+  # image.tag, then appVersion.
+  buildId: ""
+
+configMap:
+  # -- Key/value pairs projected into a chart-managed ConfigMap and
+  # injected into the container via envFrom. Keys must not collide with
+  # the chart-managed env vars (LISTEN_ADDR, METRICS_ADDR, LOG_LEVEL,
+  # POD_NAME) — the render fails fast on collisions.
+  data: {}
+  # -- Use an existing ConfigMap for envFrom instead of rendering one
+  existingConfigMap: ""
+
+namespace:
+  # -- Render the runs namespace with the PodSecurity `restricted`
+  # labels (kept on uninstall). Otherwise label it yourself:
+  # `pod-security.kubernetes.io/enforce=restricted`.
+  create: false
+
+resourceQuota:
+  # -- Render a ResourceQuota on the runs namespace with `pods` sized
+  # from boopd.runs.maxConcurrent (plus the worker replicas when they
+  # share the namespace), so Jobs beyond the cap are refused at
+  # admission (IMPL-0001 OQ12).
+  enabled: false
+  # -- Extra `spec.hard` entries, e.g. `limits.memory`.
+  hard: {}
+
+networkPolicies:
+  # -- Render one NetworkPolicy per egress class, selecting Job pods by
+  # the `boopd.dev/egress` label their profile sets. Each policy denies
+  # ingress and allows DNS plus the listed egress rules.
+  enabled: false
+  # -- Egress rules (NetworkPolicyEgressRule list) per class.
+  # @default -- See values.yaml
+  egress:
+    baseline:
+      - ports:
+          - {port: 443, protocol: TCP}
+    python:
+      - ports:
+          - {port: 443, protocol: TCP}
+
+rbac:
+  # -- Create the worker's Role and RoleBinding in the runs namespace:
+  # jobs create/get/list/watch/patch/delete, pods get/list/watch, pods/log get,
+  # secrets create/get/delete (no list).
+  create: true
+
+serviceAccount:
+  # -- Create a ServiceAccount
+  create: true
+  # -- Annotations for the ServiceAccount
+  annotations: {}
+  # -- Override the ServiceAccount name
+  name: ""
+
+# -- Pod annotations
+podAnnotations: {}
+# -- Pod labels
+podLabels: {}
+
+# -- Pod security context. fsGroup makes the 0440 credential files
+# readable by the nonroot worker.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+# -- Container security context (65532 = distroless nonroot uid)
+securityContext:
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65532
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: [ALL]
+
+service:
+  # -- Service type
+  type: ClusterIP
+  # -- HTTP port
+  httpPort: 80
+  # -- Metrics port
+  metricsPort: 9090
+
+# -- Container resource requests and limits
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+livenessProbe:
+  # @default -- See values.yaml
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 15
+
+readinessProbe:
+  # @default -- See values.yaml
+  httpGet:
+    path: /readyz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+secrets:
+  # -- Create the Secret resource (false = use existingSecret)
+  create: true
+  # -- Key/value pairs projected into the chart-managed Secret
+  # (stringData) and injected via envFrom. Same collision guard as
+  # configMap.data.
+  stringData: {}
+  # -- Name of an existing Secret for envFrom (when create=false)
+  existingSecret: ""
+
+serviceMonitor:
+  # -- Create Prometheus ServiceMonitor
+  enabled: false
+  # -- Scrape interval
+  interval: 30s
+  # -- Additional labels for ServiceMonitor
+  labels: {}
+
+prometheusRule:
+  # -- Create the PrometheusRule: the generic DeploymentReplicasUnavailable
+  # and ContainerRestarting, plus BoopdRunResourceExhausted (disk-space,
+  # out-of-memory), BoopdRunOOMKilled, BoopdOnboardingResult,
+  # BoopdReposStalled and BoopdBudgetLow.
+  enabled: false
+  # -- Additional labels (e.g., to match Prometheus operator
+  # `ruleSelector`).
+  labels: {}
+  # -- Per-alert overrides: keys `replicasUnavailable`,
+  # `containerRestarting`, `runResourceExhausted`, `runOOMKilled`,
+  # `onboardingResult`, `reposStalled` and `budgetLow`, each accepting
+  # `enabled`, `for`, `severity`, and `threshold`.
+  alerts: {}
+
+# -- Extra manifests rendered with the release (passed through `tpl`),
+# e.g. the App key Secret in a dev cluster.
+extraObjects: []
+
+# -- Additional environment variables (must not collide with the
+# chart-managed env vars — render fails fast)
+extraEnv: []
+# -- Additional volumes
+extraVolumes: []
+# -- Additional volume mounts
+extraVolumeMounts: []
+
+# -- Node selector
+nodeSelector: {}
+# -- Tolerations
+tolerations: []
+# -- Affinity rules
+affinity: {}

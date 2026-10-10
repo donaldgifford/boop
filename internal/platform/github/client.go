@@ -14,10 +14,25 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package github implements platform.Client against the GitHub REST API
-// using google/go-github/v62 + bradleyfalzon/ghinstallation/v2 for App auth.
-// PAT auth is also supported (TokenAuth → Bearer header) for simple cases,
-// but the v0.1.0 homelab path uses GitHub App installation tokens.
+// Package github implements boopd's GitHub access on google/go-github/v62
+// and bradleyfalzon/ghinstallation/v2.
+//
+// Two clients, by credential:
+//
+//   - AppClient authenticates as the App (JWT). It lists installations
+//     (ListInstallations) and implements platform.Minter: Mint creates an
+//     installation token scoped with repository_ids, Revoke deletes it.
+//   - Client authenticates as one installation (NewWithApp) or with a
+//     token (NewWithToken). It discovers repositories page by page
+//     (DiscoverPages, GET /installation/repositories), probes for the
+//     config file over GraphQL (ProbeConfig, 100 node ids per query) or
+//     REST (ProbeConfigREST), reads /rate_limit (ReadRateLimit) and
+//     re-checks one repository (CheckRepo).
+//
+// Every call except ReadRateLimit passes a client-side limiter; once the
+// installation's core limit is known, WithDiscoveredLimit sets it to
+// limit/3600 per second (DESIGN-0001 § InstallationWorkflow). Errors are
+// classified into the platform sentinels. No test touches the network.
 package github
 
 import (
@@ -35,12 +50,40 @@ import (
 	"github.com/donaldgifford/boop/internal/platform"
 )
 
-// Default rate-limit budget per IMPL-0001 Q2: 4500 req/hr sustained, 100 burst,
-// per GitHub App installation. Conservative against the 5000/hr primary cap.
+// Default rate-limit budget: 4500 req/hr sustained, 100 burst, per GitHub
+// App installation. Conservative against the 5000/hr primary cap. It
+// stands only until the installation's limit has been read once
+// (WithDiscoveredLimit).
 const (
 	defaultRateLimit rate.Limit = 4500.0 / 3600.0 // ~1.25 req/sec
 	defaultRateBurst            = 100
+
+	// discoveredRateBurst is the burst once the limit is known
+	// (DESIGN-0001 § InstallationWorkflow, Client-side limiter).
+	discoveredRateBurst = 10
 )
+
+// DiscoveredRate turns an installation's hourly core limit from
+// /rate_limit into a limiter rate and burst: limit / 3600 per second,
+// burst 10. ok is false for a non-positive limit, when the default
+// should stand.
+func DiscoveredRate(limit int) (r rate.Limit, burst int, ok bool) {
+	if limit <= 0 {
+		return 0, 0, false
+	}
+	return rate.Limit(float64(limit) / 3600), discoveredRateBurst, true
+}
+
+// WithDiscoveredLimit sets the limiter from the installation's
+// discovered core limit (DiscoveredRate). A non-positive limit means no
+// reading exists yet and keeps the default.
+func WithDiscoveredLimit(limit int) ClientOption {
+	return func(c *Client) {
+		if r, burst, ok := DiscoveredRate(limit); ok {
+			c.limiter = rate.NewLimiter(r, burst)
+		}
+	}
+}
 
 // AppAuth is the inputs needed to mint an installation token. The PEM bytes
 // come from the mirrored Secret in the Run's namespace.
@@ -76,6 +119,14 @@ func WithHTTPClient(httpClient *http.Client) ClientOption {
 	}
 }
 
+// WithConfigPath sets the single Renovate config path the client probes;
+// empty keeps platform.DefaultConfigPath.
+func WithConfigPath(path string) ClientOption {
+	return func(c *Client) {
+		c.configPath = path
+	}
+}
+
 // WithBaseURL overrides the GHES base URL after construction.
 func WithBaseURL(base string) ClientOption {
 	return func(c *Client) {
@@ -89,6 +140,7 @@ type Client struct {
 	httpClient *http.Client
 	baseURL    string
 	limiter    *rate.Limiter
+	configPath string
 
 	// appTransport is set when the Client was constructed via NewWithApp.
 	// MintAccessToken pulls a fresh installation token from it.
@@ -97,6 +149,16 @@ type Client struct {
 	// staticToken is set when the Client was constructed via NewWithToken
 	// (PAT auth). MintAccessToken returns it unchanged.
 	staticToken string
+}
+
+// SetDiscoveredLimit re-tunes a live client's limiter from the
+// installation's discovered core limit (DiscoveredRate); a non-positive
+// limit changes nothing. Safe for concurrent use.
+func (c *Client) SetDiscoveredLimit(limit int) {
+	if r, burst, ok := DiscoveredRate(limit); ok {
+		c.limiter.SetLimit(r)
+		c.limiter.SetBurst(burst)
+	}
 }
 
 // NewWithApp constructs a Client backed by GitHub App installation auth.
@@ -223,6 +285,14 @@ func (t *tokenTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req2 := req.Clone(req.Context())
 	req2.Header.Set("Authorization", "Bearer "+t.token)
 	return t.base.RoundTrip(req2)
+}
+
+// path is the config path the client probes.
+func (c *Client) path() string {
+	if c.configPath == "" {
+		return platform.DefaultConfigPath
+	}
+	return c.configPath
 }
 
 // wait blocks until the rate limiter admits one request or ctx is cancelled.

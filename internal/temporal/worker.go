@@ -21,6 +21,7 @@ import (
 	"os"
 	"runtime/debug"
 	"strconv"
+	"time"
 
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/contrib/sysinfo"
@@ -63,6 +64,12 @@ type WorkerConfig struct {
 	// to the current version at their next workflow task, so a deploy
 	// never strands running executions on old workers.
 	BuildID string
+
+	// StopTimeout is how long Stop waits for running activities. The SDK
+	// default of zero cancels every run in flight at SIGTERM; boopd sets
+	// it to RunRenovate's StartToClose so runs reach their soft
+	// deadlines (DESIGN-0001 § RunRenovate activity).
+	StopTimeout time.Duration
 }
 
 // WorkerConfigFromEnv reads WORKER_ACTIVITY_CONCURRENCY and
@@ -85,6 +92,9 @@ func WorkerConfigFromEnv(cfg *Config) (WorkerConfig, error) {
 
 	return wc, nil
 }
+
+// DeploymentName is the worker deployment the worker joins.
+func (wc *WorkerConfig) DeploymentName() string { return wc.deployment() }
 
 func (wc *WorkerConfig) deployment() string {
 	if wc.Deployment == "" {
@@ -111,6 +121,7 @@ func NewWorker(c client.Client, wc *WorkerConfig) worker.Worker {
 func workerOptions(wc *WorkerConfig) worker.Options {
 	return worker.Options{
 		MaxConcurrentActivityExecutionSize: wc.ActivityConcurrency,
+		WorkerStopTimeout:                  wc.StopTimeout,
 		DeploymentOptions: worker.DeploymentOptions{
 			UseVersioning: true,
 			Version: worker.WorkerDeploymentVersion{

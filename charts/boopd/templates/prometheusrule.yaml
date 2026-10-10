@@ -1,0 +1,100 @@
+{{/*
+Alerts: the two generic starter alerts (kube-state-metrics), then the
+run and budget alerts (DESIGN-0001 § Classification, § Observability). Per-alert overrides live under
+prometheusRule.alerts.<name> and accept `enabled`, `for`, `severity`,
+and `threshold`. `hasKey` guards (not `default`) so explicit falsy
+overrides like enabled=false or threshold=0 are honored.
+*/}}
+{{- if .Values.prometheusRule.enabled -}}
+{{- $alerts := .Values.prometheusRule.alerts | default dict }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "boopd.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "boopd.labels" . | nindent 4 }}
+    {{- with .Values.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: {{ include "boopd.fullname" . }}.rules
+      rules:
+        {{- $ru := $alerts.replicasUnavailable | default dict }}
+        {{- $ruEnabled := true }}{{- if hasKey $ru "enabled" }}{{- $ruEnabled = $ru.enabled }}{{- end }}
+        {{- $ruThreshold := 0 }}{{- if hasKey $ru "threshold" }}{{- $ruThreshold = $ru.threshold }}{{- end }}
+        {{- if $ruEnabled }}
+        - alert: DeploymentReplicasUnavailable
+          expr: >-
+            kube_deployment_status_replicas_unavailable{namespace="{{ .Release.Namespace }}",deployment="{{ include "boopd.fullname" . }}"}
+            > {{ $ruThreshold }}
+          for: {{ $ru.for | default "10m" }}
+          labels:
+            severity: {{ $ru.severity | default "warning" }}
+          annotations:
+            summary: {{ include "boopd.name" . }} has unavailable replicas
+            description: >-
+              Deployment {{ include "boopd.fullname" . }} in namespace
+              {{ .Release.Namespace }} has had more than {{ $ruThreshold }}
+              unavailable replica(s) for {{ $ru.for | default "10m" }}.
+        {{- end }}
+        {{- $cr := $alerts.containerRestarting | default dict }}
+        {{- $crEnabled := true }}{{- if hasKey $cr "enabled" }}{{- $crEnabled = $cr.enabled }}{{- end }}
+        {{- $crThreshold := 3 }}{{- if hasKey $cr "threshold" }}{{- $crThreshold = $cr.threshold }}{{- end }}
+        {{- if $crEnabled }}
+        - alert: ContainerRestarting
+          expr: >-
+            increase(kube_pod_container_status_restarts_total{namespace="{{ .Release.Namespace }}",container="{{ .Chart.Name }}"}[15m])
+            > {{ $crThreshold }}
+          for: {{ $cr.for | default "0m" }}
+          labels:
+            severity: {{ $cr.severity | default "warning" }}
+          annotations:
+            summary: {{ include "boopd.name" . }} container is restarting
+            description: >-
+              Container {{ .Chart.Name }} in namespace {{ .Release.Namespace }}
+              restarted more than {{ $crThreshold }} times in the last 15
+              minutes.
+        {{- end }}
+        {{- $ns := .Release.Namespace }}
+        {{- $runsNs := .Values.boopd.runs.namespace | default $ns }}
+        {{- $defs := list
+          (dict "key" "runResourceExhausted" "alert" "BoopdRunResourceExhausted" "for" "0m" "threshold" 0
+            "expr" (printf "sum by (profile, result) (increase(boopd_runs_total{namespace=\"%s\",result=~\"disk-space|out-of-memory\"}[1h])) > %%v" $ns)
+            "summary" "boopd runs are running out of disk or memory"
+            "description" "Renovate reported disk-space or out-of-memory for profile {{ $labels.profile }}: the profile's pod is undersized.")
+          (dict "key" "runOOMKilled" "alert" "BoopdRunOOMKilled" "for" "0m" "threshold" 0
+            "expr" (printf "sum(max_over_time(kube_pod_container_status_last_terminated_reason{namespace=\"%s\",container=\"renovate\",reason=\"OOMKilled\"}[15m])) > %%v" $runsNs)
+            "summary" "A boopd run was OOMKilled"
+            "description" "A Renovate Job container was OOMKilled: raise the profile's memory limit.")
+          (dict "key" "onboardingResult" "alert" "BoopdOnboardingResult" "for" "0m" "threshold" 0
+            "expr" (printf "sum(increase(boopd_runs_total{namespace=\"%s\",result=\"onboarding\"}[1h])) > %%v" $ns)
+            "summary" "Renovate tried to onboard a repository"
+            "description" "A run finished with result onboarding, which should not occur with onboarding off (ADR-0005).")
+          (dict "key" "reposStalled" "alert" "BoopdReposStalled" "for" "0m" "threshold" 0
+            "expr" (printf "sum(increase(boopd_repos_stalled{namespace=\"%s\"}[6h])) > %%v" $ns)
+            "summary" "boopd repositories stopped converging"
+            "description" "A RepoWorkflow hit the stall limit: its runs keep failing to converge.")
+          (dict "key" "budgetLow" "alert" "BoopdBudgetLow" "for" "30m" "threshold" 0.1
+            "expr" (printf "min by (installation, resource) (boopd_budget_remaining{namespace=\"%s\"} / boopd_budget_limit{namespace=\"%s\"}) < %%v" $ns $ns)
+            "summary" "boopd installation budget is low"
+            "description" "Installation {{ $labels.installation }} has had under the threshold of its {{ $labels.resource }} rate limit left for 30m.")
+        }}
+        {{- range $defs }}
+        {{- $o := get $alerts .key | default dict }}
+        {{- $on := true }}{{- if hasKey $o "enabled" }}{{- $on = $o.enabled }}{{- end }}
+        {{- $threshold := .threshold }}{{- if hasKey $o "threshold" }}{{- $threshold = $o.threshold }}{{- end }}
+        {{- if $on }}
+        - alert: {{ .alert }}
+          expr: >-
+            {{ printf .expr $threshold }}
+          for: {{ $o.for | default .for }}
+          labels:
+            severity: {{ $o.severity | default "warning" }}
+          annotations:
+            summary: {{ .summary | quote }}
+            description: {{ .description | quote }}
+        {{- end }}
+        {{- end }}
+{{- end }}
