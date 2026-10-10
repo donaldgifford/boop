@@ -517,7 +517,7 @@ stall).
   and `DeadlineExceeded` reasons; `rate-limit-exceeded` and a
   secondary-limit `403`/`429` in the log yield an activity error carrying
   `retryAt` from `retry-after` or one minute.
-- [ ] 5.6 One structured `run_complete` log line per result and the run
+- [x] 5.6 One structured `run_complete` log line per result and the run
   metrics (`boopd_runs_total`, `boopd_run_duration_seconds`,
   `boopd_run_pod_start_seconds`, `boopd_run_overhead_seconds`,
   `boopd_run_pending_timeouts_total`, `boopd_token_mints_total`,

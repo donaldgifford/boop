@@ -146,7 +146,9 @@ func (a *Activities) discoverPage(ctx context.Context, api InstallationAPI, app 
 	}
 	path := a.cfg.Renovate.ConfigPath
 	var res *github.ProbeResult
+	resource := workflows.ResourceGraphQL
 	if app.Discovery.Probe == config.ProbeREST {
+		resource = workflows.ResourceCore
 		res, err = api.ProbeConfigREST(ctx, repos, path)
 	} else {
 		ids := make([]string, len(repos))
@@ -158,7 +160,7 @@ func (a *Activities) discoverPage(ctx context.Context, api InstallationAPI, app 
 	if err != nil {
 		return 0, 0, fmt.Errorf("probe: %w", err)
 	}
-	a.metrics.ProbeCost(app.Name, res.Cost)
+	a.metrics.ProbeCost(installationID, resource, res.Cost)
 
 	now := a.now()
 	for i := range repos {

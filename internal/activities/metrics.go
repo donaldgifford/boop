@@ -18,27 +18,39 @@ package activities
 
 import "time"
 
-// Metrics is what the activities report. Phase 6's registry implements
-// it with the boopd_* instruments; NopMetrics drops everything.
+// Metrics is what the activities report (DESIGN-0001 § Observability).
+// internal/observability implements it over OpenTelemetry; NopMetrics
+// drops everything.
 type Metrics interface {
-	// RunCompleted is boopd_runs_total{outcome} and the run's duration,
-	// pod-start and overhead histograms.
-	RunCompleted(outcome string, duration, podStart, overhead time.Duration)
+	// RunStarted and RunEnded move boopd_runs_active{profile}.
+	RunStarted(profile string)
+	RunEnded(profile string)
+	// RunCompleted is boopd_runs_total{outcome,result,profile} and the
+	// run's boopd_run_duration_seconds, boopd_run_pod_start_seconds and
+	// boopd_run_overhead_seconds; a zero duration is not recorded.
+	RunCompleted(outcome, result, profile string, duration, podStart, overhead time.Duration)
 	// PendingTimeout is boopd_run_pending_timeouts_total.
 	PendingTimeout()
-	// TokenMint is boopd_token_mints_total{result}.
-	TokenMint(result string)
-	// TokenRevocation is boopd_token_revocations_total{result}.
-	TokenRevocation(result string)
-	// ProbeCost records boopd_discovery_probe_cost for one query batch.
-	ProbeCost(app string, cost int)
+	// TokenMint is boopd_token_mints_total{outcome}.
+	TokenMint(outcome string)
+	// TokenRevocation is boopd_token_revocations_total{outcome}.
+	TokenRevocation(outcome string)
+	// ProbeCost adds one probe batch's spend to
+	// boopd_discovery_probe_cost{installation,resource}.
+	ProbeCost(installationID int64, resource string, cost int)
 }
 
 // NopMetrics is a Metrics that records nothing.
 type NopMetrics struct{}
 
+// RunStarted implements Metrics.
+func (NopMetrics) RunStarted(string) {}
+
+// RunEnded implements Metrics.
+func (NopMetrics) RunEnded(string) {}
+
 // RunCompleted implements Metrics.
-func (NopMetrics) RunCompleted(string, time.Duration, time.Duration, time.Duration) {}
+func (NopMetrics) RunCompleted(string, string, string, time.Duration, time.Duration, time.Duration) {}
 
 // PendingTimeout implements Metrics.
 func (NopMetrics) PendingTimeout() {}
@@ -50,4 +62,4 @@ func (NopMetrics) TokenMint(string) {}
 func (NopMetrics) TokenRevocation(string) {}
 
 // ProbeCost implements Metrics.
-func (NopMetrics) ProbeCost(string, int) {}
+func (NopMetrics) ProbeCost(int64, string, int) {}

@@ -110,7 +110,12 @@ func (a *Activities) RunRenovate(ctx context.Context, in *workflows.RunInput) (*
 	r.lines = a.runLog.With("repo", in.Slug, "workflow_id", info.WorkflowExecution.ID,
 		"run_id", info.WorkflowExecution.RunID, "attempt", in.Attempt, "job", r.name, "profile", in.Profile)
 	r.workflowID, r.runID = info.WorkflowExecution.ID, info.WorkflowExecution.RunID
-	return r.execute(ctx)
+
+	a.metrics.RunStarted(in.Profile)
+	defer a.metrics.RunEnded(in.Profile)
+	res, err := r.execute(ctx)
+	r.complete(ctx, err)
+	return res, err
 }
 
 // run is one RunRenovate execution.
@@ -132,6 +137,42 @@ type run struct {
 	scan      *renovate.Scanner
 	firstLine time.Time
 	running   time.Time
+}
+
+// complete writes the one run_complete line and the run metrics.
+func (r *run) complete(ctx context.Context, err error) {
+	res := r.res
+	outcome := string(res.Outcome)
+	var appErr *temporal.ApplicationError
+	switch {
+	case err == nil:
+	case errors.As(err, &appErr):
+		outcome = appErr.Type()
+	case ctx.Err() != nil:
+		outcome = "canceled"
+	default:
+		outcome = workflows.ErrTypeInfrastructure
+	}
+	var overhead time.Duration
+	r.mu.Lock()
+	if !r.firstLine.IsZero() && !r.running.IsZero() {
+		overhead = max(r.firstLine.Sub(r.running), 0)
+	}
+	r.mu.Unlock()
+	r.a.metrics.RunCompleted(outcome, res.RepositoryResult, r.in.Profile, res.Duration, res.PodStart, overhead)
+
+	attrs := []any{
+		"outcome", outcome, "result", res.RepositoryResult, "exit_code", res.ExitCode,
+		"duration", res.Duration, "pod_start", res.PodStart, "overhead", overhead,
+		"renovate_version", res.RenovateVersion, "branches_changed", res.Progress.BranchesChanged,
+		"prs_changed", res.Progress.PRsChanged, "tuples", len(res.Tuples), "managers", res.Managers,
+		"problems", len(res.Problems), "report_missing", res.ReportMissing,
+		"rate_before", res.RateBefore != nil, "rate_after", res.RateAfter != nil,
+	}
+	if err != nil {
+		attrs = append(attrs, "error", err.Error())
+	}
+	r.log.InfoContext(ctx, "run_complete", attrs...)
 }
 
 func (r *run) execute(ctx context.Context) (*workflows.RunResult, error) {
@@ -419,6 +460,9 @@ func (r *run) deleteJob(ctx context.Context) {
 // classify turns the run's end into the result or an activity error.
 func (r *run) classify(end *runEnd) (*workflows.RunResult, error) {
 	c := classify(end, r.a.now())
+	if c.Alert {
+		r.log.Warn("run_alert", "reason", c.Reason)
+	}
 	if !c.Failed() {
 		r.res.Outcome = c.Outcome
 		return r.res, nil
