@@ -38,6 +38,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(workflows)* RepoWorkflow owns one repository
 - *(observability)* Logger, Prometheus exporter, health and budget gauges
 - *(temporal)* Register missing search attributes on the namespace
+- *(boopd)* Worker role with readiness, schedules and graceful stop
 
 ### Documentation
 
