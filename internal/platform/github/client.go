@@ -14,10 +14,25 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package github implements platform.Client against the GitHub REST API
-// using google/go-github/v62 + bradleyfalzon/ghinstallation/v2 for App auth.
-// PAT auth is also supported (TokenAuth → Bearer header) for simple cases,
-// but the v0.1.0 homelab path uses GitHub App installation tokens.
+// Package github implements boopd's GitHub access on google/go-github/v62
+// and bradleyfalzon/ghinstallation/v2.
+//
+// Two clients, by credential:
+//
+//   - AppClient authenticates as the App (JWT). It lists installations
+//     (ListInstallations) and implements platform.Minter: Mint creates an
+//     installation token scoped with repository_ids, Revoke deletes it.
+//   - Client authenticates as one installation (NewWithApp) or with a
+//     token (NewWithToken). It discovers repositories page by page
+//     (DiscoverPages, GET /installation/repositories), probes for the
+//     config file over GraphQL (ProbeConfig, 100 node ids per query) or
+//     REST (ProbeConfigREST), reads /rate_limit (ReadRateLimit) and
+//     re-checks one repository (CheckRepo).
+//
+// Every call except ReadRateLimit passes a client-side limiter; once the
+// installation's core limit is known, WithDiscoveredLimit sets it to
+// limit/3600 per second (DESIGN-0001 § InstallationWorkflow). Errors are
+// classified into the platform sentinels. No test touches the network.
 package github
 
 import (

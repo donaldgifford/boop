@@ -319,7 +319,7 @@ OQ11; INV-0001 § Renovate behaviours to reproduce).
   not archived, config file present on the default branch; distinguishes
   gone, no config, present and error (an outage must never look like an
   offboarding).
-- [ ] 2.9 Tests with `httptest` servers as in the copied tests: paging,
+- [x] 2.9 Tests with `httptest` servers as in the copied tests: paging,
   the GraphQL batch and its cost, `extends` parsing edge cases, scoped
   mint and revoke request bodies, the REST fallback, the limiter value,
   `CheckRepo`'s four answers.

@@ -14,10 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package platform defines the small Client interface used to enumerate
-// repos, check for Renovate config files and mint access tokens. The
-// GitHub implementation lives in internal/platform/github; boopd is
-// GitHub-only (RFC-0001).
+// Package platform defines the platform-neutral types boopd's activities
+// use: Repository, Installation, RepoState, the Client and Minter
+// interfaces and the error sentinels. The GitHub implementation lives in
+// internal/platform/github; boopd is GitHub-only (RFC-0001).
 //
 // Copied from renovate-operator internal/platform at 0183661 (INV-0001,
 // Observation 7), with the Forgejo client dropped. Comments below that
