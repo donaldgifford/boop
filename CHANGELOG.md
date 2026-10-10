@@ -22,6 +22,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(config)* Read secret-backed values from mounted files
 - *(profiles)* Resolve a repository's profile from extends and managers
 - *(config)* Build jobspec inputs from config and add config validate
+- *(kube)* Drive one Renovate Job through its lifecycle
 
 ### Documentation
 
