@@ -593,7 +593,7 @@ contract).
 - [x] 6.5 Search attributes registered on the namespace at start
   (idempotent), with a clear error when the namespace lacks the
   permission.
-- [ ] 6.6 e2e: the `worker` role in the k3d harness with the Temporal
+- [x] 6.6 e2e: the `worker` role in the k3d harness with the Temporal
   dev server (`temporaltest`), the stub image and `httptest` GitHub
   serving installations, repositories, the probe and `/rate_limit`: the
   discovery schedule fires once, a `RepoWorkflow` starts for every
