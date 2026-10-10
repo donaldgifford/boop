@@ -5,6 +5,10 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Features
+
+- *(jobspec)* Port renovate-operator's Job builder for one repository per Job
+
 ### Documentation
 
 - Review DESIGN-0001 and align ADRs with the spike design
@@ -13,6 +17,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - ADR-0009 runs each Renovate run as a Kubernetes Job; rework DESIGN-0001 around it
 - Record DESIGN-0001 decisions (a on all open questions except OQ8)
 - Record OQ8 decision (report via the Renovate log line)
+- Approve DESIGN-0001 and accept ADR-0009
 
 ### Miscellaneous Tasks
 
