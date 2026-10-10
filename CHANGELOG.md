@@ -67,6 +67,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(e2e)* RunRenovate end to end in k3d
 - *(activities)* A failed mint is an infrastructure error
 - *(workflows)* Every convergence row and the RepoWorkflow paths
+- *(e2e)* Worker discovery, run, recheck and graceful stop
 
 ### Miscellaneous Tasks
 
