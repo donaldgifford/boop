@@ -49,6 +49,7 @@ linters:
     - prealloc  # Uber: Preallocate slices when size is known
     - gocritic  # Performance and style checks
     - nolintlint  # Ensure nolint directives are properly used
+    - depguard  # Keep workflow code free of side-effecting packages
 
     # Complexity & Maintainability
     - gocyclo  # Uber: Limit cyclomatic complexity
@@ -99,6 +100,28 @@ linters:
         - (*github.com/fatih/color.Color).Printf  # CLI color output to stdout.
         - (*github.com/fatih/color.Color).Println  # CLI color output to stdout.
         - (*github.com/spf13/cobra.Command).MarkFlagRequired  # Only fails if flag name is wrong.
+
+    # Workflow code must stay deterministic: everything that reads GitHub,
+    # Kubernetes or the Temporal client lives behind an activity
+    # (DESIGN-0001 § Topology and packages).
+    depguard:
+      rules:
+        workflows:
+          files:
+            - "**/internal/workflows/*.go"
+          deny:
+            - pkg: github.com/donaldgifford/boop/internal/activities
+              desc: workflows call activities by name, not by import
+            - pkg: github.com/donaldgifford/boop/internal/platform
+              desc: GitHub is reached only through activities
+            - pkg: github.com/donaldgifford/boop/internal/jobspec
+              desc: Jobs are built and created only inside activities
+            - pkg: github.com/donaldgifford/boop/internal/kube
+              desc: Kubernetes is reached only through activities
+            - pkg: go.temporal.io/sdk/client
+              desc: the Temporal client is used only by activities and the worker
+            - pkg: k8s.io/client-go
+              desc: Kubernetes is reached only through activities
 
     errorlint:
       errorf: true

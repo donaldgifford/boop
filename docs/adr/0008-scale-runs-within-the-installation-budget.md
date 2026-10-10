@@ -181,7 +181,7 @@ per run, ADR-0003 is superseded.
 - ADR-0001, ADR-0002, ADR-0003
 - DESIGN-0001 § InstallationWorkflow, § RunRenovate activity
 - INV-0001 Observation 5
-- repo-guardian `v2` @ `278c7ec`: `internal/workflows/installation.go`,
+- repo-guardian `feat/impl-0028-controls-foundations` @ `d1f20a0`: `internal/workflows/installation.go`,
   `charts/repo-guardian/templates/worker-scaledobject.yaml`
 - [GitHub REST: rate limits for GitHub Apps](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api)
 - [GitHub REST: rate limit endpoint](https://docs.github.com/en/rest/rate-limit/rate-limit)

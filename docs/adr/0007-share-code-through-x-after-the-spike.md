@@ -45,7 +45,7 @@ needs are not yet known.
 
 - **Spike:** copy and own the copies. `internal/platform` is already copied
   from renovate-operator `0183661`. The Temporal pieces come from
-  repo-guardian `v2` @ `278c7ec`.
+  repo-guardian `feat/impl-0028-controls-foundations` @ `d1f20a0`.
 - **Phase 0, after the spike:** extract these into `donaldgifford/x`, one
   module with all packages versioned together. Consumers pin one `x` version.
   `boopd` and repo-guardian switch to it. renovate-operator may switch, but

@@ -63,16 +63,24 @@ Tracks INV-0001 § "First steps, in order":
 4. Process builder — done: `internal/jobspec` ported from renovate-operator
    `0183661` (one repository per Job, profile overlay, owned token Secret)
    with the env-table behaviour tests.
-5. Temporal plumbing and budget entity from repo-guardian `v2` @ `278c7ec`
+5. Temporal plumbing and budget entity — done: `internal/temporal`
+   (config, mTLS/OIDC, dial, worker versioning, schedules, SDK metric
+   views, dev-server test helper), `internal/workflows` (names, priority
+   presets, `InstallationWorkflow`) and `internal/activities`
+   (`AcquireBudget`) ported from repo-guardian `feat/impl-0028-controls-foundations` @ `d1f20a0`.
+   Changes: one task queue and worker deployment (`boopd`); the budget is
+   discovered from `/rate_limit` by a `ReadRateLimit` activity the entity
+   runs itself, tracks `core` and `graphql`, counts open leases against
+   the per-resource EWMA, caps concurrent runs and honours a
+   secondary-limit `retryAt` (DESIGN-0001 § InstallationWorkflow).
+6. `RunRenovate`, `RepoWorkflow`, `DiscoveryWorkflow`, `cmd/boopd worker`
    — next.
-6. `RunRenovate`, `RepoWorkflow`, `InstallationWorkflow`,
-   `DiscoveryWorkflow`.
 7. Chart (Role, profiles, PodSecurity labels) and homelab deploy. No
    custom Renovate image; Jobs run the upstream one.
 8. Run the success criteria; record results in a new investigation.
 
 Sibling checkouts used as sources: `~/code/renovate-operator`,
-`~/code/repo-guardian` (`v2` branch), `~/code/x`.
+`~/code/repo-guardian` (`feat/impl-0028-controls-foundations`), `~/code/x`.
 
 ### Scaffold note
 
@@ -98,6 +106,9 @@ artifacts on every release.
 cmd/boop/      # main package — keep thin, call into internal/
 internal/                 # library code; not importable outside this module
 internal/platform/        # GitHub discovery, config probe, token minting
+internal/temporal/        # Temporal client config, worker, versioning, schedules
+internal/workflows/       # deterministic workflow code; InstallationWorkflow budget entity
+internal/activities/      # side effects, registered by name: AcquireBudget
 internal/jobspec/         # Job + env builder for one Renovate run (ported from renovate-operator)
 docs/investigation/       # INV-0001 is the founding document
 charts/boop/   # Helm chart + unittest suites + values.schema.json

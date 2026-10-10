@@ -128,7 +128,7 @@ each question.
   from a platform and scan spec. It is copied and adapted the same way
   `internal/platform` was: CRD types out, config types and a profile in, one
   repository per Job instead of an indexed shard.
-- repo-guardian `v2` @ `278c7ec` provides the Temporal plumbing
+- repo-guardian `feat/impl-0028-controls-foundations` @ `d1f20a0` provides the Temporal plumbing
   (`internal/temporal`) and the budget entity (`internal/workflows/installation.go`:
   `acquire` Update, `report` Signal, leases, sweep, ContinueAsNew drain), plus
   option presets (`options.go`).
@@ -540,13 +540,20 @@ type ResourceBudget struct {
 }
 
 type BudgetState struct {
-    Resources         map[string]*ResourceBudget // "core", "graphql"
-    Leases            map[string]Lease           // holder = RepoWorkflow ID
-    MaxConcurrentRuns int                        // optional cap from config; 0 = budget only
-    RetryAt           time.Time                  // installation-wide pause from a secondary limit
-    // ... repo-guardian's handled count, suspend state
+    Resources map[string]*ResourceBudget // "core", "graphql"
+    Observed  time.Time                  // when the newest readings were taken
+    Leases    map[string]Lease           // holder = RepoWorkflow ID; no amount, see below
+    RetryAt   time.Time                  // installation-wide pause from a secondary limit
+    Suspended bool
 }
 ```
+
+The `budget.*` config values (`reserveFraction`, `maxConcurrentRuns`,
+`defaultEstimate`, lease TTL) travel in the workflow input, as repo-guardian's
+threshold does, so a config change takes effect when `AcquireBudget` next
+starts the workflow. A lease reserves no fixed amount: admission counts open
+leases against each resource's current estimate, so a better estimate applies
+to the runs already in flight.
 
 **Admission.** `acquire` grants a lease only if all of these hold:
 
@@ -556,8 +563,10 @@ type BudgetState struct {
 - `RetryAt` is in the past.
 
 Otherwise it returns `retryAt`: the latest `Reset` among the exhausted
-resources, `RetryAt` itself, or the next lease expiry if only the cap was
-hit.
+resources, `RetryAt` itself, or, if only the cap was hit, the next lease
+expiry bounded to five minutes, since a run usually reports well before its
+70-minute lease expires. Waits for the same instant are spread over the
+following minute.
 
 **Secondary limits** (OQ5). `/rate_limit` shows none of these, and all are
 per installation: at most 100 concurrent requests, 900 REST points and 2,000
@@ -1397,7 +1406,7 @@ per run, every admitted lease is a pod.
 - [INV-0001](../investigation/0001-temporal-as-the-renovate-control-plane.md)
 - [RFC-0001](../rfc/0001-boopd-run-renovate-per-repository-on-temporal.md)
 - ADR-0001 to ADR-0009; ADR-0003 is superseded by ADR-0009
-- repo-guardian `v2` @ `278c7ec`: `internal/temporal/`,
+- repo-guardian `feat/impl-0028-controls-foundations` @ `d1f20a0`: `internal/temporal/`,
   `internal/workflows/installation.go`, `internal/workflows/options.go`,
   `contrib/temporal/`, DESIGN-0026
 - renovate-operator `0183661`: `internal/platform/`,

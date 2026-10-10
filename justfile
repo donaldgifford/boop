@@ -71,6 +71,13 @@ test:
 [group('test')]
 test-all: test
 
+# Run the integration tests (build tag `integration`): they start the
+# Temporal CLI's dev server, downloaded once per machine at the version
+# pinned in internal/temporal/temporaltest.
+[group('test')]
+test-integration:
+    @go test -v -race -count=1 -tags integration ./...
+
 # Run tests for a single package: just test-pkg ./pkg/foo
 [group('test')]
 test-pkg pkg:
