@@ -453,7 +453,7 @@ and the k3d end-to-end harness every later phase extends (OQ3).
   "E2E Tests" does the same on a runner with k3d installed at the
   `mise.toml` pin, gated like the Go jobs. The harness exposes the
   namespace, the clientset and the stub image to tests.
-- [ ] 4.8 e2e scenarios for `kube`: the whole lifecycle against the real
+- [x] 4.8 e2e scenarios for `kube`: the whole lifecycle against the real
   API server and kubelet with the stub image (suspended Job, Secret,
   unsuspend, `Running`, log follow to the end, exit code, foreground
   delete leaves no pod and no Secret); a 1 MB report line arrives whole;

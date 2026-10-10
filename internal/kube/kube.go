@@ -272,10 +272,8 @@ func (r *Runner) readExit(ctx context.Context, name string) (Exit, bool, error) 
 	if err != nil {
 		return Exit{}, false, fmt.Errorf("kube: get job %s: %w", name, err)
 	}
-	for _, c := range job.Status.Conditions {
-		if c.Type == batchv1.JobFailed && c.Status == corev1.ConditionTrue && c.Reason == batchv1.JobReasonDeadlineExceeded {
-			return Exit{Code: -1, Reason: c.Reason}, true, nil
-		}
+	if deadlineExceeded(job) {
+		return Exit{Code: -1, Reason: batchv1.JobReasonDeadlineExceeded}, true, nil
 	}
 	pod, err := r.Pod(ctx, name)
 	if errors.Is(err, ErrNoPod) {
@@ -287,10 +285,30 @@ func (r *Runner) readExit(ctx context.Context, name string) (Exit, bool, error) 
 	for i := range pod.Status.ContainerStatuses {
 		cs := &pod.Status.ContainerStatuses[i]
 		if cs.Name == containerName && cs.State.Terminated != nil {
+			// The deadline kill can land between the Job read above and
+			// the pod read; read the Job again before trusting the exit.
+			again, err := r.cs.BatchV1().Jobs(r.namespace).Get(ctx, name, metav1.GetOptions{})
+			if err == nil && deadlineExceeded(again) {
+				return Exit{Code: -1, Reason: batchv1.JobReasonDeadlineExceeded}, true, nil
+			}
 			return Exit{Code: int(cs.State.Terminated.ExitCode), Reason: cs.State.Terminated.Reason}, true, nil
 		}
 	}
 	return Exit{}, false, nil
+}
+
+// deadlineExceeded reports whether the Job hit activeDeadlineSeconds. The
+// controller sets FailureTarget before it kills the pod and Failed only
+// after, so a container terminated by that kill (exit 143) must not be
+// read as the run's own exit.
+func deadlineExceeded(job *batchv1.Job) bool {
+	for _, c := range job.Status.Conditions {
+		if (c.Type == batchv1.JobFailed || c.Type == batchv1.JobFailureTarget) &&
+			c.Status == corev1.ConditionTrue && c.Reason == batchv1.JobReasonDeadlineExceeded {
+			return true
+		}
+	}
+	return false
 }
 
 // Delete deletes the Job with foreground propagation and waits, bounded,

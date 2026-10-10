@@ -168,3 +168,18 @@ func TestRunner_DeleteForeground(t *testing.T) {
 		t.Errorf("Delete() of a gone job = %v, want nil", err)
 	}
 }
+
+func TestRunner_ExitCode_FailureTargetBeatsTheKill(t *testing.T) {
+	t.Parallel()
+	j := job("j")
+	j.Namespace = ns
+	j.Status.Conditions = []batchv1.JobCondition{
+		{Type: batchv1.JobFailureTarget, Status: corev1.ConditionTrue, Reason: batchv1.JobReasonDeadlineExceeded},
+	}
+	killed := pod("j", corev1.PodFailed, &corev1.ContainerStateTerminated{ExitCode: 143, Reason: "Error"})
+	cs := fake.NewClientset(j, killed)
+	got, err := kube.NewRunner(cs, ns).ExitCode(context.Background(), "j")
+	if err != nil || got != (kube.Exit{Code: -1, Reason: "DeadlineExceeded"}) {
+		t.Errorf("ExitCode() = %+v, %v; want DeadlineExceeded over the SIGTERM exit", got, err)
+	}
+}

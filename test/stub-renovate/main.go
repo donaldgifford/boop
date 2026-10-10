@@ -121,7 +121,7 @@ func run(cfg *config, out io.Writer) error {
 	sc.Buffer(make([]byte, 0, 64<<10), 16<<20)
 	for n := 0; sc.Scan(); n++ {
 		if cfg.hangAfter >= 0 && n >= cfg.hangAfter {
-			select {} // hang until killed
+			hang()
 		}
 		line := sc.Text()
 		if cfg.slug != "" {
@@ -140,6 +140,14 @@ func run(cfg *config, out io.Writer) error {
 		}
 	}
 	return sc.Err()
+}
+
+// hang blocks until the process is killed. A bare select{} would not:
+// with no other goroutine the runtime reports a deadlock and exits 2.
+func hang() {
+	for {
+		time.Sleep(time.Hour)
+	}
 }
 
 func readFixture(name string) ([]byte, error) {
