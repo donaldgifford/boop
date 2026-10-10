@@ -11,6 +11,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(temporal)* Port repo-guardian's Temporal plumbing and the installation budget entity
 - *(platform)* Carry repository id and node id from discovery
 - *(platform)* Add an App-level client that lists installations
+- *(platform)* Add the Minter seam with scoped mint and revoke
 
 ### Documentation
 
