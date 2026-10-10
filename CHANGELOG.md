@@ -25,6 +25,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(kube)* Drive one Renovate Job through its lifecycle
 - *(kube)* Reconnect the log follower and drop replayed lines
 - *(kube)* Count API requests by verb, resource and code
+- *(renovate)* Scan the run's log and parse the report
 
 ### Documentation
 
