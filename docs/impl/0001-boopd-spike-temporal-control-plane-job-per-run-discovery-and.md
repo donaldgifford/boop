@@ -406,7 +406,7 @@ and the k3d end-to-end harness every later phase extends (OQ3).
 
 #### Tasks
 
-- [ ] 4.1 `internal/kube`: in-cluster client, or `KUBECONFIG` when set,
+- [x] 4.1 `internal/kube`: in-cluster client, or `KUBECONFIG` when set,
   with the namespace from config; a `Runner` with `CreateSuspended(job)`,
   `CreateSecret(secret)`, `Unsuspend(name)`, `WaitRunning(name, timeout)`
   by watching the Job's pod, `FollowLog(name, since)` streaming
