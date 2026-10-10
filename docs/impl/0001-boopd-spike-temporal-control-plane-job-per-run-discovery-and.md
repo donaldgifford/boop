@@ -421,7 +421,7 @@ and the k3d end-to-end harness every later phase extends (OQ3).
 - [x] 4.3 `boopd_kube_requests_total{verb,resource,code}` through a
   client-go transport wrapper (the metric registry arrives in Phase 6;
   the wrapper takes an interface).
-- [ ] 4.4 `internal/renovate`: the log scanner matching `msg` exactly for
+- [x] 4.4 `internal/renovate`: the log scanner matching `msg` exactly for
   the branch, PR, end and report events, live and `dryRun: full`,
   carrying `repository` and `branch`; `Progress` counters; the
   `Repository finished` fields (`result`, `status`, `exitCode`,
