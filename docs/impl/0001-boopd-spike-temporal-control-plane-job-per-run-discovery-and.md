@@ -532,7 +532,7 @@ stall).
   report sets `reportMissing` with reconstructed tuples; a revoke failure
   is counted, not an error; cancelling the activity context deletes the
   Job with foreground propagation before it returns.
-- [ ] 5.9 Unit tests: the classification table row by row; the discovery
+- [x] 5.9 Unit tests: the classification table row by row; the discovery
   activity's paging, heartbeat and resume against `httptest` GitHub; the
   other activities through the SDK's `TestActivityEnvironment` over
   fakes.
