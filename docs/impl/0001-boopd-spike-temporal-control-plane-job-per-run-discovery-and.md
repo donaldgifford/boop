@@ -674,12 +674,19 @@ and the first real environment.
 - [ ] 7.9 `just k3d-install` for the developer loop against the real
   Renovate image and one of your scratch repositories (OQ10) in
   `dryRun: full`, with the App key from a local file. Not in CI.
+  **Deferred - human required:** the recipe is ready
+  (`just k3d-install values=dev/values.yaml app_key=<pem>`); the run
+  needs the `boop-bot` App key, a scratch repository and a Temporal
+  frontend reachable from k3d.
 - [ ] 7.10 Homelab: a `boopd` namespace on repo-guardian's reference
   Temporal cluster with its own client identity (OQ6), a `boop-bot`
   GitHub App installed on the homelab organisation with the private key
   in a Secret, the Redis subchart or an existing instance (OQ7), Loki
   labels from the correlation fields; the first release `0.1.0` cut by
   the release train (OQ5) and deployed.
+  **Deferred - human required:** the homelab cluster, the Temporal
+  client identity, the GitHub App registration and the release merge
+  are outside this repository.
 
 #### Success Criteria
 

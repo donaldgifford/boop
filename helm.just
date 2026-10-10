@@ -94,13 +94,24 @@ k3d-up:
 k3d-down:
     @k3d cluster delete {{ project_name }}
 
+# The developer loop against real Renovate (IMPL-0001 task 7.9):
+#   just k3d-install values=dev/values.yaml app_key=~/boop-bot.pem
+# app_key becomes the `boop-bot-app` Secret (key private-key.pem) the
+# values' privateKeySecretRef names; values sets temporal.address,
+# boopd.apps and boopd.renovate.dryRun: full. dev/ is gitignored.
 # Build the dev image, import it into k3d, install/upgrade the release
 [group('k3d')]
-k3d-install: k3d-up docker-build
-    @k3d image import ghcr.io/donaldgifford/boopd:dev \
-        --cluster {{ project_name }}
-    @helm upgrade --install {{ chart_name }} {{ chart_dir }} \
-        --set image.tag=dev --set image.pullPolicy=Never
+k3d-install values="" app_key="": k3d-up docker-build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    k3d image import ghcr.io/donaldgifford/boopd:dev --cluster {{ project_name }}
+    if [[ -n "{{ app_key }}" ]]; then
+        kubectl create secret generic boop-bot-app --from-file=private-key.pem="{{ app_key }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+    fi
+    helm upgrade --install {{ chart_name }} {{ chart_dir }} \
+        --set image.tag=dev --set image.pullPolicy=Never \
+        {{ if values != "" { "-f " + values } else { "" } }}
 
 # Uninstall the release from the k3d cluster
 [group('k3d')]
