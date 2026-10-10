@@ -563,7 +563,7 @@ contract).
   heartbeat timeout; suspend signals to budgets; a summary result.
   `EnsureSchedule` per configured App (`discovery/<app>`, interval
   `discovery.every`, overlap skip) at worker start.
-- [ ] 6.2 `RepoWorkflow` with `RepoState` and the loop: the selector over
+- [x] 6.2 `RepoWorkflow` with `RepoState` and the loop: the selector over
   `NextDue`, `recheck` (runs now at `PriorityHigh`), `discovered`
   (refreshes slug, `Extends`, `LastSeen`) and the absence timer at
   `LastSeen + 3 × DiscoveryInterval` → `CheckRepo` → end on gone or no

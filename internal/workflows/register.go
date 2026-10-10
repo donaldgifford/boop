@@ -30,6 +30,7 @@ type registration struct {
 // all is every boopd workflow, on the one task queue.
 var all = []registration{
 	{InstallationWorkflow, InstallationWorkflowName},
+	{RepoWorkflow, RepoWorkflowName},
 	{DiscoveryWorkflow, DiscoveryWorkflowName},
 }
 

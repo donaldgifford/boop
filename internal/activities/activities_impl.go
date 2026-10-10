@@ -30,6 +30,7 @@ import (
 	"github.com/donaldgifford/boop/internal/config"
 	"github.com/donaldgifford/boop/internal/kube"
 	"github.com/donaldgifford/boop/internal/platform"
+	"github.com/donaldgifford/boop/internal/profiles"
 	"github.com/donaldgifford/boop/internal/workflows"
 )
 
@@ -72,6 +73,7 @@ type Activities struct {
 	mu       sync.Mutex
 	appOf    map[int64]string // installation id -> app name, learned from listings
 	presetID map[string]int64 // app name -> shared-preset repository id
+	profiles *profiles.Resolver
 }
 
 // New builds the activities from deps.
@@ -205,6 +207,7 @@ func (a *Activities) Register(r Registry) {
 		workflows.CheckRepoActivity:            a.CheckRepo,
 		workflows.ReadRateLimitActivity:        a.ReadRateLimit,
 		workflows.RunRenovateActivity:          a.RunRenovate,
+		workflows.PlanRunActivity:              a.PlanRun,
 	} {
 		r.RegisterActivityWithOptions(fn, activity.RegisterOptions{Name: name})
 	}
