@@ -375,7 +375,7 @@ Phase 0 moves it.
   names), takes the strictest match by `order`, falls back to
   `default_profile` when `extends` is known but matches nothing and to
   `unknown_profile` when `extends` is empty; managers only ever tighten.
-- [ ] 3.5 `jobspec.Profile` and `jobspec.App` are built from the config
+- [x] 3.5 `jobspec.Profile` and `jobspec.App` are built from the config
   types by one constructor, so the chart's config file is the only
   source. `boopd config validate <file>` loads and validates without
   starting anything, for the chart's CI and for operators.
