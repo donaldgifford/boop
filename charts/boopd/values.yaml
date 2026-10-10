@@ -121,6 +121,12 @@ configMap:
   # -- Use an existing ConfigMap for envFrom instead of rendering one
   existingConfigMap: ""
 
+rbac:
+  # -- Create the worker's Role and RoleBinding in the runs namespace:
+  # jobs create/get/list/watch/patch/delete, pods get/list/watch, pods/log get,
+  # secrets create/get/delete (no list).
+  create: true
+
 serviceAccount:
   # -- Create a ServiceAccount
   create: true

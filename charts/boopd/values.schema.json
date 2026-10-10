@@ -460,6 +460,14 @@
           }
         }
       }
+    },
+    "rbac": {
+      "type": "object",
+      "properties": {
+        "create": {
+          "type": "boolean"
+        }
+      }
     }
   },
   "$defs": {

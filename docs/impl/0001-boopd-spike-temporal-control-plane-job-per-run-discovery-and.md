@@ -637,9 +637,11 @@ and the first real environment.
   JSON schema in `values.schema.json` for the value shapes; the chart's
   CI renders the ConfigMap and runs `boopd config validate` on it (task
   3.5), so a bad value fails before a deploy.
-- [ ] 7.3 RBAC: ServiceAccount, Role and RoleBinding with exactly the
+- [x] 7.3 RBAC: ServiceAccount, Role and RoleBinding with exactly the
   design's verbs (`jobs` create/get/list/watch/delete; `pods`
   get/list/watch; `pods/log` get; `secrets` create/get/delete, no `list`).
+  Jobs also get `patch`: RunRenovate step 4 unsuspends the Job with a
+  patch, which the design's Role table had left out (table corrected).
 - [ ] 7.4 Secrets: App private key, Redis URL and Temporal client
   certificate or OIDC client secret mounted as files in the worker only;
   `existingSecret` for each; the Temporal values block copied from

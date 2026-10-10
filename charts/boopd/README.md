@@ -67,6 +67,7 @@ Prometheus Operator CRDs in the cluster.
 | prometheusRule.alerts | object | `{}` | Per-alert overrides: keys `replicasUnavailable` and `containerRestarting`, each accepting `enabled`, `for`, `severity`, and `threshold`. |
 | prometheusRule.enabled | bool | `false` | Create PrometheusRule with the generic starter alerts (DeploymentReplicasUnavailable, ContainerRestarting). |
 | prometheusRule.labels | object | `{}` | Additional labels (e.g., to match Prometheus operator `ruleSelector`). |
+| rbac.create | bool | `true` | Create the worker's Role and RoleBinding in the runs namespace: jobs create/get/list/watch/patch/delete, pods get/list/watch, pods/log get, secrets create/get/delete (no list). |
 | readinessProbe.httpGet.path | string | `"/readyz"` |  |
 | readinessProbe.httpGet.port | string | `"http"` |  |
 | readinessProbe.initialDelaySeconds | int | `5` |  |
