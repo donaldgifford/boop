@@ -39,6 +39,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(observability)* Logger, Prometheus exporter, health and budget gauges
 - *(temporal)* Register missing search attributes on the namespace
 - *(boopd)* Worker role with readiness, schedules and graceful stop
+- *(chart)* Rename to boopd; the Deployment runs the worker role
 
 ### Documentation
 
