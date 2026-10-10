@@ -109,10 +109,18 @@ func ServeListener(ctx context.Context, ln net.Listener, h http.Handler) error {
 		return err
 	case <-ctx.Done():
 	}
-	sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(sctx); err != nil {
-		return fmt.Errorf("observability: shutdown: %w", err)
+		// A connection dialed but never used counts as active for its
+		// first five seconds; probes and scrapes leave them. Nothing
+		// here is worth waiting for, so close what is left.
+		if !errors.Is(err, context.DeadlineExceeded) {
+			return fmt.Errorf("observability: shutdown: %w", err)
+		}
+		if err := srv.Close(); err != nil {
+			return fmt.Errorf("observability: close: %w", err)
+		}
 	}
 	if err := <-errc; !errors.Is(err, http.ErrServerClosed) {
 		return err
