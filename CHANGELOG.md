@@ -13,6 +13,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(platform)* Add an App-level client that lists installations
 - *(platform)* Add the Minter seam with scoped mint and revoke
 - *(platform)* Expose installation discovery page by page
+- *(platform)* Probe for the config file over GraphQL, REST as fallback
 
 ### Documentation
 
