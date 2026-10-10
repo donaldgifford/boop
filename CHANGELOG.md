@@ -31,6 +31,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Add IMPL-0001, the spike implementation plan with phases, criteria and open questions
 - *(impl)* Record the IMPL-0001 decisions; config is HCL via hclkit, tests lean on k3d e2e
 
+### Testing
+
+- *(platform)* Close IMPL-0001 Phase 2 and refresh the package docs
+
 ### Miscellaneous Tasks
 
 - Initial commit
