@@ -60,9 +60,11 @@ Tracks INV-0001 § "First steps, in order":
 3. `internal/platform` copied from renovate-operator `0183661` — done.
    Changes: Forgejo client dropped, lint fixes (`%w: %w` wrapping,
    formatting).
-4. Process builder (copy renovate-operator `internal/jobspec`, adapt) +
-   behaviour tests — next.
-5. Temporal plumbing and budget entity from repo-guardian `v2` @ `278c7ec`.
+4. Process builder — done: `internal/jobspec` ported from renovate-operator
+   `0183661` (one repository per Job, profile overlay, owned token Secret)
+   with the env-table behaviour tests.
+5. Temporal plumbing and budget entity from repo-guardian `v2` @ `278c7ec`
+   — next.
 6. `RunRenovate`, `RepoWorkflow`, `InstallationWorkflow`,
    `DiscoveryWorkflow`.
 7. Chart (Role, profiles, PodSecurity labels) and homelab deploy. No
@@ -96,6 +98,7 @@ artifacts on every release.
 cmd/boop/      # main package — keep thin, call into internal/
 internal/                 # library code; not importable outside this module
 internal/platform/        # GitHub discovery, config probe, token minting
+internal/jobspec/         # Job + env builder for one Renovate run (ported from renovate-operator)
 docs/investigation/       # INV-0001 is the founding document
 charts/boop/   # Helm chart + unittest suites + values.schema.json
 Dockerfile                # multi-stage distroless build (VERSION/COMMIT/DATE args)
