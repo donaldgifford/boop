@@ -18,6 +18,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(platform)* Derive the client limiter from the discovered limit
 - *(platform)* Add CheckRepo with gone, no-config, present and error
 - *(config)* Decode the HCL config file with hclkit
+- *(config)* Apply defaults and validate every rule with positions
 
 ### Documentation
 
