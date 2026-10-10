@@ -54,6 +54,7 @@ Prometheus Operator CRDs in the cluster.
 | configMap.data | object | `{}` | Key/value pairs projected into a chart-managed ConfigMap and injected into the container via envFrom. Keys must not collide with the chart-managed env vars (LISTEN_ADDR, METRICS_ADDR, LOG_LEVEL, POD_NAME) — the render fails fast on collisions. |
 | configMap.existingConfigMap | string | `""` | Use an existing ConfigMap for envFrom instead of rendering one |
 | extraEnv | list | `[]` | Additional environment variables (must not collide with the chart-managed env vars — render fails fast) |
+| extraObjects | list | `[]` | Extra manifests rendered with the release (passed through `tpl`), e.g. the App key Secret in a dev cluster. |
 | extraVolumeMounts | list | `[]` | Additional volume mounts |
 | extraVolumes | list | `[]` | Additional volumes |
 | fullnameOverride | string | `""` | Override the full release name |

@@ -592,6 +592,12 @@
           "type": "object"
         }
       }
+    },
+    "extraObjects": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
     }
   },
   "$defs": {

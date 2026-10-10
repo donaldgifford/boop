@@ -323,6 +323,10 @@ prometheusRule:
   # `enabled`, `for`, `severity`, and `threshold`.
   alerts: {}
 
+# -- Extra manifests rendered with the release (passed through `tpl`),
+# e.g. the App key Secret in a dev cluster.
+extraObjects: []
+
 # -- Additional environment variables (must not collide with the
 # chart-managed env vars — render fails fast)
 extraEnv: []

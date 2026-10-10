@@ -6,9 +6,11 @@ image:
   repository: busybox
   tag: latest
 
+# Exit on SIGTERM: the worker's grace period is an hour.
 command:
-  - sleep
-  - "900"
+  - sh
+  - -c
+  - trap "exit 0" TERM; sleep 900 & wait
 args: []
 
 livenessProbe: null
@@ -17,8 +19,6 @@ readinessProbe: null
 resources: {}
 
 boopd:
-  renovate:
-    redisSecretRef: {name: boopd-redis, key: url}
   profileRules:
     - extends: ["github>boop-bot/renovate-config:python"]
       managers: [pip_requirements, poetry]
@@ -34,3 +34,12 @@ boopd:
 
 temporal:
   address: temporal-frontend:7233
+
+# The App key Secret the config names; ct installs into a bare cluster.
+extraObjects:
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: boop-bot-app
+    stringData:
+      private-key.pem: not-a-key

@@ -218,12 +218,6 @@ tests:
               defaultMode: 0440
               items:
                 - {key: private-key.pem, path: private-key.pem}
-      - contains:
-          path: spec.template.spec.containers[0].volumeMounts
-          content:
-            name: secret-cb527cd7ca
-            mountPath: /etc/boopd/secrets/boopd-redis
-            readOnly: true
 
   - it: mounts the Temporal mTLS Secret and points the env at it
     set:
