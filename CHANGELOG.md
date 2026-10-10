@@ -32,6 +32,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(activities)* DiscoverInstallation pages, probes and signals
 - *(activities)* Classify a run by the design's table
 - *(activities)* RunRenovate runs one repository as a Job
+- *(observability)* Run metrics and the run_complete line
 
 ### Documentation
 
