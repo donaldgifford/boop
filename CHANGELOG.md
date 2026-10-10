@@ -40,6 +40,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(temporal)* Register missing search attributes on the namespace
 - *(boopd)* Worker role with readiness, schedules and graceful stop
 - *(chart)* Rename to boopd; the Deployment runs the worker role
+- *(chart)* Render boopd.hcl from values into a mounted ConfigMap
 
 ### Documentation
 
