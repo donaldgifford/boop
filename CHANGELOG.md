@@ -12,6 +12,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(platform)* Carry repository id and node id from discovery
 - *(platform)* Add an App-level client that lists installations
 - *(platform)* Add the Minter seam with scoped mint and revoke
+- *(platform)* Expose installation discovery page by page
 
 ### Documentation
 
