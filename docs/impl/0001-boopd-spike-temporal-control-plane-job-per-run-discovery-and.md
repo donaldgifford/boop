@@ -309,7 +309,7 @@ OQ11; INV-0001 § Renovate behaviours to reproduce).
   JSON only; above 64 KB or unparseable yields an empty list). The REST
   fallback `GET /repos/{slug}/contents/{path}` behind `discovery.probe:
   rest`. `ConfigPaths` collapses to the configured path.
-- [ ] 2.6 `ReadRateLimit(ctx) (*workflows.Readings, error)` on the
+- [x] 2.6 `ReadRateLimit(ctx) (*workflows.Readings, error)` on the
   installation client: `GET /rate_limit`, reading `resources.core` and
   `resources.graphql` only, with `ObservedAt` from the response `Date`.
 - [ ] 2.7 Limiter from the discovered limit: a `WithRateLimit` value derived
