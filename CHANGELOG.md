@@ -54,6 +54,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(impl)* Record the IMPL-0001 decisions; config is HCL via hclkit, tests lean on k3d e2e
 - *(impl)* Mark task 4.5 deferred until a scratch repository exists
 - Phase 5 activities in the package doc and CLAUDE.md
+- Phase 6 layout, worker role and boopd rename
 
 ### Testing
 
