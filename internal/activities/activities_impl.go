@@ -29,14 +29,18 @@ import (
 
 	"github.com/donaldgifford/boop/internal/config"
 	"github.com/donaldgifford/boop/internal/kube"
+	"github.com/donaldgifford/boop/internal/platform"
 	"github.com/donaldgifford/boop/internal/workflows"
 )
 
 // Deps are what the activities need. Config must have had ReadSecrets
 // called.
 type Deps struct {
-	Config    *config.Config
-	GitHub    GitHub
+	Config *config.Config
+	GitHub GitHub
+	// Minter mints and revokes run tokens; the app's own client, holding
+	// the key in memory, when nil (DESIGN-0001 OQ11).
+	Minter    platform.Minter
 	Temporal  Starter
 	TaskQueue string
 	Runner    *kube.Runner
@@ -55,6 +59,7 @@ type Deps struct {
 type Activities struct {
 	cfg       *config.Config
 	gh        GitHub
+	minter    platform.Minter
 	temporal  Starter
 	taskQueue string
 	runner    *kube.Runner
@@ -74,6 +79,7 @@ func New(deps *Deps) *Activities {
 	a := &Activities{
 		cfg:       deps.Config,
 		gh:        deps.GitHub,
+		minter:    deps.Minter,
 		temporal:  deps.Temporal,
 		taskQueue: deps.TaskQueue,
 		runner:    deps.Runner,
@@ -182,6 +188,14 @@ func (a *Activities) ListInstallations(ctx context.Context, in *workflows.ListIn
 	return out, nil
 }
 
+// minterFor is the Minter for app's runs.
+func (a *Activities) minterFor(app *config.App) (platform.Minter, error) {
+	if a.minter != nil {
+		return a.minter, nil
+	}
+	return a.gh.App(app)
+}
+
 // Register registers every activity on r under its workflows package
 // name. The budget activity registers separately (Budget.Register).
 func (a *Activities) Register(r Registry) {
@@ -190,6 +204,7 @@ func (a *Activities) Register(r Registry) {
 		workflows.DiscoverInstallationActivity: a.DiscoverInstallation,
 		workflows.CheckRepoActivity:            a.CheckRepo,
 		workflows.ReadRateLimitActivity:        a.ReadRateLimit,
+		workflows.RunRenovateActivity:          a.RunRenovate,
 	} {
 		r.RegisterActivityWithOptions(fn, activity.RegisterOptions{Name: name})
 	}

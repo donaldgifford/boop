@@ -227,12 +227,12 @@ func (r *run) mint(ctx context.Context) error {
 	} else if preset != 0 && preset != r.in.RepoID {
 		ids = append(ids, preset)
 	}
-	api, err := r.a.gh.App(r.app)
+	minter, err := r.a.minterFor(r.app)
 	if err != nil {
 		r.a.metrics.TokenMint(resultFailure)
 		return err
 	}
-	tok, exp, err := api.Mint(ctx, r.in.InstallationID, ids)
+	tok, exp, err := minter.Mint(ctx, r.in.InstallationID, ids)
 	if err != nil {
 		r.a.metrics.TokenMint(resultFailure)
 		return err
@@ -434,9 +434,9 @@ func (r *run) revoke(ctx context.Context) {
 	if r.token == "" {
 		return
 	}
-	api, err := r.a.gh.App(r.app)
+	minter, err := r.a.minterFor(r.app)
 	if err == nil {
-		err = api.Revoke(ctx, r.token)
+		err = minter.Revoke(ctx, r.token)
 	}
 	if err != nil {
 		r.a.metrics.TokenRevocation(resultFailure)

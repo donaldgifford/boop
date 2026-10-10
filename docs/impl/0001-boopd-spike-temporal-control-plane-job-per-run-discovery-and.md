@@ -522,7 +522,7 @@ stall).
   `boopd_run_pod_start_seconds`, `boopd_run_overhead_seconds`,
   `boopd_run_pending_timeouts_total`, `boopd_token_mints_total`,
   `boopd_token_revocations_total`).
-- [ ] 5.7 `Activities` struct wiring the clients, the `Minter`, the config
+- [x] 5.7 `Activities` struct wiring the clients, the `Minter`, the config
   and the registry; `Register` under the `workflows` names.
 - [ ] 5.8 e2e: `RunRenovate` end to end in the k3d harness with the stub
   image and an in-process `httptest` GitHub (mint, `/rate_limit`, revoke):
