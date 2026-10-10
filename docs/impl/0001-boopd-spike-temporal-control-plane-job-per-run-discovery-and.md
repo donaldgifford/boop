@@ -436,6 +436,10 @@ and the k3d end-to-end harness every later phase extends (OQ3).
   `internal/renovate/testdata` with the command that produced them. The
   exact `msg` strings are pinned by them, so a Renovate change fails the
   parser's test, not a run.
+  **Deferred - human required:** needs a scratch repository and a token
+  (OQ10 `c`: the fixture repositories are made by hand). The parser
+  tests run over synthetic fixtures in `internal/renovate/testdata`
+  until then; its README has the steps.
 - [ ] 4.6 Stub Renovate image, `test/stub-renovate/`: a small static Go
   binary on a distroless base that replays a fixture log line by line
   with a configurable delay, exit code and report size, can hang on
