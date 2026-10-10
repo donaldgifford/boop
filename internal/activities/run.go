@@ -176,6 +176,17 @@ func (r *run) complete(ctx context.Context, err error) {
 }
 
 func (r *run) execute(ctx context.Context) (*workflows.RunResult, error) {
+	// Heartbeat from the start, not only while following the log: the
+	// pod may take up to the pending timeout to start, far longer than
+	// the activity's heartbeat timeout.
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Go(func() { r.heartbeat(ctx, stop) })
+	defer func() {
+		close(stop)
+		wg.Wait()
+	}()
+
 	if err := r.mint(ctx); err != nil {
 		return nil, infraError("mint token: "+err.Error(), nil)
 	}
@@ -310,7 +321,7 @@ func (r *run) createJob(ctx context.Context) error {
 }
 
 // follow streams the log until the container exits, the soft deadline
-// passes or ctx ends, heartbeating Progress meanwhile. A run stopped
+// passes or ctx ends; execute heartbeats Progress meanwhile. A run stopped
 // early has its Job deleted here, with foreground propagation, before
 // anything else.
 func (r *run) follow(ctx context.Context) *runEnd {
@@ -321,14 +332,6 @@ func (r *run) follow(ctx context.Context) *runEnd {
 	}
 	runCtx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
-
-	stop := make(chan struct{})
-	var wg sync.WaitGroup
-	wg.Go(func() { r.heartbeat(ctx, stop) })
-	defer func() {
-		close(stop)
-		wg.Wait()
-	}()
 
 	err := r.a.runner.FollowLog(runCtx, r.name, time.Time{}, r.line)
 	if err != nil && runCtx.Err() == nil {
