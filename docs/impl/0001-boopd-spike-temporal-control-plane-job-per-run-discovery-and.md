@@ -414,7 +414,7 @@ and the k3d end-to-end harness every later phase extends (OQ3).
   from the container's terminated state (incl. `OOMKilled` and
   `DeadlineExceeded` reasons), `Delete(name)` with foreground propagation
   and a bounded wait.
-- [ ] 4.2 Log follower resilience: on a broken stream, reconnect with
+- [x] 4.2 Log follower resilience: on a broken stream, reconnect with
   `sinceTime` from the last line's timestamp and drop lines at or before
   it; bounded retries; a line callback that receives the raw line and its
   timestamp.

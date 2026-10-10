@@ -19,6 +19,7 @@ package kube
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -26,6 +27,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/rest"
 )
 
 // Line is one log line with the kubelet's timestamp.
@@ -34,26 +36,119 @@ type Line struct {
 	Text string
 }
 
+// Log follower defaults.
+const (
+	// DefaultMaxReconnects bounds consecutive reconnects that deliver no
+	// new line.
+	DefaultMaxReconnects = 5
+	// DefaultReconnectBackoff is the pause before a reconnect.
+	DefaultReconnectBackoff = time.Second
+)
+
+// ErrLogBroken is returned when the log stream kept breaking without
+// delivering new lines.
+var ErrLogBroken = errors.New("kube: log stream broken")
+
+// WithMaxReconnects overrides DefaultMaxReconnects.
+func WithMaxReconnects(n int) Option { return func(r *Runner) { r.maxReconnects = n } }
+
+// WithReconnectBackoff overrides DefaultReconnectBackoff.
+func WithReconnectBackoff(d time.Duration) Option { return func(r *Runner) { r.backoff = d } }
+
 // FollowLog streams the Renovate container's log of the Job's pod with
 // follow=true&timestamps=true from since (zero for the start), calling fn
-// for each complete line in order. It returns when the stream ends, ctx
-// is done or fn returns an error.
+// with each complete line and its timestamp, in order, exactly once.
+//
+// A stream that breaks, or ends while the container still runs, is
+// reopened with sinceTime from the last delivered line; replayed lines
+// at or before it are dropped, and so is a partial line cut off by the
+// break. After DefaultMaxReconnects reopenings in a row that deliver
+// nothing new it returns ErrLogBroken. It returns nil once the stream
+// ends with the container terminated, and fn's error if fn fails.
 func (r *Runner) FollowLog(ctx context.Context, name string, since time.Time, fn func(Line) error) error {
 	pod, err := r.Pod(ctx, name)
 	if err != nil {
 		return err
 	}
-	opts := &corev1.PodLogOptions{Container: containerName, Follow: true, Timestamps: true}
-	if !since.IsZero() {
-		opts.SinceTime = &metav1.Time{Time: since}
+	pods := r.cs.CoreV1().Pods(r.namespace)
+	last := time.Time{}
+	failures := 0
+	for {
+		opts := &corev1.PodLogOptions{Container: containerName, Follow: true, Timestamps: true}
+		if from := laterOf(since, last); !from.IsZero() {
+			opts.SinceTime = &metav1.Time{Time: from}
+		}
+		delivered, streamErr, fnErr := r.readOnce(ctx, pods.GetLogs(pod.Name, opts), last, fn)
+		if fnErr != nil {
+			return fnErr
+		}
+		progressed := delivered.After(last)
+		last = delivered
+		if streamErr == nil && r.containerDone(ctx, pod.Name) {
+			return nil
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if progressed {
+			failures = 0
+		} else {
+			failures++
+		}
+		if failures > r.maxReconnects {
+			return fmt.Errorf("%w: pod %s after %d reconnects: %w", ErrLogBroken, pod.Name, r.maxReconnects, streamErr)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(r.backoff):
+		}
 	}
-	stream, err := r.cs.CoreV1().Pods(r.namespace).GetLogs(pod.Name, opts).Stream(ctx)
+}
+
+// readOnce opens the stream and reads it to its end. It returns the last
+// delivered timestamp, the stream's error (nil for a clean end) and fn's
+// error.
+func (*Runner) readOnce(ctx context.Context, req *rest.Request, after time.Time, fn func(Line) error) (time.Time, error, error) {
+	stream, err := req.Stream(ctx)
 	if err != nil {
-		return fmt.Errorf("kube: open log of %s: %w", pod.Name, err)
+		return after, fmt.Errorf("kube: open log: %w", err), nil
 	}
 	defer stream.Close()
-	_, err = readLines(stream, time.Time{}, fn)
-	return err
+	var fnErr error
+	last, err := readLines(stream, after, func(l Line) error {
+		if err := fn(l); err != nil {
+			fnErr = err
+			return err
+		}
+		return nil
+	})
+	if fnErr != nil {
+		return last, nil, fnErr
+	}
+	return last, err, nil
+}
+
+// containerDone reports whether the Renovate container has terminated.
+// An error reading the pod counts as not done, so the caller reconnects.
+func (r *Runner) containerDone(ctx context.Context, podName string) bool {
+	p, err := r.cs.CoreV1().Pods(r.namespace).Get(ctx, podName, metav1.GetOptions{})
+	if err != nil {
+		return false
+	}
+	for i := range p.Status.ContainerStatuses {
+		if cs := &p.Status.ContainerStatuses[i]; cs.Name == containerName && cs.State.Terminated != nil {
+			return true
+		}
+	}
+	return p.Status.Phase == corev1.PodSucceeded || p.Status.Phase == corev1.PodFailed
+}
+
+func laterOf(a, b time.Time) time.Time {
+	if b.After(a) {
+		return b
+	}
+	return a
 }
 
 // readLines reads timestamped lines from rd, skipping any at or before

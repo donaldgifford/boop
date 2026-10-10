@@ -101,6 +101,8 @@ type Runner struct {
 	namespace     string
 	deleteTimeout time.Duration
 	poll          time.Duration
+	maxReconnects int
+	backoff       time.Duration
 }
 
 // Option tunes a Runner.
@@ -114,7 +116,14 @@ func WithPollInterval(d time.Duration) Option { return func(r *Runner) { r.poll 
 
 // NewRunner returns a Runner for namespace.
 func NewRunner(cs kubernetes.Interface, namespace string, opts ...Option) *Runner {
-	r := &Runner{cs: cs, namespace: namespace, deleteTimeout: DefaultDeleteTimeout, poll: DefaultPollInterval}
+	r := &Runner{
+		cs:            cs,
+		namespace:     namespace,
+		deleteTimeout: DefaultDeleteTimeout,
+		poll:          DefaultPollInterval,
+		maxReconnects: DefaultMaxReconnects,
+		backoff:       DefaultReconnectBackoff,
+	}
 	for _, opt := range opts {
 		opt(r)
 	}
