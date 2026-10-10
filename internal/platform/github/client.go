@@ -35,12 +35,40 @@ import (
 	"github.com/donaldgifford/boop/internal/platform"
 )
 
-// Default rate-limit budget per IMPL-0001 Q2: 4500 req/hr sustained, 100 burst,
-// per GitHub App installation. Conservative against the 5000/hr primary cap.
+// Default rate-limit budget: 4500 req/hr sustained, 100 burst, per GitHub
+// App installation. Conservative against the 5000/hr primary cap. It
+// stands only until the installation's limit has been read once
+// (WithDiscoveredLimit).
 const (
 	defaultRateLimit rate.Limit = 4500.0 / 3600.0 // ~1.25 req/sec
 	defaultRateBurst            = 100
+
+	// discoveredRateBurst is the burst once the limit is known
+	// (DESIGN-0001 § InstallationWorkflow, Client-side limiter).
+	discoveredRateBurst = 10
 )
+
+// DiscoveredRate turns an installation's hourly core limit from
+// /rate_limit into a limiter rate and burst: limit / 3600 per second,
+// burst 10. ok is false for a non-positive limit, when the default
+// should stand.
+func DiscoveredRate(limit int) (r rate.Limit, burst int, ok bool) {
+	if limit <= 0 {
+		return 0, 0, false
+	}
+	return rate.Limit(float64(limit) / 3600), discoveredRateBurst, true
+}
+
+// WithDiscoveredLimit sets the limiter from the installation's
+// discovered core limit (DiscoveredRate). A non-positive limit means no
+// reading exists yet and keeps the default.
+func WithDiscoveredLimit(limit int) ClientOption {
+	return func(c *Client) {
+		if r, burst, ok := DiscoveredRate(limit); ok {
+			c.limiter = rate.NewLimiter(r, burst)
+		}
+	}
+}
 
 // AppAuth is the inputs needed to mint an installation token. The PEM bytes
 // come from the mirrored Secret in the Run's namespace.

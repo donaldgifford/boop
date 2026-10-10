@@ -312,7 +312,7 @@ OQ11; INV-0001 § Renovate behaviours to reproduce).
 - [x] 2.6 `ReadRateLimit(ctx) (*workflows.Readings, error)` on the
   installation client: `GET /rate_limit`, reading `resources.core` and
   `resources.graphql` only, with `ObservedAt` from the response `Date`.
-- [ ] 2.7 Limiter from the discovered limit: a `WithRateLimit` value derived
+- [x] 2.7 Limiter from the discovered limit: a `WithRateLimit` value derived
   as `limit / 3600` per second, burst 10, replacing the copied 4,500/hr
   default once a reading exists.
 - [ ] 2.8 `CheckRepo(ctx, repoID)`: repository visible to the installation,
