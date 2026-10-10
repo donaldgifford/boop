@@ -34,6 +34,8 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(activities)* RunRenovate runs one repository as a Job
 - *(observability)* Run metrics and the run_complete line
 - *(activities)* Minter seam and registration under workflow names
+- *(workflows)* DiscoveryWorkflow and the discovery schedules
+- *(workflows)* RepoWorkflow owns one repository
 
 ### Documentation
 
@@ -61,6 +63,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(fakegithub)* In-process GitHub for activity tests
 - *(e2e)* RunRenovate end to end in k3d
 - *(activities)* A failed mint is an infrastructure error
+- *(workflows)* Every convergence row and the RepoWorkflow paths
 
 ### Miscellaneous Tasks
 
