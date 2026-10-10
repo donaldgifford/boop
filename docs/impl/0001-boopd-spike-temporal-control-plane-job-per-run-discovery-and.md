@@ -642,7 +642,7 @@ and the first real environment.
   get/list/watch; `pods/log` get; `secrets` create/get/delete, no `list`).
   Jobs also get `patch`: RunRenovate step 4 unsuspends the Job with a
   patch, which the design's Role table had left out (table corrected).
-- [ ] 7.4 Secrets: App private key, Redis URL and Temporal client
+- [x] 7.4 Secrets: App private key, Redis URL and Temporal client
   certificate or OIDC client secret mounted as files in the worker only;
   `existingSecret` for each; the Temporal values block copied from
   repo-guardian's chart (`temporal.address`, `namespace`, `taskQueue`,

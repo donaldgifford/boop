@@ -90,7 +90,7 @@ entry would shadow the operator's attempt (explicit `env` beats
 Returns a space-separated string for has-element style checks.
 */}}
 {{- define "boopd.reservedEnvVars" -}}
-LISTEN_ADDR METRICS_ADDR LOG_LEVEL POD_NAME
+LISTEN_ADDR METRICS_ADDR LOG_LEVEL POD_NAME TEMPORAL_ADDRESS TEMPORAL_NAMESPACE TEMPORAL_TASK_QUEUE TEMPORAL_BUILD_ID TEMPORAL_TLS_CERT_PATH TEMPORAL_TLS_KEY_PATH TEMPORAL_TLS_CA_PATH TEMPORAL_TLS_SERVER_NAME TEMPORAL_TLS_DISABLED TEMPORAL_OIDC_TOKEN_URL TEMPORAL_OIDC_CLIENT_ID TEMPORAL_OIDC_CLIENT_SECRET_PATH TEMPORAL_OIDC_SCOPES TEMPORAL_OIDC_AUDIENCE
 {{- end }}
 
 {{/*
@@ -143,4 +143,171 @@ entry once operators have had a release or two to notice:
 Renders empty on success; failure aborts the entire template render.
 */}}
 {{- define "boopd.validateRemovedValues" -}}
+{{- end }}
+
+{{/*
+Temporal connection env (TEMPORAL_*) and the mounted credential paths.
+Copied from repo-guardian's chart with /etc/boopd paths.
+*/}}
+{{- define "boopd.temporalEnv" -}}
+- name: TEMPORAL_ADDRESS
+  value: {{ .Values.temporal.address | quote }}
+- name: TEMPORAL_NAMESPACE
+  value: {{ .Values.temporal.namespace | quote }}
+- name: TEMPORAL_TASK_QUEUE
+  value: {{ .Values.temporal.taskQueue | quote }}
+- name: TEMPORAL_BUILD_ID
+  value: {{ .Values.worker.buildId | default .Values.image.tag | default .Chart.AppVersion | quote }}
+{{- $tls := .Values.temporal.tls }}
+{{- $oidc := .Values.temporal.auth.oidc }}
+{{- if $tls.existingSecret }}
+- name: TEMPORAL_TLS_CERT_PATH
+  value: /etc/boopd/temporal-tls/tls.crt
+- name: TEMPORAL_TLS_KEY_PATH
+  value: /etc/boopd/temporal-tls/tls.key
+- name: TEMPORAL_TLS_CA_PATH
+  value: /etc/boopd/temporal-tls/ca.crt
+{{- else if $tls.caSecret }}
+- name: TEMPORAL_TLS_CA_PATH
+  value: /etc/boopd/temporal-ca/ca.crt
+{{- end }}
+{{- if and $tls.serverName (or $tls.existingSecret $oidc.tokenUrl) }}
+- name: TEMPORAL_TLS_SERVER_NAME
+  value: {{ $tls.serverName | quote }}
+{{- end }}
+{{- if $tls.disabled }}
+- name: TEMPORAL_TLS_DISABLED
+  value: "true"
+{{- end }}
+{{- if $oidc.tokenUrl }}
+- name: TEMPORAL_OIDC_TOKEN_URL
+  value: {{ $oidc.tokenUrl | quote }}
+- name: TEMPORAL_OIDC_CLIENT_ID
+  value: {{ $oidc.clientId | quote }}
+- name: TEMPORAL_OIDC_CLIENT_SECRET_PATH
+  value: /etc/boopd/temporal-oidc/client-secret
+{{- with $oidc.scopes }}
+- name: TEMPORAL_OIDC_SCOPES
+  value: {{ join " " . | quote }}
+{{- end }}
+{{- with $oidc.audience }}
+- name: TEMPORAL_OIDC_AUDIENCE
+  value: {{ . | quote }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Render guards for Temporal auth and TLS: each combination the binary
+would refuse at startup (or silently misapply) fails here instead.
+*/}}
+{{- define "boopd.validateTemporalAuth" -}}
+{{- $tls := .Values.temporal.tls -}}
+{{- $oidc := .Values.temporal.auth.oidc -}}
+{{- if and (not $oidc.tokenUrl) (or $oidc.clientId $oidc.existingSecret $oidc.scopes $oidc.audience) -}}
+{{- fail "temporal.auth.oidc.tokenUrl is required when any other temporal.auth.oidc value is set" -}}
+{{- end -}}
+{{- if and $oidc.tokenUrl (not (and $oidc.clientId $oidc.existingSecret)) -}}
+{{- fail "temporal.auth.oidc needs clientId and existingSecret (with key client-secret) alongside tokenUrl" -}}
+{{- end -}}
+{{- if and $tls.disabled (or $tls.existingSecret $tls.caSecret $tls.serverName) -}}
+{{- fail "temporal.tls.disabled contradicts temporal.tls.existingSecret, caSecret and serverName" -}}
+{{- end -}}
+{{- if and $tls.caSecret $tls.existingSecret -}}
+{{- fail "temporal.tls.caSecret and temporal.tls.existingSecret are exclusive: put ca.crt in existingSecret for mTLS" -}}
+{{- end -}}
+{{- if and $tls.caSecret (not $oidc.tokenUrl) -}}
+{{- fail "temporal.tls.caSecret is for temporal.auth.oidc (server-verified TLS without a client certificate); for mTLS use temporal.tls.existingSecret" -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+The Secrets boopd.hcl names (each App's private key, the Redis URL),
+as a dict of Secret name -> list of keys. Each is mounted at
+<secretsDir>/<name>/<key>, the path internal/config reads.
+*/}}
+{{- define "boopd.configSecrets" -}}
+{{- $out := dict -}}
+{{- range $name, $a := .Values.boopd.apps -}}
+{{- with $a.privateKeySecretRef -}}
+{{- $_ := set $out .name (append (get $out .name | default list) .key | uniq) -}}
+{{- end -}}
+{{- end -}}
+{{- with .Values.boopd.renovate.redisSecretRef -}}
+{{- if .name -}}
+{{- $_ := set $out .name (append (get $out .name | default list) .key | uniq) -}}
+{{- end -}}
+{{- end -}}
+{{- toJson $out -}}
+{{- end }}
+
+{{/*
+A volume name for a Secret: Secret names are DNS subdomains (dots
+allowed), volume names are DNS labels.
+*/}}
+{{- define "boopd.secretVolumeName" -}}
+{{- printf "secret-%s" (sha256sum . | trunc 10) -}}
+{{- end }}
+
+{{/*
+Credential volumes and mounts: the config's Secrets plus Temporal's.
+Mounted into the worker only; files are 0440 under the pod's fsGroup.
+*/}}
+{{- define "boopd.credentialVolumes" -}}
+{{- range $name, $keys := include "boopd.configSecrets" . | fromJson }}
+- name: {{ include "boopd.secretVolumeName" $name }}
+  secret:
+    secretName: {{ $name }}
+    defaultMode: 0440
+    items:
+      {{- range $keys }}
+      - key: {{ . }}
+        path: {{ . }}
+      {{- end }}
+{{- end }}
+{{- with .Values.temporal.tls.existingSecret }}
+- name: temporal-tls
+  secret:
+    secretName: {{ . }}
+    defaultMode: 0440
+{{- end }}
+{{- with .Values.temporal.tls.caSecret }}
+- name: temporal-ca
+  secret:
+    secretName: {{ . }}
+    defaultMode: 0440
+{{- end }}
+{{- with .Values.temporal.auth.oidc.existingSecret }}
+- name: temporal-oidc
+  secret:
+    secretName: {{ . }}
+    defaultMode: 0440
+    items:
+      - key: client-secret
+        path: client-secret
+{{- end }}
+{{- end }}
+
+{{- define "boopd.credentialMounts" -}}
+{{- $dir := .Values.boopd.secretsDir -}}
+{{- range $name, $_ := include "boopd.configSecrets" . | fromJson }}
+- name: {{ include "boopd.secretVolumeName" $name }}
+  mountPath: {{ printf "%s/%s" $dir $name }}
+  readOnly: true
+{{- end }}
+{{- if .Values.temporal.tls.existingSecret }}
+- name: temporal-tls
+  mountPath: /etc/boopd/temporal-tls
+  readOnly: true
+{{- end }}
+{{- if .Values.temporal.tls.caSecret }}
+- name: temporal-ca
+  mountPath: /etc/boopd/temporal-ca
+  readOnly: true
+{{- end }}
+{{- if .Values.temporal.auth.oidc.existingSecret }}
+- name: temporal-oidc
+  mountPath: /etc/boopd/temporal-oidc
+  readOnly: true
+{{- end }}
 {{- end }}

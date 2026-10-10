@@ -468,6 +468,75 @@
           "type": "boolean"
         }
       }
+    },
+    "temporal": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string",
+          "minLength": 1
+        },
+        "taskQueue": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tls": {
+          "type": "object",
+          "properties": {
+            "existingSecret": {
+              "type": "string"
+            },
+            "serverName": {
+              "type": "string"
+            },
+            "caSecret": {
+              "type": "string"
+            },
+            "disabled": {
+              "type": "boolean"
+            }
+          }
+        },
+        "auth": {
+          "type": "object",
+          "properties": {
+            "oidc": {
+              "type": "object",
+              "properties": {
+                "tokenUrl": {
+                  "type": "string"
+                },
+                "clientId": {
+                  "type": "string"
+                },
+                "existingSecret": {
+                  "type": "string"
+                },
+                "scopes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "audience": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "worker": {
+      "type": "object",
+      "properties": {
+        "buildId": {
+          "type": "string"
+        }
+      }
     }
   },
   "$defs": {

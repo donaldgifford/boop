@@ -104,13 +104,62 @@ boopd:
   unknownProfile: strict
   # Every matching rule contributes; the strictest wins.
   profileRules: []
-  # GitHub Apps by name. At least one is required:
+  # GitHub Apps by name. At least one is required. Each
+  # privateKeySecretRef names an existing Secret, mounted read-only at
+  # <secretsDir>/<name>/<key> in the worker only (the same holds for
+  # renovate.redisSecretRef):
   #   boop-bot:
   #     appId: 123456
   #     privateKeySecretRef: {name: boop-bot-app, key: private-key.pem}
   #     discovery: {every: 6h, probe: graphql}
   #     budget: {reserveFraction: 0.10, maxConcurrentRuns: 10}
   apps: {}
+
+temporal:
+  # -- Frontend `host:port`. Required.
+  address: ""
+  # -- Temporal namespace.
+  namespace: boopd
+  # -- Task queue the worker polls.
+  taskQueue: boopd
+  tls:
+    # -- Secret with `tls.crt`, `tls.key` and (optionally) `ca.crt` for
+    # mTLS. Mounted into the worker only.
+    existingSecret: ""
+    # -- Server name to verify the frontend certificate against.
+    serverName: ""
+    # -- Secret with only `ca.crt`: verify the frontend's certificate
+    # without presenting one, for `auth.oidc` against a private CA.
+    # Empty with OIDC uses the system roots.
+    caSecret: ""
+    # -- Plaintext to the frontend (TEMPORAL_TLS_DISABLED). Only for a
+    # cluster-internal frontend that serves no TLS; with `auth.oidc`
+    # the bearer token is then readable on the wire, and the worker
+    # logs a warning.
+    disabled: false
+  auth:
+    # -- Authenticate with a bearer token from an OAuth2
+    # client-credentials grant (Keycloak and the like) instead of mTLS.
+    # The token is cached and renewed a minute before it expires.
+    oidc:
+      # -- The IdP's token endpoint, e.g.
+      # `https://keycloak/realms/<realm>/protocol/openid-connect/token`.
+      tokenUrl: ""
+      # -- OAuth2 client ID.
+      clientId: ""
+      # -- Secret holding the client secret under `client-secret`.
+      # Mounted as a file, never an env var.
+      existingSecret: ""
+      # -- Scopes to request.
+      scopes: []
+      # -- `audience` parameter, for IdPs that take one. Keycloak sets
+      # the audience with a client-scope mapper instead.
+      audience: ""
+
+worker:
+  # -- Worker deployment build ID (TEMPORAL_BUILD_ID); empty uses
+  # image.tag, then appVersion.
+  buildId: ""
 
 configMap:
   # -- Key/value pairs projected into a chart-managed ConfigMap and
@@ -140,14 +189,24 @@ podAnnotations: {}
 # -- Pod labels
 podLabels: {}
 
-# -- Pod security context
-podSecurityContext: {}
+# -- Pod security context. fsGroup makes the 0440 credential files
+# readable by the nonroot worker.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
 
 # -- Container security context (65532 = distroless nonroot uid)
 securityContext:
   readOnlyRootFilesystem: true
   runAsNonRoot: true
   runAsUser: 65532
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: [ALL]
 
 service:
   # -- Service type

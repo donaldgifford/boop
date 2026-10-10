@@ -1,5 +1,6 @@
 {{- include "boopd.validateEnvCollisions" . -}}
 {{- include "boopd.validateRemovedValues" . -}}
+{{- include "boopd.validateTemporalAuth" . -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -79,6 +80,7 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            {{- include "boopd.temporalEnv" . | nindent 12 }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -87,6 +89,7 @@ spec:
               mountPath: /etc/boopd/boopd.hcl
               subPath: boopd.hcl
               readOnly: true
+            {{- include "boopd.credentialMounts" . | nindent 12 }}
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -110,6 +113,7 @@ spec:
         - name: config
           configMap:
             name: {{ include "boopd.fullname" . }}-config
+        {{- include "boopd.credentialVolumes" . | nindent 8 }}
         {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

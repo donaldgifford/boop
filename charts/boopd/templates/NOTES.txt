@@ -6,6 +6,11 @@ GitHub App and will not become ready; set boopd.apps.<name>.appId and
 privateKeySecretRef.
 
 {{ end -}}
+{{- if not .Values.temporal.address }}
+WARNING: temporal.address is empty. The worker cannot dial Temporal and
+will not start; set temporal.address to the frontend host:port.
+
+{{ end -}}
 Health check:     GET /healthz
 Readiness check:  GET /readyz
 Metrics:          GET :{{ .Values.config.metricsPort }}/metrics

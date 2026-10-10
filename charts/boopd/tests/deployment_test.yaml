@@ -183,3 +183,90 @@ tests:
           value: RELEASE-NAME-boopd-config
       - exists:
           path: spec.template.metadata.annotations["checksum/config"]
+
+  - it: sets the Temporal env and the build ID from the image tag
+    set:
+      temporal.address: temporal:7233
+      image.tag: v0.1.0
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: TEMPORAL_ADDRESS, value: "temporal:7233"}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: TEMPORAL_NAMESPACE, value: boopd}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: TEMPORAL_BUILD_ID, value: v0.1.0}
+
+  - it: mounts each config Secret at secretsDir/<name> with only its key
+    values:
+      - ../ci/ci-values.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: secret-2dcd826ef4
+            mountPath: /etc/boopd/secrets/boop-bot-app
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: secret-2dcd826ef4
+            secret:
+              secretName: boop-bot-app
+              defaultMode: 0440
+              items:
+                - {key: private-key.pem, path: private-key.pem}
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: secret-cb527cd7ca
+            mountPath: /etc/boopd/secrets/boopd-redis
+            readOnly: true
+
+  - it: mounts the Temporal mTLS Secret and points the env at it
+    set:
+      temporal.tls.existingSecret: boopd-temporal-tls
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content: {name: temporal-tls, mountPath: /etc/boopd/temporal-tls, readOnly: true}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: TEMPORAL_TLS_CERT_PATH, value: /etc/boopd/temporal-tls/tls.crt}
+
+  - it: mounts the OIDC client secret as a file
+    set:
+      temporal.auth.oidc:
+        tokenUrl: https://idp/token
+        clientId: boopd
+        existingSecret: boopd-oidc
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: TEMPORAL_OIDC_CLIENT_SECRET_PATH, value: /etc/boopd/temporal-oidc/client-secret}
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: temporal-oidc
+            secret:
+              secretName: boopd-oidc
+              defaultMode: 0440
+              items:
+                - {key: client-secret, path: client-secret}
+
+  - it: fails OIDC without a client secret
+    set:
+      temporal.auth.oidc.tokenUrl: https://idp/token
+    asserts:
+      - failedTemplate:
+          errorPattern: needs clientId and existingSecret
+
+  - it: rejects extraEnv shadowing a Temporal variable
+    set:
+      extraEnv:
+        - {name: TEMPORAL_ADDRESS, value: x}
+    asserts:
+      - failedTemplate:
+          errorPattern: extraEnv\[TEMPORAL_ADDRESS\]

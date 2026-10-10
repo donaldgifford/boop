@@ -63,7 +63,7 @@ Prometheus Operator CRDs in the cluster.
 | nodeSelector | object | `{}` | Node selector |
 | podAnnotations | object | `{}` | Pod annotations |
 | podLabels | object | `{}` | Pod labels |
-| podSecurityContext | object | `{}` | Pod security context |
+| podSecurityContext | object | `{"fsGroup":65532,"runAsGroup":65532,"runAsNonRoot":true,"runAsUser":65532,"seccompProfile":{"type":"RuntimeDefault"}}` | Pod security context. fsGroup makes the 0440 credential files readable by the nonroot worker. |
 | prometheusRule.alerts | object | `{}` | Per-alert overrides: keys `replicasUnavailable` and `containerRestarting`, each accepting `enabled`, `for`, `severity`, and `threshold`. |
 | prometheusRule.enabled | bool | `false` | Create PrometheusRule with the generic starter alerts (DeploymentReplicasUnavailable, ContainerRestarting). |
 | prometheusRule.labels | object | `{}` | Additional labels (e.g., to match Prometheus operator `ruleSelector`). |
@@ -78,7 +78,7 @@ Prometheus Operator CRDs in the cluster.
 | secrets.create | bool | `true` | Create the Secret resource (false = use existingSecret) |
 | secrets.existingSecret | string | `""` | Name of an existing Secret for envFrom (when create=false) |
 | secrets.stringData | object | `{}` | Key/value pairs projected into the chart-managed Secret (stringData) and injected via envFrom. Same collision guard as configMap.data. |
-| securityContext | object | `{"readOnlyRootFilesystem":true,"runAsNonRoot":true,"runAsUser":65532}` | Container security context (65532 = distroless nonroot uid) |
+| securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true,"runAsNonRoot":true,"runAsUser":65532}` | Container security context (65532 = distroless nonroot uid) |
 | service.httpPort | int | `80` | HTTP port |
 | service.metricsPort | int | `9090` | Metrics port |
 | service.type | string | `"ClusterIP"` | Service type |
@@ -88,8 +88,22 @@ Prometheus Operator CRDs in the cluster.
 | serviceMonitor.enabled | bool | `false` | Create Prometheus ServiceMonitor |
 | serviceMonitor.interval | string | `"30s"` | Scrape interval |
 | serviceMonitor.labels | object | `{}` | Additional labels for ServiceMonitor |
+| temporal.address | string | `""` | Frontend `host:port`. Required. |
+| temporal.auth.oidc | object | `{"audience":"","clientId":"","existingSecret":"","scopes":[],"tokenUrl":""}` | Authenticate with a bearer token from an OAuth2 client-credentials grant (Keycloak and the like) instead of mTLS. The token is cached and renewed a minute before it expires. |
+| temporal.auth.oidc.audience | string | `""` | `audience` parameter, for IdPs that take one. Keycloak sets the audience with a client-scope mapper instead. |
+| temporal.auth.oidc.clientId | string | `""` | OAuth2 client ID. |
+| temporal.auth.oidc.existingSecret | string | `""` | Secret holding the client secret under `client-secret`. Mounted as a file, never an env var. |
+| temporal.auth.oidc.scopes | list | `[]` | Scopes to request. |
+| temporal.auth.oidc.tokenUrl | string | `""` | The IdP's token endpoint, e.g. `https://keycloak/realms/<realm>/protocol/openid-connect/token`. |
+| temporal.namespace | string | `"boopd"` | Temporal namespace. |
+| temporal.taskQueue | string | `"boopd"` | Task queue the worker polls. |
+| temporal.tls.caSecret | string | `""` | Secret with only `ca.crt`: verify the frontend's certificate without presenting one, for `auth.oidc` against a private CA. Empty with OIDC uses the system roots. |
+| temporal.tls.disabled | bool | `false` | Plaintext to the frontend (TEMPORAL_TLS_DISABLED). Only for a cluster-internal frontend that serves no TLS; with `auth.oidc` the bearer token is then readable on the wire, and the worker logs a warning. |
+| temporal.tls.existingSecret | string | `""` | Secret with `tls.crt`, `tls.key` and (optionally) `ca.crt` for mTLS. Mounted into the worker only. |
+| temporal.tls.serverName | string | `""` | Server name to verify the frontend certificate against. |
 | terminationGracePeriodSeconds | int | `3600` | Seconds Kubernetes waits after SIGTERM. Must exceed the RunRenovate StartToClose (58m) so a draining worker lets in-flight runs reach their soft deadlines (DESIGN-0001 § Worker shutdown). |
 | tolerations | list | `[]` | Tolerations |
+| worker.buildId | string | `""` | Worker deployment build ID (TEMPORAL_BUILD_ID); empty uses image.tag, then appVersion. |
 
 ## Development
 
