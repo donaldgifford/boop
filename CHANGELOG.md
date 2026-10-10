@@ -21,6 +21,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Approve DESIGN-0001 and accept ADR-0009
 - Mark spike step 4 done and add internal/jobspec to the layout
 - Add IMPL-0001, the spike implementation plan with phases, criteria and open questions
+- *(impl)* Record the IMPL-0001 decisions; config is HCL via hclkit, tests lean on k3d e2e
 
 ### Miscellaneous Tasks
 
