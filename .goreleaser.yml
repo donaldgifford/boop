@@ -1,0 +1,96 @@
+---
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# goreleaser config for boop — binary archives + checksums +
+# SBOMs + the GitHub Release. Invoked by the `binary` job in
+# .github/workflows/release.yml on the tag cut by bump-version; the
+# container image (docker buildx bake) and Helm chart publish from the
+# same tag, so all three artifacts carry one version.
+#
+# No docker/sign sections here: bake owns images, cosign signs the
+# image and chart digests in the release workflow.
+version: 2
+
+project_name: boop
+
+builds:
+  - id: boop
+    main: ./cmd/boop
+    binary: boop
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+      - -X main.commit={{ .Commit }}
+      - -X main.date={{ .Date }}
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: default
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    formats: ["tar.gz"]
+    files:
+      - none*
+
+sboms:
+  - id: archives
+    artifacts: archive
+    documents:
+      - "${artifact}.spdx.json"
+    cmd: syft
+    args: ["$artifact", "--output", "spdx-json=$document"]
+
+checksum:
+  name_template: 'checksums.txt'
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: Features
+      regexp: "^feat:"
+      order: 0
+    - title: Bug Fixes
+      regexp: "^fix:"
+      order: 1
+    - title: Others
+      order: 999
+
+release:
+  github:
+    owner: donaldgifford
+    name: boop
+  draft: false
+  prerelease: auto
+  mode: prepend
+  header: |
+    ## Release {{ .Tag }} ({{ .Date }})
+
+    The container image and Helm chart for this release carry the same
+    version:
+
+    ```text
+    ghcr.io/donaldgifford/boop:{{ .Tag }}
+    oci://ghcr.io/donaldgifford/charts/boop --version {{ .Version }}
+    ```
+
+  footer: |
+    ---
+    **Full Changelog**: https://github.com/donaldgifford/boop/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+snapshot:
+  version_template: '{{ .Tag }}-dev'

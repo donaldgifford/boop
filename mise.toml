@@ -1,0 +1,76 @@
+[tools]
+
+# Go
+# renovate: datasource=github-tags depName=golang/go
+go = "1.27.2"
+# renovate: datasource=github-releases depName=segmentio/golines
+golines = "latest"
+# renovate: datasource=go depName=golang.org/x/tools
+"go:golang.org/x/tools/cmd/goimports" = "latest"
+# renovate: datasource=go depName=golang.org/x/tools
+"go:golang.org/x/tools/cmd/godoc" = "latest"
+# mockery v3: v2's final release (2.53.6) is built against go1.25 and
+# cannot load this go1.26 module at all, so `make mocks` was a no-op
+# error. See IMPL-0021 Phase 7.
+# renovate: datasource=go depName=github.com/vektra/mockery/v3
+"go:github.com/vektra/mockery/v3" = "latest"
+
+# Repo utilities
+# Formatters and linters
+# renovate: datasource=github-releases depName=DavidAnson/markdownlint-cli2
+markdownlint-cli2 = "0.18.1"
+# renovate: datasource=github-releases depName=google/yamlfmt
+yamlfmt = "0.20.0"
+# renovate: datasource=github-tags depName=adrienverge/yamllint
+yamllint = "1.37.1"
+# renovate: datasource=npm depName=prettier
+prettier = "3.7.4"
+# renovate: datasource=github-releases depName=orhun/git-cliff
+git-cliff = "latest"
+# renovate: datasource=github-releases depName=rhysd/actionlint
+actionlint = "latest"
+# renovate: datasource=github-releases depName=casey/just
+just = "latest"
+
+# tools
+# renovate: datasource=github-releases depName=mikefarah/yq
+yq = "4.48.1"
+# renovate: datasource=github-releases depName=jqlang/jq
+jq = "latest"
+# renovate: datasource=github-releases depName=donaldgifford/docz
+"github:donaldgifford/docz" = "latest"
+
+
+# Release tools
+# renovate: datasource=github-releases depName=golangci/golangci-lint
+golangci-lint = "2.14.0"
+# renovate: datasource=github-releases depName=goreleaser/goreleaser
+goreleaser = "latest"
+
+# Security
+# renovate: datasource=github-releases depName=anchore/syft
+syft = "latest"
+# renovate: datasource=github-releases depName=anchore/grype
+grype = "latest"
+# renovate: datasource=go depName=golang.org/x/vuln
+"go:golang.org/x/vuln/cmd/govulncheck" = "latest"
+
+# Compliance
+# renovate: datasource=go depName=github.com/google/go-licenses
+"go:github.com/google/go-licenses" = "latest"
+
+# Helm and Kubernetes
+# renovate: datasource=github-releases depName=helm/helm
+helm = "3.19.0"
+# renovate: datasource=github-releases depName=helm/chart-testing
+helm-ct = "3.14.0"
+# renovate: datasource=github-releases depName=databus23/helm-diff
+helm-diff = "latest"
+# renovate: datasource=github-releases depName=norwoodj/helm-docs
+helm-docs = "1.14.2"
+# renovate: datasource=github-releases depName=sigstore/cosign
+cosign = "latest"
+# renovate: datasource=github-releases depName=prometheus/prometheus
+promtool = "latest"
+# renovate: datasource=github-releases depName=k3d-io/k3d
+k3d = "5.8.3"
