@@ -18,6 +18,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Record DESIGN-0001 decisions (a on all open questions except OQ8)
 - Record OQ8 decision (report via the Renovate log line)
 - Approve DESIGN-0001 and accept ADR-0009
+- Mark spike step 4 done and add internal/jobspec to the layout
 
 ### Miscellaneous Tasks
 
