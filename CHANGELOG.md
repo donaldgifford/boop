@@ -39,6 +39,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Testing
 
 - *(platform)* Close IMPL-0001 Phase 2 and refresh the package docs
+- *(config)* Golden config renders the jobspec fixture; close Phase 3
 
 ### Miscellaneous Tasks
 
