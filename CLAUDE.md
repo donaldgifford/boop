@@ -55,7 +55,7 @@ Do not re-open these without a new document that says why:
 
 Tracks INV-0001 § "First steps, in order":
 
-1. Repo, module, tooling — done (Go 1.27.1).
+1. Repo, module, tooling — done (Go 1.27.2).
 2. Investigation in `docs/`, this file — done.
 3. `internal/platform` copied from renovate-operator `0183661` — done.
    Changes: Forgejo client dropped, lint fixes (`%w: %w` wrapping,
