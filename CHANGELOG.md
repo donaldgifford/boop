@@ -17,6 +17,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(platform)* Read core and graphql from /rate_limit
 - *(platform)* Derive the client limiter from the discovered limit
 - *(platform)* Add CheckRepo with gone, no-config, present and error
+- *(config)* Decode the HCL config file with hclkit
 
 ### Documentation
 
