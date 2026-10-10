@@ -28,4 +28,5 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Bootstrap boop with founding docs and GitHub platform client
 - Bump golangci-lint to 2.13.2 to match mise.toml
 - Bump Go to 1.27.2 and golangci-lint to 2.14.0
+- *(licenses)* Ignore nexus-proto-annotations, MIT upstream with no LICENSE in its module zip
 
