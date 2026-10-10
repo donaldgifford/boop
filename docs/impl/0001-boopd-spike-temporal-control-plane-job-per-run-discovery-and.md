@@ -590,7 +590,7 @@ contract).
   stop polling and let runs reach their soft deadlines. Rename `cmd/boop`
   to `cmd/boopd` with the binary, image, goreleaser, bake and justfile
   names (OQ1).
-- [ ] 6.5 Search attributes registered on the namespace at start
+- [x] 6.5 Search attributes registered on the namespace at start
   (idempotent), with a clear error when the namespace lacks the
   permission.
 - [ ] 6.6 e2e: the `worker` role in the k3d harness with the Temporal
