@@ -168,3 +168,18 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].command[0]
           value: /bin/server
+
+  - it: mounts the config file read-only and rolls pods when it changes
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: config
+            mountPath: /etc/boopd/boopd.hcl
+            subPath: boopd.hcl
+            readOnly: true
+      - equal:
+          path: spec.template.spec.volumes[0].configMap.name
+          value: RELEASE-NAME-boopd-config
+      - exists:
+          path: spec.template.metadata.annotations["checksum/config"]

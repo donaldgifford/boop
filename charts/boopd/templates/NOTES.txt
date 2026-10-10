@@ -1,5 +1,11 @@
 {{ include "boopd.fullname" . }} has been deployed!
 
+{{- if not .Values.boopd.apps }}
+WARNING: boopd.apps is empty. The worker refuses a config without a
+GitHub App and will not become ready; set boopd.apps.<name>.appId and
+privateKeySecretRef.
+
+{{ end -}}
 Health check:     GET /healthz
 Readiness check:  GET /readyz
 Metrics:          GET :{{ .Values.config.metricsPort }}/metrics

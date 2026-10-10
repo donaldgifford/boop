@@ -43,9 +43,17 @@ helm-template-ci:
 helm-unittest:
     @helm unittest {{ chart_dir }}
 
-# Full chart gate: lint + unit tests
+# Render boopd.hcl from the CI values and run `boopd config validate` on it
 [group('helm')]
-helm-test: helm-lint helm-unittest
+helm-config-validate:
+    @mkdir -p {{ build_dir }}
+    @helm template {{ chart_name }} {{ chart_dir }} -f {{ chart_dir }}/ci/ci-values.yaml \
+        --show-only templates/config.yaml | yq '.data["boopd.hcl"]' > {{ build_dir }}/boopd.hcl
+    @go run ./cmd/boopd config validate {{ build_dir }}/boopd.hcl
+
+# Full chart gate: lint + unit tests + rendered config validation
+[group('helm')]
+helm-test: helm-lint helm-unittest helm-config-validate
 
 # Regenerate the chart README from README.md.gotmpl
 [group('helm')]

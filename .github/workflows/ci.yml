@@ -78,6 +78,14 @@ jobs:
       - name: Lint Helm chart
         run: helm lint charts/*/
 
+      # The chart renders boopd.hcl from values; a bad value fails here,
+      # not at deploy (IMPL-0001 task 7.2).
+      - name: Validate rendered config
+        run: |
+          helm template boopd charts/boopd -f charts/boopd/ci/ci-values.yaml \
+            --show-only templates/config.yaml | yq '.data["boopd.hcl"]' > "${RUNNER_TEMP}/boopd.hcl"
+          go run ./cmd/boopd config validate "${RUNNER_TEMP}/boopd.hcl"
+
   test-go:
     name: Test Go
     runs-on: ubuntu-latest

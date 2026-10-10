@@ -45,6 +45,73 @@ config:
   # -- Log level (published as LOG_LEVEL)
   logLevel: info
 
+# -- boopd.hcl, rendered into the `<fullname>-config` ConfigMap and
+# mounted read-only at /etc/boopd/boopd.hcl. The keys mirror the config
+# file's blocks in camelCase (examples/boopd.hcl is the annotated
+# reference); an empty or absent key leaves the file's default.
+# @default -- See values.yaml
+boopd:
+  # Where the chart mounts the Secrets the config names: <dir>/<name>/<key>.
+  secretsDir: /etc/boopd/secrets
+  renovate:
+    # Must be pinned by digest; Renovate keeps the tag and digest current.
+    image: ghcr.io/renovatebot/renovate:44-full@sha256:fc07a2877ce78abcaba5ac19e5bebb47b228785b6a74bf9834ff6119112bf260
+    configPath: renovate.json
+    sharedPreset: ""
+    logLevel: info
+    dryRun: ""
+    gitAuthor: ""
+    # Merged into RENOVATE_CONFIG; an explicit false is preserved.
+    global: {}
+    # The Secret holding the Redis URL (the Redis section below).
+    redisSecretRef: {}
+  runs:
+    # Where Jobs are created; empty means the release namespace.
+    namespace: ""
+    pendingTimeout: 10m
+    # Cluster-capacity cap across installations; 0 means no cap.
+    maxConcurrent: 20
+  # Profiles by name. `pod` and `renovate` follow the config file's
+  # profile blocks.
+  profiles:
+    baseline:
+      pod:
+        labels:
+          boopd.dev/egress: baseline
+        resources:
+          requests: {cpu: "1", memory: 2Gi}
+          limits: {cpu: "2", memory: 4Gi}
+    node:
+      inherit: baseline
+    python:
+      inherit: baseline
+      pod:
+        # Set to the cluster's sandboxing RuntimeClass, if it has one.
+        runtimeClassName: ""
+        labels:
+          boopd.dev/egress: python
+        resources:
+          limits: {memory: 6Gi}
+      renovate:
+        customEnvVariables:
+          PIP_ONLY_BINARY: ":all:"
+          UV_NO_BUILD: "1"
+    strict:
+      inherit: python
+  # Ascending strictness.
+  order: [baseline, node, python, strict]
+  defaultProfile: baseline
+  unknownProfile: strict
+  # Every matching rule contributes; the strictest wins.
+  profileRules: []
+  # GitHub Apps by name. At least one is required:
+  #   boop-bot:
+  #     appId: 123456
+  #     privateKeySecretRef: {name: boop-bot-app, key: private-key.pem}
+  #     discovery: {every: 6h, probe: graphql}
+  #     budget: {reserveFraction: 0.10, maxConcurrentRuns: 10}
+  apps: {}
+
 configMap:
   # -- Key/value pairs projected into a chart-managed ConfigMap and
   # injected into the container via envFrom. Keys must not collide with

@@ -632,7 +632,7 @@ and the first real environment.
   name (OQ1); the Deployment becomes the worker with two replicas,
   `terminationGracePeriodSeconds` above StartToClose, the `worker`
   subcommand and `--config`.
-- [ ] 7.2 Config file: a ConfigMap carrying `boopd.hcl` rendered from
+- [x] 7.2 Config file: a ConfigMap carrying `boopd.hcl` rendered from
   values that mirror `internal/config`'s blocks, mounted read-only; a
   JSON schema in `values.schema.json` for the value shapes; the chart's
   CI renders the ConfigMap and runs `boopd config validate` on it (task

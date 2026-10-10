@@ -1,0 +1,43 @@
+---
+suite: config file
+templates:
+  - templates/config.yaml
+tests:
+  - it: renders boopd.hcl into the config ConfigMap
+    values:
+      - ../ci/ci-values.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-boopd-config
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'app "boop-bot" \{'
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'namespace = "NAMESPACE"'
+
+  - it: keeps an explicit false in a free block
+    set:
+      boopd.renovate.global:
+        platformAutomerge: false
+    asserts:
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'platformAutomerge = false'
+
+  - it: escapes template sequences in strings
+    set:
+      boopd.renovate.gitAuthor: "bot ${x} %{y}"
+    asserts:
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'git_author = "bot \$\$\{x\} %%\{y\}"'
+
+  - it: rejects an image not pinned by digest
+    set:
+      boopd.renovate.image: ghcr.io/renovatebot/renovate:44-full
+    asserts:
+      - failedTemplate: {}

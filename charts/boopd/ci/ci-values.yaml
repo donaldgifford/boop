@@ -15,3 +15,19 @@ livenessProbe: null
 readinessProbe: null
 
 resources: {}
+
+boopd:
+  renovate:
+    redisSecretRef: {name: boopd-redis, key: url}
+  profileRules:
+    - extends: ["github>boop-bot/renovate-config:python"]
+      managers: [pip_requirements, poetry]
+      profile: python
+  apps:
+    boop-bot:
+      appId: 123456
+      installations: [42]
+      cadence: 24h
+      privateKeySecretRef: {name: boop-bot-app, key: private-key.pem}
+      discovery: {every: 6h, probe: graphql, skipForks: true, skipArchived: false}
+      budget: {reserveFraction: 0.1, maxConcurrentRuns: 10, defaultEstimate: {core: 300, graphql: 150}}
