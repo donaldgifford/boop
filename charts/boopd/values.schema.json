@@ -573,6 +573,25 @@
           }
         }
       }
+    },
+    "redis": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "maxmemory": {
+          "type": "string",
+          "pattern": "^[0-9]+(kb|mb|gb)?$"
+        },
+        "keyPrefix": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resources": {
+          "type": "object"
+        }
+      }
     }
   },
   "$defs": {

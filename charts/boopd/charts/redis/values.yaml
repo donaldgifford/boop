@@ -1,0 +1,11 @@
+---
+# Set by the parent chart; see the boopd chart's `redis` values.
+image:
+  repository: docker.io/library/redis
+  tag: 8.2-alpine@sha256:b51665e66f00759be7c3152ad5ac3c66fb2f619c13ef62dea7cc1f9914524635
+  pullPolicy: IfNotPresent
+maxmemory: 256mb
+keyPrefix: "renovate:"
+resources:
+  requests: {cpu: 50m, memory: 300Mi}
+  limits: {cpu: 500m, memory: 300Mi}

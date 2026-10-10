@@ -653,9 +653,11 @@ and the first real environment.
   `runs.maxConcurrent` (OQ12); optional NetworkPolicies keyed on
   `boopd.dev/egress`; an optional `RuntimeClass` name for the Python
   profile.
-- [ ] 7.6 Redis: a chart dependency with `AUTH`, `maxmemory`,
+- [x] 7.6 Redis: a chart dependency with `AUTH`, `maxmemory`,
   `allkeys-lru` and an ACL user limited to Renovate's key prefix, or an
-  external reference through the Secret (OQ7).
+  external reference through the Secret (OQ7). The dependency is a local
+  subchart (`charts/boopd/charts/redis`) on the official image, not
+  Bitnami's, whose versioned images moved to `bitnamilegacy`.
 - [ ] 7.7 helm-unittest: the Role's verbs exactly and no `list` on
   secrets; the config file renders the golden example; env collisions
   still fail; ServiceMonitor and PrometheusRule carry the run and budget

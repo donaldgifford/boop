@@ -34,6 +34,12 @@ Optional monitoring integrations (`serviceMonitor.enabled`,
 `prometheusRule.enabled`) are off by default and require the
 Prometheus Operator CRDs in the cluster.
 
+## Requirements
+
+| Repository | Name | Version |
+|------------|------|---------|
+|  | redis | 0.0.0-dev |
+
 ## Values
 
 | Key | Type | Default | Description |
@@ -75,6 +81,10 @@ Prometheus Operator CRDs in the cluster.
 | readinessProbe.httpGet.port | string | `"http"` |  |
 | readinessProbe.initialDelaySeconds | int | `5` |  |
 | readinessProbe.periodSeconds | int | `10` |  |
+| redis.enabled | bool | `true` | Run the redis subchart. |
+| redis.keyPrefix | string | `"renovate:"` | Key prefix the ACL user is limited to; also Renovate's `redisPrefix` unless boopd.renovate.global sets one. |
+| redis.maxmemory | string | `"256mb"` | Memory cap; keys are evicted least-recently-used beyond it. |
+| redis.resources | object | `{"limits":{"cpu":"500m","memory":"300Mi"},"requests":{"cpu":"50m","memory":"300Mi"}}` | Resources; keep the memory limit above maxmemory. |
 | replicaCount | int | `2` | Worker replicas. A fixed, small count (ADR-0008 as amended by ADR-0009): runs are Jobs, so the worker never scales with load. |
 | resourceQuota.enabled | bool | `false` | Render a ResourceQuota on the runs namespace with `pods` sized from boopd.runs.maxConcurrent (plus the worker replicas when they share the namespace), so Jobs beyond the cap are refused at admission (IMPL-0001 OQ12). |
 | resourceQuota.hard | object | `{}` | Extra `spec.hard` entries, e.g. `limits.memory`. |

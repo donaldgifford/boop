@@ -56,6 +56,34 @@ A secret_ref block: (list <block name> <map> <indent>).
 {{ $pad }}}
 {{- end }}
 
+{{/*
+The Redis URL Secret the config names: the explicit
+boopd.renovate.redisSecretRef, else the redis subchart's when enabled.
+JSON; "{}" when there is none.
+*/}}
+{{- define "boopd.redisSecretRef" -}}
+{{- $ref := .Values.boopd.renovate.redisSecretRef | default dict -}}
+{{- if $ref.name -}}
+{{- toJson $ref -}}
+{{- else if .Values.redis.enabled -}}
+{{- toJson (dict "name" (printf "%s-redis-auth" .Release.Name) "key" "url") -}}
+{{- else -}}
+{}
+{{- end -}}
+{{- end }}
+
+{{/*
+Renovate's global options: the configured ones plus, with the redis
+subchart, the key prefix its ACL user is limited to.
+*/}}
+{{- define "boopd.renovateGlobal" -}}
+{{- $g := deepCopy (.Values.boopd.renovate.global | default dict) -}}
+{{- if and .Values.redis.enabled (not (hasKey $g "redisPrefix")) -}}
+{{- $_ := set $g "redisPrefix" .Values.redis.keyPrefix -}}
+{{- end -}}
+{{- toJson $g -}}
+{{- end }}
+
 {{- define "boopd.configFile" -}}
 {{- $c := .Values.boopd -}}
 # Rendered by the boopd chart from .Values.boopd; see examples/boopd.hcl.
@@ -63,13 +91,13 @@ secrets_dir = {{ include "boopd.hclValue" $c.secretsDir }}
 
 renovate {
 {{- include "boopd.hclAttrs" (list $c.renovate (list "image:image" "configPath:config_path" "sharedPreset:shared_preset" "logLevel:log_level" "dryRun:dry_run" "gitAuthor:git_author") 2) }}
-{{- with $c.renovate.global }}
+{{- with include "boopd.renovateGlobal" . | fromJson }}
 
   global {
 {{- include "boopd.hclFree" (list . 4) }}
   }
 {{- end }}
-{{- with $c.renovate.redisSecretRef }}
+{{- with include "boopd.redisSecretRef" . | fromJson }}
 {{ include "boopd.hclSecretRef" (list "redis_secret_ref" . 2) }}
 {{- end }}
 }

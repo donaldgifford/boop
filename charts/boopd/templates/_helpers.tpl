@@ -233,10 +233,8 @@ as a dict of Secret name -> list of keys. Each is mounted at
 {{- $_ := set $out .name (append (get $out .name | default list) .key | uniq) -}}
 {{- end -}}
 {{- end -}}
-{{- with .Values.boopd.renovate.redisSecretRef -}}
-{{- if .name -}}
+{{- with include "boopd.redisSecretRef" . | fromJson -}}
 {{- $_ := set $out .name (append (get $out .name | default list) .key | uniq) -}}
-{{- end -}}
 {{- end -}}
 {{- toJson $out -}}
 {{- end }}

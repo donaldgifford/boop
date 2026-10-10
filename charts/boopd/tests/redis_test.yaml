@@ -1,0 +1,69 @@
+---
+suite: redis
+templates:
+  - charts/redis/templates/secret.yaml
+  - charts/redis/templates/deployment.yaml
+  - templates/config.yaml
+  - templates/deployment.yaml
+tests:
+  - it: turns the default user off and limits renovate to its prefix
+    template: charts/redis/templates/secret.yaml
+    asserts:
+      - matchRegex:
+          path: stringData["users.acl"]
+          pattern: '(?m)^user default off$'
+      - matchRegex:
+          path: stringData["users.acl"]
+          pattern: 'user renovate on #[0-9a-f]{64} resetkeys ~renovate:\* resetchannels -@all .* -@dangerous'
+      - matchRegex:
+          path: stringData.url
+          pattern: '^redis://renovate:[A-Za-z0-9]{40}@RELEASE-NAME-redis\.NAMESPACE\.svc:6379$'
+
+  - it: runs as an LRU cache at the memory cap with the ACL file
+    template: charts/redis/templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: [--maxmemory, 256mb, --maxmemory-policy, allkeys-lru, --aclfile, /etc/redis/users.acl, --save, "", --appendonly, "no", --dir, /data]
+
+  - it: points the config at the subchart's Secret and sets redisPrefix
+    template: templates/config.yaml
+    asserts:
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'redis_secret_ref \{\s+name = "RELEASE-NAME-redis-auth"\s+key  = "url"'
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'redisPrefix = "renovate:"'
+
+  - it: mounts the subchart's URL Secret in the worker
+    template: templates/deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: secret-4a59dc73d6
+            mountPath: /etc/boopd/secrets/RELEASE-NAME-redis-auth
+            readOnly: true
+
+  - it: uses an external Redis through its Secret when the subchart is off
+    template: templates/config.yaml
+    set:
+      redis.enabled: false
+      boopd.renovate.redisSecretRef: {name: shared-redis, key: url}
+    asserts:
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'name = "shared-redis"'
+      - notMatchRegex:
+          path: data["boopd.hcl"]
+          pattern: redisPrefix
+
+  - it: names no Redis at all when neither is set
+    template: templates/config.yaml
+    set:
+      redis.enabled: false
+    asserts:
+      - notMatchRegex:
+          path: data["boopd.hcl"]
+          pattern: redis_secret_ref

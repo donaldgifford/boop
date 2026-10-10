@@ -17,3 +17,4 @@ rules:
   empty-values: disable
 ignore: |-
   charts/boopd/templates
+  charts/boopd/charts/redis/templates

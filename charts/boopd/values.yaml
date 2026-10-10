@@ -63,7 +63,8 @@ boopd:
     gitAuthor: ""
     # Merged into RENOVATE_CONFIG; an explicit false is preserved.
     global: {}
-    # The Secret holding the Redis URL (the Redis section below).
+    # An external Redis: the Secret holding its URL ({name, key}). Empty
+    # with redis.enabled uses the subchart's <release>-redis-auth.
     redisSecretRef: {}
   runs:
     # Where Jobs are created; empty means the release namespace.
@@ -115,6 +116,23 @@ boopd:
   #     discovery: {every: 6h, probe: graphql}
   #     budget: {reserveFraction: 0.10, maxConcurrentRuns: 10}
   apps: {}
+
+# Renovate's datasource cache (IMPL-0001 OQ7): the local redis subchart,
+# a cache with no persistence. AUTH is an ACL user limited to keyPrefix
+# and barred from dangerous commands; the default user is off. Set
+# enabled: false and boopd.renovate.redisSecretRef for an external Redis.
+redis:
+  # -- Run the redis subchart.
+  enabled: true
+  # -- Memory cap; keys are evicted least-recently-used beyond it.
+  maxmemory: 256mb
+  # -- Key prefix the ACL user is limited to; also Renovate's
+  # `redisPrefix` unless boopd.renovate.global sets one.
+  keyPrefix: "renovate:"
+  # -- Resources; keep the memory limit above maxmemory.
+  resources:
+    requests: {cpu: 50m, memory: 300Mi}
+    limits: {cpu: 500m, memory: 300Mi}
 
 temporal:
   # -- Frontend `host:port`. Required.
