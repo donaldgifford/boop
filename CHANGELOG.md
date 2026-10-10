@@ -75,6 +75,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(activities)* A failed mint is an infrastructure error
 - *(workflows)* Every convergence row and the RepoWorkflow paths
 - *(e2e)* Worker discovery, run, recheck and graceful stop
+- *(chart)* Golden config render and the run and budget alerts
 
 ### Miscellaneous Tasks
 
