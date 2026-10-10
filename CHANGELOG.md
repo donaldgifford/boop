@@ -48,6 +48,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(e2e)* Add the stub Renovate image
 - *(e2e)* Add the k3d e2e harness, just e2e and the E2E CI job
 - *(e2e)* Run the kube lifecycle against k3d; read deadlines first
+- *(kube)* Pin the create-suspended, Secret, unsuspend request order
 
 ### Miscellaneous Tasks
 
