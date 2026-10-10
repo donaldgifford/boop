@@ -26,6 +26,9 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(kube)* Reconnect the log follower and drop replayed lines
 - *(kube)* Count API requests by verb, resource and code
 - *(renovate)* Scan the run's log and parse the report
+- *(platform)* Resolve repository ids by slug and re-tune a live limiter
+- *(workflows)* Activity types for runs, discovery and CheckRepo
+- *(activities)* ListInstallations, CheckRepo and ReadRateLimit
 
 ### Documentation
 
