@@ -345,7 +345,7 @@ Phase 0 moves it.
 
 #### Tasks
 
-- [ ] 3.1 `internal/config`: the HCL grammar for the design's example,
+- [x] 3.1 `internal/config`: the HCL grammar for the design's example,
   block for block: `renovate {}`, `runs {}`, `profile "<name>" {}` with
   nested `pod {}` and `renovate {}`, top-level `order`, `default_profile`,
   `unknown_profile`, `profile_rule {}`, and `app "<name>" {}` with nested
