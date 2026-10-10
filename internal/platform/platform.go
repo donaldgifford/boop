@@ -132,6 +132,19 @@ type Client interface {
 	MintAccessToken(ctx context.Context) (token string, expiresAt time.Time, err error)
 }
 
+// Minter mints and revokes repository-scoped installation tokens for
+// runs (DESIGN-0001 § RunRenovate activity steps 1 and 10, OQ2, OQ11).
+// The spike's implementation holds the App key in memory; OpenBao
+// Transit can sit behind the same seam later.
+type Minter interface {
+	// Mint returns an installation token restricted to repoIDs and its
+	// expiry. Callers must not assume a token length.
+	Mint(ctx context.Context, installationID int64, repoIDs []int64) (token string, expiresAt time.Time, err error)
+
+	// Revoke ends token before its expiry.
+	Revoke(ctx context.Context, token string) error
+}
+
 // ConfigPaths is the ordered list of files HasRenovateConfig probes. First
 // 200 OK wins. Exposed so tests can match the same set without duplicating
 // the constants.

@@ -2,10 +2,13 @@ package github_test
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +16,7 @@ import (
 
 	"golang.org/x/time/rate"
 
+	"github.com/donaldgifford/boop/internal/platform"
 	ghclient "github.com/donaldgifford/boop/internal/platform/github"
 )
 
@@ -141,5 +145,117 @@ func TestListInstallations_Pages(t *testing.T) {
 		if !strings.HasPrefix(r.Auth, "Bearer ") {
 			t.Errorf("request Authorization = %q, want App JWT bearer", r.Auth)
 		}
+	}
+}
+
+func TestMint_ScopesToRepositoryIDs(t *testing.T) {
+	t.Parallel()
+
+	// A long, opaque token: callers must not assume a length.
+	longToken := "ghs_" + strings.Repeat("x", 300)
+	s, srv := newAppServer(t, func(w http.ResponseWriter, r *http.Request, _ string) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v3/app/installations/42/access_tokens" {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"token":"` + longToken + `","expires_at":"2026-10-10T13:00:00Z"}`))
+	})
+
+	tok, exp, err := newTestAppClient(t, srv).Mint(context.Background(), 42, []int64{1001, 2002})
+	if err != nil {
+		t.Fatalf("Mint() err = %v", err)
+	}
+	if tok != longToken {
+		t.Errorf("Mint() token len = %d, want %d", len(tok), len(longToken))
+	}
+	if want := time.Date(2026, 10, 10, 13, 0, 0, 0, time.UTC); !exp.Equal(want) {
+		t.Errorf("Mint() expiresAt = %v, want %v", exp, want)
+	}
+
+	log := s.log()
+	if len(log) != 1 {
+		t.Fatalf("server saw %d requests, want 1", len(log))
+	}
+	var body struct {
+		RepositoryIDs []int64 `json:"repository_ids"`
+	}
+	if err := json.Unmarshal([]byte(log[0].Body), &body); err != nil {
+		t.Fatalf("mint body %q: %v", log[0].Body, err)
+	}
+	if !slices.Equal(body.RepositoryIDs, []int64{1001, 2002}) {
+		t.Errorf("mint body repository_ids = %v, want [1001 2002]", body.RepositoryIDs)
+	}
+	var raw map[string]any
+	_ = json.Unmarshal([]byte(log[0].Body), &raw)
+	if len(raw) != 1 {
+		t.Errorf("mint body = %s, want only repository_ids", log[0].Body)
+	}
+	if !strings.HasPrefix(log[0].Auth, "Bearer ") || log[0].Auth == "Bearer "+longToken {
+		t.Errorf("mint Authorization = %q, want the App JWT", log[0].Auth)
+	}
+}
+
+func TestMint_Rejects(t *testing.T) {
+	t.Parallel()
+	_, srv := newAppServer(t, func(w http.ResponseWriter, _ *http.Request, _ string) {
+		http.Error(w, `{"message":"Bad credentials"}`, http.StatusUnauthorized)
+	})
+	c := newTestAppClient(t, srv)
+
+	tests := []struct {
+		name    string
+		inst    int64
+		repoIDs []int64
+		wantErr error
+	}{
+		{name: "no installation", repoIDs: []int64{1}},
+		{name: "no repositories", inst: 1},
+		{name: "unauthorized", inst: 1, repoIDs: []int64{1}, wantErr: platform.ErrUnauthorized},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, _, err := c.Mint(context.Background(), tt.inst, tt.repoIDs)
+			if err == nil {
+				t.Fatalf("Mint(%d, %v) err = nil, want error", tt.inst, tt.repoIDs)
+			}
+			if tt.wantErr != nil && !errors.Is(err, tt.wantErr) {
+				t.Errorf("Mint(%d, %v) err = %v, want %v", tt.inst, tt.repoIDs, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestRevoke_DeletesWithTheToken(t *testing.T) {
+	t.Parallel()
+	s, srv := newAppServer(t, func(w http.ResponseWriter, r *http.Request, _ string) {
+		if r.Method != http.MethodDelete || r.URL.Path != "/api/v3/installation/token" {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	if err := newTestAppClient(t, srv).Revoke(context.Background(), "ghs_minted"); err != nil {
+		t.Fatalf("Revoke() err = %v", err)
+	}
+	log := s.log()
+	if len(log) != 1 {
+		t.Fatalf("server saw %d requests, want 1", len(log))
+	}
+	if log[0].Method != http.MethodDelete || log[0].Path != "/api/v3/installation/token" {
+		t.Errorf("revoke request = %s %s, want DELETE /installation/token", log[0].Method, log[0].Path)
+	}
+	if log[0].Auth != "Bearer ghs_minted" {
+		t.Errorf("revoke Authorization = %q, want Bearer ghs_minted", log[0].Auth)
+	}
+}
+
+func TestRevoke_EmptyToken(t *testing.T) {
+	t.Parallel()
+	_, srv := newAppServer(t, func(w http.ResponseWriter, r *http.Request, _ string) { http.NotFound(w, r) })
+	if err := newTestAppClient(t, srv).Revoke(context.Background(), ""); err == nil {
+		t.Error(`Revoke("") err = nil, want error`)
 	}
 }

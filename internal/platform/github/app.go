@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	ghinstallation "github.com/bradleyfalzon/ghinstallation/v2"
 	gogithub "github.com/google/go-github/v62/github"
@@ -41,7 +42,13 @@ type AppClient struct {
 	httpClient *http.Client
 	baseURL    string
 	limiter    *rate.Limiter
+
+	// transport is the base transport, without the JWT, that Revoke wraps
+	// with the token being revoked.
+	transport http.RoundTripper
 }
+
+var _ platform.Minter = (*AppClient)(nil)
 
 // AppOption tunes the constructed AppClient.
 type AppOption func(*AppClient)
@@ -92,7 +99,54 @@ func NewAppClient(appID int64, key []byte, endpoint string, opts ...AppOption) (
 		return nil, err
 	}
 	c.gh = gh
+	c.transport = transport
 	return c, nil
+}
+
+// Mint creates an installation token with
+// POST /app/installations/{id}/access_tokens, restricted to repoIDs
+// (the run's repository and the shared-preset repository, OQ2). An empty
+// repoIDs is refused: an unscoped token is never what a run wants.
+func (c *AppClient) Mint(ctx context.Context, installationID int64, repoIDs []int64) (string, time.Time, error) {
+	if installationID == 0 {
+		return "", time.Time{}, errors.New("github: installation id required")
+	}
+	if len(repoIDs) == 0 {
+		return "", time.Time{}, errors.New("github: mint needs at least one repository id")
+	}
+	if err := c.limiter.Wait(ctx); err != nil {
+		return "", time.Time{}, err
+	}
+	tok, resp, err := c.gh.Apps.CreateInstallationToken(ctx, installationID, &gogithub.InstallationTokenOptions{
+		RepositoryIDs: repoIDs,
+	})
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("github: mint installation token: %w", classifyErr(resp, err))
+	}
+	if tok.GetToken() == "" {
+		return "", time.Time{}, errors.New("github: mint returned an empty token")
+	}
+	return tok.GetToken(), tok.GetExpiresAt().Time, nil
+}
+
+// Revoke ends token with DELETE /installation/token, authenticated as
+// the token itself.
+func (c *AppClient) Revoke(ctx context.Context, token string) error {
+	if token == "" {
+		return errors.New("github: revoke needs a token")
+	}
+	gh, err := buildGoGitHubClient(&http.Client{Transport: &tokenTransport{token: token, base: c.transport}}, c.baseURL)
+	if err != nil {
+		return err
+	}
+	if err := c.limiter.Wait(ctx); err != nil {
+		return err
+	}
+	resp, err := gh.Apps.RevokeInstallationToken(ctx)
+	if err != nil {
+		return fmt.Errorf("github: revoke installation token: %w", classifyErr(resp, err))
+	}
+	return nil
 }
 
 // ListInstallations pages GET /app/installations, 100 per page, and

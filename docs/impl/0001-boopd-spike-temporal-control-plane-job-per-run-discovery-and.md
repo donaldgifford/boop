@@ -289,7 +289,7 @@ OQ11; INV-0001 § Renovate behaviours to reproduce).
   `GET /app/installations` at 100 per page and returning id, account
   login, `suspended_at` and the `repository_selection`. Filtered by the
   optional allowlist in the caller.
-- [ ] 2.3 `Minter` interface: `Mint(ctx, installationID, repoIDs) (token,
+- [x] 2.3 `Minter` interface: `Mint(ctx, installationID, repoIDs) (token,
   expiresAt, error)` and `Revoke(ctx, token) error`. The in-memory
   implementation holds the parsed key, mints with
   `POST /app/installations/{id}/access_tokens` and `repository_ids`
