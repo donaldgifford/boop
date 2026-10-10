@@ -29,6 +29,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(platform)* Resolve repository ids by slug and re-tune a live limiter
 - *(workflows)* Activity types for runs, discovery and CheckRepo
 - *(activities)* ListInstallations, CheckRepo and ReadRateLimit
+- *(activities)* DiscoverInstallation pages, probes and signals
 
 ### Documentation
 
@@ -52,6 +53,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(e2e)* Add the k3d e2e harness, just e2e and the E2E CI job
 - *(e2e)* Run the kube lifecycle against k3d; read deadlines first
 - *(kube)* Pin the create-suspended, Secret, unsuspend request order
+- *(fakegithub)* In-process GitHub for activity tests
 
 ### Miscellaneous Tasks
 
