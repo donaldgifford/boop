@@ -45,6 +45,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(chart)* Temporal connection values and worker-only credential mounts
 - *(chart)* Restricted namespace, runs ResourceQuota and egress NetworkPolicies
 - *(chart)* Redis subchart for Renovate's datasource cache
+- *(just)* K3d-install takes a values file and the App key
 
 ### Bug Fixes
 
