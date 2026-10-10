@@ -13,9 +13,9 @@ version: 2
 project_name: boop
 
 builds:
-  - id: boop
-    main: ./cmd/boop
-    binary: boop
+  - id: boopd
+    main: ./cmd/boopd
+    binary: boopd
     env:
       - CGO_ENABLED=0
     flags:

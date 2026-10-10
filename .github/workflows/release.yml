@@ -47,7 +47,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_REPO: ${{ github.repository }}
+  IMAGE_REPO: ${{ github.repository_owner }}/boopd
   CHART_NAMESPACE: ${{ github.repository_owner }}/charts
   CHART_NAME: ${{ github.event.repository.name }}
 

@@ -23,7 +23,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/donaldgifford/boop:0.0.0-dev
+          value: ghcr.io/donaldgifford/boopd:0.0.0-dev
 
   - it: honors image.tag override
     set:
@@ -31,7 +31,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/donaldgifford/boop:v1.2.3
+          value: ghcr.io/donaldgifford/boopd:v1.2.3
 
   - it: exposes http and metrics container ports from config
     asserts:

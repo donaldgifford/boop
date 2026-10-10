@@ -30,8 +30,9 @@ const (
 )
 
 const usage = `usage:
-  boop [version]
-  boop config validate <file>
+  boopd [version]
+  boopd config validate <file>
+  boopd worker --config <file>
 `
 
 func main() {
@@ -42,9 +43,11 @@ func main() {
 func run(args []string, stdout, stderr io.Writer) int {
 	switch {
 	case len(args) == 0, len(args) == 1 && args[0] == "version":
-		return write(stdout, exitOK, "boop %s (%s, %s)\n", version, commit, date)
+		return write(stdout, exitOK, "boopd %s (%s, %s)\n", version, commit, date)
 	case len(args) == 3 && args[0] == "config" && args[1] == "validate":
 		return validateConfig(args[2], stdout, stderr)
+	case len(args) >= 1 && args[0] == "worker":
+		return runWorker(args[1:], stdout, stderr)
 	default:
 		return write(stderr, exitUsage, "%s", usage)
 	}

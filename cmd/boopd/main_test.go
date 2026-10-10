@@ -37,8 +37,10 @@ func TestRun_ConfigValidate(t *testing.T) {
 		{name: "example", args: []string{"config", "validate", example}, wantCode: 0, wantStdout: "ok"},
 		{name: "misspelled", args: []string{"config", "validate", misspelled}, wantCode: 1, wantStderr: misspelled + ":" + strconv.Itoa(line) + ":"},
 		{name: "missing file", args: []string{"config", "validate", "/nonexistent.hcl"}, wantCode: 1, wantStderr: "Cannot read config file"},
-		{name: "version", args: []string{"version"}, wantCode: 0, wantStdout: "boop dev"},
+		{name: "version", args: []string{"version"}, wantCode: 0, wantStdout: "boopd dev"},
 		{name: "usage", args: []string{"config"}, wantCode: 2, wantStderr: "usage:"},
+		{name: "worker bad flag", args: []string{"worker", "--nope"}, wantCode: 2, wantStderr: "flag provided but not defined"},
+		{name: "worker missing config", args: []string{"worker", "--config", "/nonexistent.hcl"}, wantCode: 1, wantStderr: "Cannot read config file"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

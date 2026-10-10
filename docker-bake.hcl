@@ -10,7 +10,7 @@
 // docker/metadata-action's bake-file outputs.
 
 variable "REGISTRY" {
-  default = "ghcr.io/donaldgifford/boop"
+  default = "ghcr.io/donaldgifford/boopd"
 }
 
 variable "TAG" {
@@ -30,15 +30,15 @@ variable "DATE" {
 }
 
 group "default" {
-  targets = ["boop"]
+  targets = ["boopd"]
 }
 
 group "ci" {
-  targets = ["boop-ci"]
+  targets = ["boopd-ci"]
 }
 
 group "release" {
-  targets = ["boop-release"]
+  targets = ["boopd-release"]
 }
 
 target "_common" {
@@ -74,7 +74,7 @@ target "docker-metadata-action" {
 // No platforms pin — local builds target the host platform, so the
 // image runs natively in a local k3d cluster on both amd64 and arm64
 // hosts (`just k3d-install`).
-target "boop" {
+target "boopd" {
   inherits = ["_common"]
   tags     = ["${REGISTRY}:${TAG}"]
 }
@@ -83,13 +83,13 @@ target "boop" {
 // GitHub's ubuntu-latest runners take ~25 min and dominate PR feedback
 // time. Multi-arch coverage is restored in the release target, which
 // runs only on tag pushes.
-target "boop-ci" {
+target "boopd-ci" {
   inherits  = ["_common"]
   tags      = ["${REGISTRY}:${TAG}-ci"]
   platforms = ["linux/amd64"]
 }
 
-target "boop-release" {
+target "boopd-release" {
   inherits = ["_common", "docker-metadata-action"]
   // tags intentionally omitted — they come from docker-metadata-action
   // (defaults for local bake; CI overrides via metadata-action).

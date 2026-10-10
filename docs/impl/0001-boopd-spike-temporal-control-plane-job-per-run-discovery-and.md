@@ -582,7 +582,7 @@ contract).
   carrying `temporal.MetricViews()` (OQ4); the boopd metric set from the
   design registered once and pinned by a names test; `/healthz` and
   `/readyz` on `LISTEN_ADDR` (OQ9).
-- [ ] 6.4 `cmd/boopd worker --config <file>`: load config, build the
+- [x] 6.4 `cmd/boopd worker --config <file>`: load config, build the
   clients and the `Minter`, dial Temporal from `TEMPORAL_*`, check the
   server version floor, register workflows and activities, start the
   worker with `WorkerStopTimeout` = StartToClose, `PromoteBuild`, ensure

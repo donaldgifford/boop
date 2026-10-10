@@ -13,6 +13,7 @@ import? 'docker.just'
 import? 'helm.just'
 
 project_name      := "boop"
+binary_name       := "boopd"
 stub_image        := "ghcr.io/donaldgifford/boopd-stub-renovate:dev"
 project_owner     := "donaldgifford"
 go_package        := "github.com/" + project_owner + "/" + project_name
@@ -41,12 +42,12 @@ _default:
 [group('build')]
 build: build-core
 
-# Build the core binary into build/bin/boop
+# Build the core binary into build/bin/boopd
 [group('build')]
 build-core:
     @mkdir -p {{ bin_dir }}
     @go build -ldflags "-X main.version={{ version }} -X main.commit={{ commit_hash }} -X main.date={{ build_date }}" \
-        -o {{ bin_dir }}/{{ project_name }} ./cmd/{{ project_name }}
+        -o {{ bin_dir }}/{{ binary_name }} ./cmd/{{ binary_name }}
     @echo "✓ Core binaries built"
 
 # Remove build artifacts and the Go build cache
@@ -63,7 +64,7 @@ clean:
 # Build then run the service from the local bin
 [group('run')]
 run: build
-    @{{ bin_dir }}/{{ project_name }}
+    @{{ bin_dir }}/{{ binary_name }}
 
 # ─── Test ───────────────────────────────────────────────────────────
 

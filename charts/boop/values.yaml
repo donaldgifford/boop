@@ -9,7 +9,7 @@ revisionHistoryLimit: 3
 
 image:
   # -- Container image repository
-  repository: ghcr.io/donaldgifford/boop
+  repository: ghcr.io/donaldgifford/boopd
   # -- Image pull policy
   pullPolicy: IfNotPresent
   # -- Overrides the image tag (default: appVersion)
