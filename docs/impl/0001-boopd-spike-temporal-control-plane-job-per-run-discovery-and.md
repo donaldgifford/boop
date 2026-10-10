@@ -720,44 +720,91 @@ Strategy, run in the homelab, with the fixtures the design describes
   with an sdist-only dependency whose `setup.py` would write a marker; a
   many-updates repository for the convergence run. This document lists
   what each must contain so they can be rebuilt.
+  **Deferred - human required:** the repositories are created by hand on
+  the homelab organisation. Each carries `renovate.json` extending the
+  shared preset, so discovery onboards it. Code runs only where a
+  manager's artifact update executes repository code, so each fixture
+  routes its probe through one. The findings leave as the step's stderr,
+  which Renovate logs as an artifact error (nothing is pushed in
+  `dryRun: full`).
+  - `isolation`: a Gradle project with an outdated wrapper and a
+    `build.gradle` whose top-level block, run by Renovate's wrapper
+    update, writes `boopd-marker` files into `RENOVATE_CACHE_DIR` (or
+    `cacheDir` from `RENOVATE_CONFIG`), the repository's parent
+    (`baseDir`) and `/tmp`; prints the inherited environment; reads
+    every `/proc/*/environ` and `/proc/*/cmdline` it can and greps the
+    filesystem for `BEGIN .*PRIVATE KEY`, `ghs_` and `redis://`;
+    starts `nohup sleep 3600 &`; and exits non-zero with the findings.
+  - `isolation-probe`: the same Gradle shape, run after `isolation`,
+    reporting any `boopd-marker` under those paths and any `sleep`
+    process it can see.
+  - `python-sdist`: `requirements.txt` pinning an old version of a
+    package published only as an sdist (from a local index or a
+    `git+` URL to a repository whose `setup.py` writes
+    `/tmp/boopd-sdist-marker` and prints it); the `python` profile's
+    `PIP_ONLY_BINARY=:all:` should make the lock update fail first.
+  - `many-updates`: a `package.json` and lockfile pinning about fifty
+    dependencies at old majors, so an uninterrupted run takes well over
+    the forced two-minute soft deadline.
 - [ ] 8.2 Comparison with renovate-operator v0.1.x, both in `dryRun: full`,
   over the homelab's repositories: report tuple sets equal, or every
   difference explained by a release or age boundary (INV-0001
   Observation 11).
+  **Deferred - human required:** runs in the homelab against the 8.1
+  fixtures and real GitHub.
 - [ ] 8.3 Overhead: seconds per repository with a warm Redis versus a cold
   one, and `boopd_run_pod_start_seconds` and `boopd_run_overhead_seconds`
   distributions.
+  **Deferred - human required:** runs in the homelab against the 8.1
+  fixtures and real GitHub.
 - [ ] 8.4 Worker death: kill a worker pod mid-run; the Job finishes or is
   reaped by `activeDeadlineSeconds` and `ttlSecondsAfterFinished`, the
   activity times out on heartbeat, and the workflow treats it as
   `TimedOut` with the last progress.
+  **Deferred - human required:** runs in the homelab against the 8.1
+  fixtures and real GitHub.
 - [ ] 8.5 Token lifetime and scope: no `401` across a full pass; a run
   scoped to its repository and the preset repository applies the shared
   preset; the token answers `401` after `RunResult` is returned.
+  **Deferred - human required:** runs in the homelab against the 8.1
+  fixtures and real GitHub.
 - [ ] 8.6 Convergence and stall: with the soft deadline forced to two
   minutes, the many-updates repository reaches the same report as an
   uninterrupted run within the rerun cap with no duplicate or broken
   branches; a hung package manager is marked `stalled` after three
   attempts and stops until its next due time.
+  **Deferred - human required:** runs in the homelab against the 8.1
+  fixtures and real GitHub.
 - [ ] 8.7 Budget signal: with four concurrent runs on one installation,
   `boopd_rate_spend_per_run` is stable enough to drive the EWMA, and
   admission never dips under the reserve.
+  **Deferred - human required:** runs in the homelab against the 8.1
+  fixtures and real GitHub.
 - [ ] 8.8 Isolation and profile enforcement: the isolation fixture finds
   the scoped token and the Redis URL and nothing else; the second
   repository finds no markers; the Python fixture ends `Failed` with a
   lockfile error and its marker is absent.
+  **Deferred - human required:** runs in the homelab against the 8.1
+  fixtures and real GitHub.
 - [ ] 8.9 Discovery cost: `boopd_discovery_probe_cost` for a full pass is
   under 5% of the installation's hourly `graphql` limit.
+  **Deferred - human required:** runs in the homelab against the 8.1
+  fixtures and real GitHub.
 - [ ] 8.10 Result capture and log correlation: `run_complete` plus the
   report answers what each run did; Renovate lines in Loki carry
   repository and workflow ID labels.
+  **Deferred - human required:** runs in the homelab against the 8.1
+  fixtures and real GitHub.
 - [ ] 8.11 INV-0002: one section per criterion with the measurement, the
   pass or fail, and the profile and timeout adjustments the numbers
   justify (DESIGN-0001 OQ7, OQ10 are "starting points for the spike to
   adjust").
+  **Deferred - human required:** written from the 8.2-8.10 results.
 - [ ] 8.12 Close the loop: DESIGN-0001 to Implemented with a results
   pointer; ADR-0001 to ADR-0009 from Proposed to Accepted where still
   Proposed; this document to Completed; CLAUDE.md step 8 done.
+  **Deferred - human required:** follows INV-0002; the statuses move
+  only on recorded results.
 
 #### Success Criteria
 
