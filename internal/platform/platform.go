@@ -62,6 +62,27 @@ type Repository struct {
 	Topics []string
 }
 
+// Installation is one installation of the GitHub App, as listed by
+// GET /app/installations (DESIGN-0001 § DiscoveryWorkflow).
+type Installation struct {
+	// ID is the installation id; it names the InstallationWorkflow.
+	ID int64
+
+	// Account is the login of the user or organisation the App is
+	// installed on.
+	Account string
+
+	// SuspendedAt is when the installation was suspended; zero when it
+	// is active. Suspended installations are not discovered.
+	SuspendedAt time.Time
+
+	// RepositorySelection is "all" or "selected".
+	RepositorySelection string
+}
+
+// Suspended reports whether the installation is suspended.
+func (i *Installation) Suspended() bool { return !i.SuspendedAt.IsZero() }
+
 // DiscoveryFilter is the platform-agnostic shape of a Scan's spec.discovery.
 // The Run reconciler translates v1alpha1.DiscoverySpec into a DiscoveryFilter
 // before calling Client.Discover.
