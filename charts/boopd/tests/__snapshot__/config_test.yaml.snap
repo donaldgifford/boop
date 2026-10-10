@@ -1,0 +1,101 @@
+renders the golden example (examples/boopd.hcl as values):
+  1: |
+    |
+      # Rendered by the boopd chart from .Values.boopd; see examples/boopd.hcl.
+      secrets_dir = "/etc/boopd/secrets"
+
+      renovate {
+        image = "ghcr.io/renovatebot/renovate:44-full@sha256:0f5b1a9e4c3d2b1a0f9e8d7c6b5a4938271605f4e3d2c1b0a9f8e7d6c5b4a392"
+        config_path = "renovate.json"
+        shared_preset = "github>boop-bot/renovate-config:default.json"
+        log_level = "info"
+        dry_run = "full"
+
+        global {
+          prHourlyLimit = 0
+        }
+
+        redis_secret_ref {
+          name = "boopd-redis"
+          key  = "url"
+        }
+      }
+
+      runs {
+        namespace = "boopd"
+        pending_timeout = "10m"
+        max_concurrent = 20
+      }
+
+      profile "baseline" {
+        pod {
+          labels = {"boopd.dev/egress":"baseline"}
+          resources {
+            requests = {"cpu":"1","memory":"2Gi"}
+            limits = {"cpu":"2","memory":"4Gi"}
+          }
+        }
+      }
+
+      profile "node" {
+        inherit = "baseline"
+      }
+
+      profile "python" {
+        inherit = "baseline"
+        pod {
+          runtime_class_name = "gvisor"
+          labels = {"boopd.dev/egress":"python"}
+          resources {
+            limits = {"memory":"6Gi"}
+          }
+        }
+        renovate {
+          customEnvVariables = {"PIP_ONLY_BINARY":":all:","UV_NO_BUILD":"1"}
+        }
+      }
+
+      profile "strict" {
+        inherit = "python"
+      }
+
+      order           = ["baseline","node","python","strict"]
+      default_profile = "baseline"
+      unknown_profile = "strict"
+
+      profile_rule {
+        extends = ["github>boop-bot/renovate-config:python"]
+        managers = ["pip_requirements","pip_setup","pipenv","poetry","pep621","pip-compile","pyenv"]
+        profile = "python"
+      }
+
+      profile_rule {
+        extends = ["github>boop-bot/renovate-config:node"]
+        managers = ["npm","bun"]
+        profile = "node"
+      }
+
+      app "boop-bot" {
+        endpoint = "https://api.github.com"
+        app_id = 123456
+        installations = []
+        cadence = "24h"
+
+        private_key_secret_ref {
+          name = "boop-bot-app"
+          key  = "private-key.pem"
+        }
+
+        discovery {
+          every = "6h"
+          probe = "graphql"
+          skip_forks = true
+          skip_archived = true
+        }
+
+        budget {
+          reserve_fraction = 0.1
+          max_concurrent_runs = 10
+          default_estimate = {"core":300,"graphql":150}
+        }
+      }

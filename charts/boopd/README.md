@@ -73,8 +73,8 @@ Prometheus Operator CRDs in the cluster.
 | podAnnotations | object | `{}` | Pod annotations |
 | podLabels | object | `{}` | Pod labels |
 | podSecurityContext | object | `{"fsGroup":65532,"runAsGroup":65532,"runAsNonRoot":true,"runAsUser":65532,"seccompProfile":{"type":"RuntimeDefault"}}` | Pod security context. fsGroup makes the 0440 credential files readable by the nonroot worker. |
-| prometheusRule.alerts | object | `{}` | Per-alert overrides: keys `replicasUnavailable` and `containerRestarting`, each accepting `enabled`, `for`, `severity`, and `threshold`. |
-| prometheusRule.enabled | bool | `false` | Create PrometheusRule with the generic starter alerts (DeploymentReplicasUnavailable, ContainerRestarting). |
+| prometheusRule.alerts | object | `{}` | Per-alert overrides: keys `replicasUnavailable`, `containerRestarting`, `runResourceExhausted`, `runOOMKilled`, `onboardingResult`, `reposStalled` and `budgetLow`, each accepting `enabled`, `for`, `severity`, and `threshold`. |
+| prometheusRule.enabled | bool | `false` | Create the PrometheusRule: the generic DeploymentReplicasUnavailable and ContainerRestarting, plus BoopdRunResourceExhausted (disk-space, out-of-memory), BoopdRunOOMKilled, BoopdOnboardingResult, BoopdReposStalled and BoopdBudgetLow. |
 | prometheusRule.labels | object | `{}` | Additional labels (e.g., to match Prometheus operator `ruleSelector`). |
 | rbac.create | bool | `true` | Create the worker's Role and RoleBinding in the runs namespace: jobs create/get/list/watch/patch/delete, pods get/list/watch, pods/log get, secrets create/get/delete (no list). |
 | readinessProbe.httpGet.path | string | `"/readyz"` |  |

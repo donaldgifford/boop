@@ -49,3 +49,10 @@ tests:
       - matchRegex:
           path: data["boopd.hcl"]
           pattern: 'runtime_class_name = "gvisor"'
+
+  - it: renders the golden example (examples/boopd.hcl as values)
+    values:
+      - ../ci/example-values.yaml
+    asserts:
+      - matchSnapshot:
+          path: data["boopd.hcl"]

@@ -658,7 +658,7 @@ and the first real environment.
   external reference through the Secret (OQ7). The dependency is a local
   subchart (`charts/boopd/charts/redis`) on the official image, not
   Bitnami's, whose versioned images moved to `bitnamilegacy`.
-- [ ] 7.7 helm-unittest: the Role's verbs exactly and no `list` on
+- [x] 7.7 helm-unittest: the Role's verbs exactly and no `list` on
   secrets; the config file renders the golden example; env collisions
   still fail; ServiceMonitor and PrometheusRule carry the run and budget
   alerts (`disk-space`, `OOMKilled`, `onboarding` result, stalled

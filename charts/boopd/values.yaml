@@ -309,15 +309,18 @@ serviceMonitor:
   labels: {}
 
 prometheusRule:
-  # -- Create PrometheusRule with the generic starter alerts
-  # (DeploymentReplicasUnavailable, ContainerRestarting).
+  # -- Create the PrometheusRule: the generic DeploymentReplicasUnavailable
+  # and ContainerRestarting, plus BoopdRunResourceExhausted (disk-space,
+  # out-of-memory), BoopdRunOOMKilled, BoopdOnboardingResult,
+  # BoopdReposStalled and BoopdBudgetLow.
   enabled: false
   # -- Additional labels (e.g., to match Prometheus operator
   # `ruleSelector`).
   labels: {}
-  # -- Per-alert overrides: keys `replicasUnavailable` and
-  # `containerRestarting`, each accepting `enabled`, `for`,
-  # `severity`, and `threshold`.
+  # -- Per-alert overrides: keys `replicasUnavailable`,
+  # `containerRestarting`, `runResourceExhausted`, `runOOMKilled`,
+  # `onboardingResult`, `reposStalled` and `budgetLow`, each accepting
+  # `enabled`, `for`, `severity`, and `threshold`.
   alerts: {}
 
 # -- Additional environment variables (must not collide with the

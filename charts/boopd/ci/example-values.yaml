@@ -1,0 +1,42 @@
+---
+# examples/boopd.hcl as chart values: the golden render
+# (tests/config_test.yaml snapshots it; `just helm-config-validate`
+# validates it).
+redis:
+  enabled: false
+temporal:
+  address: temporal-frontend:7233
+boopd:
+  renovate:
+    image: ghcr.io/renovatebot/renovate:44-full@sha256:0f5b1a9e4c3d2b1a0f9e8d7c6b5a4938271605f4e3d2c1b0a9f8e7d6c5b4a392
+    configPath: renovate.json
+    sharedPreset: github>boop-bot/renovate-config:default.json
+    logLevel: info
+    dryRun: full
+    global:
+      prHourlyLimit: 0
+    redisSecretRef: {name: boopd-redis, key: url}
+  runs:
+    namespace: boopd
+    pendingTimeout: 10m
+    maxConcurrent: 20
+  profiles:
+    python:
+      pod:
+        runtimeClassName: gvisor
+  profileRules:
+    - extends: ["github>boop-bot/renovate-config:python"]
+      managers: [pip_requirements, pip_setup, pipenv, poetry, pep621, pip-compile, pyenv]
+      profile: python
+    - extends: ["github>boop-bot/renovate-config:node"]
+      managers: [npm, bun]
+      profile: node
+  apps:
+    boop-bot:
+      endpoint: https://api.github.com
+      appId: 123456
+      installations: []
+      cadence: 24h
+      privateKeySecretRef: {name: boop-bot-app, key: private-key.pem}
+      discovery: {every: 6h, probe: graphql, skipForks: true, skipArchived: true}
+      budget: {reserveFraction: 0.10, maxConcurrentRuns: 10, defaultEstimate: {core: 300, graphql: 150}}

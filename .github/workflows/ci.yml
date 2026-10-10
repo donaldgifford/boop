@@ -82,9 +82,12 @@ jobs:
       # not at deploy (IMPL-0001 task 7.2).
       - name: Validate rendered config
         run: |
-          helm template boopd charts/boopd -f charts/boopd/ci/ci-values.yaml \
-            --show-only templates/config.yaml | yq '.data["boopd.hcl"]' > "${RUNNER_TEMP}/boopd.hcl"
-          go run ./cmd/boopd config validate "${RUNNER_TEMP}/boopd.hcl"
+          for v in charts/boopd/ci/*-values.yaml; do
+            out="${RUNNER_TEMP}/$(basename "$v" -values.yaml).hcl"
+            helm template boopd charts/boopd -f "$v" --show-only templates/config.yaml \
+              | yq '.data["boopd.hcl"]' > "$out"
+            go run ./cmd/boopd config validate "$out"
+          done
 
   test-go:
     name: Test Go
