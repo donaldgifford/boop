@@ -603,7 +603,7 @@ contract).
   due time; a `recheck` signal runs again at `PriorityHigh`; `SIGTERM`
   with a run in flight stops polling and keeps the activity to its soft
   deadline.
-- [ ] 6.7 Workflow tests in the `testsuite` with fakes for every row of
+- [x] 6.7 Workflow tests in the `testsuite` with fakes for every row of
   the convergence table, `pending` release and re-acquire,
   heartbeat-timeout progress, absence → `CheckRepo` → end or continue,
   managers merge, ContinueAsNew carry; `DiscoveryWorkflow` fan-out and
