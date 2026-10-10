@@ -20,6 +20,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Record OQ8 decision (report via the Renovate log line)
 - Approve DESIGN-0001 and accept ADR-0009
 - Mark spike step 4 done and add internal/jobspec to the layout
+- Add IMPL-0001, the spike implementation plan with phases, criteria and open questions
 
 ### Miscellaneous Tasks
 
