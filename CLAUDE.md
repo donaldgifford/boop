@@ -53,7 +53,10 @@ Do not re-open these without a new document that says why:
 
 ### Spike status
 
-Tracks INV-0001 § "First steps, in order":
+The checklist is [IMPL-0001](docs/impl/0001-boopd-spike-temporal-control-plane-job-per-run-discovery-and.md):
+phases with tasks, success criteria and the implementation open questions.
+Check tasks off there as they land. The summary below tracks INV-0001
+§ "First steps, in order":
 
 1. Repo, module, tooling — done (Go 1.27.2).
 2. Investigation in `docs/`, this file — done.

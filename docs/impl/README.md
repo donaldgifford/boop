@@ -32,4 +32,5 @@ docz create impl "Your Implementation Title"
 
 | ID | Title | Status | Date | Author | Link |
 |----|-------|--------|------|--------|------|
+| IMPL-0001 | boopd spike: Temporal control plane, Job per run, discovery and the homelab deploy | In Progress | 2026-10-10 | Donald Gifford | [0001-boopd-spike-temporal-control-plane-job-per-run-discovery-and.md](0001-boopd-spike-temporal-control-plane-job-per-run-discovery-and.md) |
 <!-- END DOCZ AUTO-GENERATED -->
