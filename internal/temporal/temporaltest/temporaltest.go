@@ -25,6 +25,8 @@ package temporaltest
 import (
 	"io"
 	"log/slog"
+	"net"
+	"strconv"
 	"testing"
 
 	"go.temporal.io/sdk/client"
@@ -45,19 +47,53 @@ type Server struct {
 	Config temporal.Config
 }
 
+// Option configures Start.
+type Option func(tb testing.TB, o *testsuite.DevServerOptions)
+
+// ListenOnAllInterfaces binds the frontend to 0.0.0.0 on a free port, so
+// a worker in a k3d cluster can dial it at host.k3d.internal:<port>.
+func ListenOnAllInterfaces() Option {
+	return func(tb testing.TB, o *testsuite.DevServerOptions) {
+		tb.Helper()
+
+		var lc net.ListenConfig
+		l, err := lc.Listen(tb.Context(), "tcp", "0.0.0.0:0")
+		if err != nil {
+			tb.Fatalf("temporaltest: pick a port: %v", err)
+		}
+
+		addr, ok := l.Addr().(*net.TCPAddr)
+		if !ok {
+			tb.Fatalf("temporaltest: listener address %v is not TCP", l.Addr())
+		}
+
+		port := addr.Port
+		if err := l.Close(); err != nil {
+			tb.Fatalf("temporaltest: release port: %v", err)
+		}
+
+		o.ClientOptions.HostPort = net.JoinHostPort("0.0.0.0", strconv.Itoa(port))
+	}
+}
+
 // Start runs a dev server with the boopd namespace registered and stops
 // it when tb finishes. The first run on a machine downloads the CLI
 // into the user cache directory.
-func Start(tb testing.TB) *Server {
+func Start(tb testing.TB, opts ...Option) *Server {
 	tb.Helper()
 
 	quiet := tlog.NewStructuredLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))
 
-	srv, err := testsuite.StartDevServer(tb.Context(), testsuite.DevServerOptions{
+	o := testsuite.DevServerOptions{
 		CachedDownload: testsuite.CachedDownload{Version: CLIVersion},
 		ClientOptions:  &client.Options{Namespace: temporal.DefaultNamespace, Logger: quiet},
 		LogLevel:       "error",
-	})
+	}
+	for _, opt := range opts {
+		opt(tb, &o)
+	}
+
+	srv, err := testsuite.StartDevServer(tb.Context(), o)
 	if err != nil {
 		tb.Fatalf("temporaltest: start dev server %s: %v", CLIVersion, err)
 	}

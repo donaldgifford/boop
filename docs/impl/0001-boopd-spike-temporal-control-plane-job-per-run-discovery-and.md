@@ -663,7 +663,7 @@ and the first real environment.
   still fail; ServiceMonitor and PrometheusRule carry the run and budget
   alerts (`disk-space`, `OOMKilled`, `onboarding` result, stalled
   repositories).
-- [ ] 7.8 Stub GitHub, `test/stub-github/`: the `httptest` GitHub from
+- [x] 7.8 Stub GitHub, `test/stub-github/`: the `httptest` GitHub from
   Phases 5 and 6 as an image, so a worker running in-cluster has
   something to talk to. Chart e2e in the harness: `helm upgrade --install`
   with the stub Renovate image as `renovate.image`, the stub GitHub as

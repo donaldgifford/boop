@@ -95,16 +95,17 @@ type Server struct {
 	rateReads     int
 }
 
-// New starts a fake GitHub with one installation (id 1) and healthy
-// rate limits; it closes with the test.
-func New(tb testing.TB) *Server {
-	tb.Helper()
+// NewFake returns a fake GitHub with one installation (id 1) and
+// healthy rate limits that is not serving yet: mount Handler on any
+// server. test/stub-github serves it over TLS in a cluster. BaseURL and
+// the embedded httptest.Server are only set by New.
+func NewFake() (*Server, error) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		tb.Fatalf("fakegithub: generate key: %v", err)
+		return nil, fmt.Errorf("fakegithub: generate key: %w", err)
 	}
 	reset := time.Now().Add(time.Hour).Truncate(time.Second)
-	s := &Server{
+	return &Server{
 		PEM:           pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}),
 		installations: []Installation{{ID: 1, Account: "acme"}},
 		rates: map[string]Rate{
@@ -115,11 +116,24 @@ func New(tb testing.TB) *Server {
 		tokenTTL:     time.Hour,
 		revokeStatus: http.StatusNoContent,
 		failPages:    make(map[int]int),
+	}, nil
+}
+
+// New starts a fake GitHub (see NewFake) on a local httptest server; it
+// closes with the test.
+func New(tb testing.TB) *Server {
+	tb.Helper()
+	s, err := NewFake()
+	if err != nil {
+		tb.Fatal(err)
 	}
-	s.Server = httptest.NewServer(http.HandlerFunc(s.serve))
+	s.Server = httptest.NewServer(s.Handler())
 	tb.Cleanup(s.Close)
 	return s
 }
+
+// Handler serves the fake's API.
+func (s *Server) Handler() http.Handler { return http.HandlerFunc(s.serve) }
 
 // BaseURL is the API base URL to configure as the app's endpoint.
 func (s *Server) BaseURL() string { return s.URL + "/" }

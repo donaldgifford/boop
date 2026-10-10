@@ -113,3 +113,16 @@ target "stub-renovate" {
   tags       = ["${STUB_IMAGE}"]
   output     = ["type=docker"]
 }
+
+// Stub GitHub image for the chart e2e (IMPL-0001 task 7.8): fakegithub
+// over TLS. Like stub-renovate, built locally and in CI, never pushed.
+variable "STUB_GITHUB_IMAGE" {
+  default = "ghcr.io/donaldgifford/boopd-stub-github:dev"
+}
+
+target "stub-github" {
+  context    = "."
+  dockerfile = "test/stub-github/Dockerfile"
+  tags       = ["${STUB_GITHUB_IMAGE}"]
+  output     = ["type=docker"]
+}

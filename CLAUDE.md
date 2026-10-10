@@ -131,6 +131,7 @@ internal/profiles/        # pure profile resolver: extends + managers -> stricte
 internal/kube/            # Job lifecycle Runner: suspended create, Secret, unsuspend, log follow, exit, delete
 internal/renovate/        # log scanner + report parser: progress, Repository finished, update tuples
 test/stub-renovate/       # stub Renovate image for e2e (bake target stub-renovate; never pushed)
+test/stub-github/         # test/fakegithub over TLS as an image for the chart e2e (bake target stub-github; never pushed)
 test/e2e/                 # k3d e2e suite, build tag e2e; `just e2e`
 test/fakegithub/          # in-process GitHub (App, mint/revoke, paging, probes, /rate_limit) for tests
 examples/boopd.hcl        # the design's example config; `boopd config validate` keeps it loadable
@@ -146,9 +147,12 @@ mise.toml                 # pinned toolchain: go, golangci-lint, helm, ct, k3d, 
 ## Workflows
 
 - `just check` — lint + test (pre-commit gate)
-- `just e2e` — create the k3d cluster, build and import the stub
-  Renovate image, run `go test -tags e2e ./test/e2e/...` against it
-  (`just e2e-down` deletes the cluster); CI's "E2E Tests" job does the same
+- `just e2e` — create the k3d cluster, build and import the boopd,
+  stub Renovate and stub GitHub images, run `go test -tags e2e
+  ./test/e2e/...` against it (`just e2e-down` deletes the cluster). The
+  chart e2e (`TestChart_*`) helm-installs `charts/boopd` with the stubs
+  and a host dev server; CI's "E2E Tests" job does the same and is the
+  chart gate
 - `just build` — binary into `build/bin/boopd`
 - `just docker-build` — host-native image via bake
 - `just helm-test` — chart lint (helm + ct) and helm-unittest suites

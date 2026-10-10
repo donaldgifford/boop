@@ -15,6 +15,7 @@ import? 'helm.just'
 project_name      := "boop"
 binary_name       := "boopd"
 stub_image        := "ghcr.io/donaldgifford/boopd-stub-renovate:dev"
+stub_github_image := "ghcr.io/donaldgifford/boopd-stub-github:dev"
 project_owner     := "donaldgifford"
 go_package        := "github.com/" + project_owner + "/" + project_name
 build_dir         := "build"
@@ -84,11 +85,13 @@ test-all: test
 test-integration:
     @go test -v -race -count=1 -tags integration ./...
 
-# Run the e2e suite in the local k3d cluster with the stub Renovate image
+# Run the e2e suite in the local k3d cluster: the stub Renovate and
+# GitHub images, and the boopd image the chart e2e installs
 [group('test')]
 e2e: k3d-up
-    @docker buildx bake stub-renovate
-    @k3d image import {{ stub_image }} --cluster {{ project_name }}
+    @docker buildx bake --load boopd stub-renovate stub-github
+    @k3d image import {{ stub_image }} {{ stub_github_image }} ghcr.io/donaldgifford/boopd:dev \
+        --cluster {{ project_name }}
     @KUBECONFIG="$(k3d kubeconfig write {{ project_name }})" \
         go test -v -count=1 -timeout 15m -tags e2e ./test/e2e/...
 
