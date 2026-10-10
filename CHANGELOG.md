@@ -8,6 +8,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Features
 
 - *(jobspec)* Port renovate-operator's Job builder for one repository per Job
+- *(temporal)* Port repo-guardian's Temporal plumbing and the installation budget entity
 
 ### Documentation
 
