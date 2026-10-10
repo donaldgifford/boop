@@ -15,8 +15,7 @@ add:
 mise install        # toolchain: go, helm, ct, helm-docs, k3d, ...
 just helm-plugins   # one-time: install the helm-unittest + helm-diff plugins
 just helm-docs      # generate charts/boop/README.md
-mkdir -p cmd/boop
-$EDITOR cmd/boop/main.go
+just build          # build/bin/boopd
 ```
 
 The service is expected to honor the environment contract the chart
@@ -29,7 +28,7 @@ Run `just` (or `just --list`) for the full recipe list. The usual loops:
 
 ```sh
 just check          # lint + test
-just build          # binary into build/bin/boop
+just build          # binary into build/bin/boopd
 just docker-build   # local image via docker buildx bake
 just helm-test      # chart lint + helm-unittest suites
 just k3d-install    # dev image → local k3d cluster → helm install
@@ -65,7 +64,7 @@ is pushed to `oci://ghcr.io/donaldgifford/charts/boop`.
 
 | Path | Purpose |
 | --- | --- |
-| `cmd/boop/` | Service entrypoint (add your code here) |
+| `cmd/boopd/` | Service entrypoint (`boopd worker`) |
 | `charts/boop/` | Helm chart + unittest suites |
 | `docker-bake.hcl` | Image build targets (local / ci / release) |
 | `justfile`, `docker.just`, `helm.just` | Task runner recipes |

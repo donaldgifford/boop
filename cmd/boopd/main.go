@@ -2,9 +2,10 @@
 //
 // Usage:
 //
-//	boop                          print the version
-//	boop version                  print the version
-//	boop config validate <file>   load and validate a config file; exit 1 on errors
+//	boopd                          print the version
+//	boopd version                  print the version
+//	boopd config validate <file>   load and validate a config file; exit 1 on errors
+//	boopd worker --config <file>   run the Temporal worker until SIGTERM
 package main
 
 import (
