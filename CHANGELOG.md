@@ -68,6 +68,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(impl)* Mark task 4.5 deferred until a scratch repository exists
 - Phase 5 activities in the package doc and CLAUDE.md
 - Phase 6 layout, worker role and boopd rename
+- Phase 7 chart status and configuration contract
 
 ### Testing
 
