@@ -83,6 +83,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(e2e)* Worker discovery, run, recheck and graceful stop
 - *(chart)* Golden config render and the run and budget alerts
 - *(chart)* Keep the golden values out of ct install
+- *(e2e)* Stub GitHub image and the chart e2e
 
 ### Miscellaneous Tasks
 
