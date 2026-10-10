@@ -47,6 +47,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(config)* Golden config renders the jobspec fixture; close Phase 3
 - *(e2e)* Add the stub Renovate image
 - *(e2e)* Add the k3d e2e harness, just e2e and the E2E CI job
+- *(e2e)* Run the kube lifecycle against k3d; read deadlines first
 
 ### Miscellaneous Tasks
 
