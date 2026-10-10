@@ -13,6 +13,7 @@ import? 'docker.just'
 import? 'helm.just'
 
 project_name      := "boop"
+stub_image        := "ghcr.io/donaldgifford/boopd-stub-renovate:dev"
 project_owner     := "donaldgifford"
 go_package        := "github.com/" + project_owner + "/" + project_name
 build_dir         := "build"
@@ -81,6 +82,18 @@ test-all: test
 [group('test')]
 test-integration:
     @go test -v -race -count=1 -tags integration ./...
+
+# Run the e2e suite in the local k3d cluster with the stub Renovate image
+[group('test')]
+e2e: k3d-up
+    @docker buildx bake stub-renovate
+    @k3d image import {{ stub_image }} --cluster {{ project_name }}
+    @KUBECONFIG="$(k3d kubeconfig write {{ project_name }})" \
+        go test -v -count=1 -timeout 15m -tags e2e ./test/e2e/...
+
+# Delete the k3d cluster the e2e suite runs in
+[group('test')]
+e2e-down: k3d-down
 
 # Run tests for a single package: just test-pkg ./pkg/foo
 [group('test')]

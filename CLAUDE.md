@@ -133,6 +133,9 @@ mise.toml                 # pinned toolchain: go, golangci-lint, helm, ct, k3d, 
 ## Workflows
 
 - `just check` — lint + test (pre-commit gate)
+- `just e2e` — create the k3d cluster, build and import the stub
+  Renovate image, run `go test -tags e2e ./test/e2e/...` against it
+  (`just e2e-down` deletes the cluster); CI's "E2E Tests" job does the same
 - `just build` — binary into `build/bin/boop`
 - `just docker-build` — host-native image via bake
 - `just helm-test` — chart lint (helm + ct) and helm-unittest suites

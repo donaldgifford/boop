@@ -446,7 +446,7 @@ and the k3d end-to-end harness every later phase extends (OQ3).
   request (for the stall and deadline scenarios) and can write marker
   files (for the isolation scenario). Built by bake as
   `ghcr.io/donaldgifford/boopd-stub-renovate:dev`; never published.
-- [ ] 4.7 e2e harness, `test/e2e/` behind the `e2e` build tag: `just e2e`
+- [x] 4.7 e2e harness, `test/e2e/` behind the `e2e` build tag: `just e2e`
   runs `k3d-up`, builds and imports the stub image, creates a namespace
   per test run, and runs `go test -tags e2e ./test/e2e/...` with
   `KUBECONFIG` from k3d; `just e2e-down` deletes the cluster. A CI job
