@@ -52,7 +52,7 @@ tests:
 
   - it: renders the golden example (examples/boopd.hcl as values)
     values:
-      - ../ci/example-values.yaml
+      - values/example.yaml
     asserts:
       - matchSnapshot:
           path: data["boopd.hcl"]

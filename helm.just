@@ -43,14 +43,14 @@ helm-template-ci:
 helm-unittest:
     @helm unittest {{ chart_dir }}
 
-# Render boopd.hcl from each ci/*-values.yaml and run `boopd config validate` on it
+# Render boopd.hcl from the CI and golden values and run `boopd config validate` on it
 [group('helm')]
 helm-config-validate:
     #!/usr/bin/env bash
     set -euo pipefail
     mkdir -p {{ build_dir }}
-    for v in {{ chart_dir }}/ci/*-values.yaml; do
-        out="{{ build_dir }}/$(basename "$v" -values.yaml).hcl"
+    for v in {{ chart_dir }}/ci/ci-values.yaml {{ chart_dir }}/tests/values/example.yaml; do
+        out="{{ build_dir }}/$(basename "$v" .yaml).hcl"
         helm template {{ chart_name }} {{ chart_dir }} -f "$v" --show-only templates/config.yaml \
             | yq '.data["boopd.hcl"]' > "$out"
         go run ./cmd/boopd config validate "$out"

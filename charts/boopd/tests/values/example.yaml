@@ -1,6 +1,6 @@
 ---
 # examples/boopd.hcl as chart values: the golden render
-# (tests/config_test.yaml snapshots it; `just helm-config-validate`
+# (config_test.yaml snapshots it; `just helm-config-validate`
 # validates it).
 redis:
   enabled: false
