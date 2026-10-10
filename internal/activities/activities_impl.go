@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"slices"
 	"sync"
 	"time"
@@ -41,6 +42,10 @@ type Deps struct {
 	Runner    *kube.Runner
 	Metrics   Metrics
 	Logger    *slog.Logger
+	// RunLog receives every Renovate line with the correlation fields;
+	// JSON on stdout when nil.
+	RunLog  *slog.Logger
+	Timings RunTimings
 	// Now is the clock; time.Now when nil.
 	Now func() time.Time
 }
@@ -55,6 +60,8 @@ type Activities struct {
 	runner    *kube.Runner
 	metrics   Metrics
 	log       *slog.Logger
+	runLog    *slog.Logger
+	timings   RunTimings
 	now       func() time.Time
 
 	mu       sync.Mutex
@@ -72,6 +79,8 @@ func New(deps *Deps) *Activities {
 		runner:    deps.Runner,
 		metrics:   deps.Metrics,
 		log:       deps.Logger,
+		runLog:    deps.RunLog,
+		timings:   deps.Timings.withDefaults(),
 		now:       deps.Now,
 		appOf:     make(map[int64]string),
 		presetID:  make(map[string]int64),
@@ -84,6 +93,9 @@ func New(deps *Deps) *Activities {
 	}
 	if a.log == nil {
 		a.log = slog.Default()
+	}
+	if a.runLog == nil {
+		a.runLog = slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	}
 	if a.now == nil {
 		a.now = time.Now

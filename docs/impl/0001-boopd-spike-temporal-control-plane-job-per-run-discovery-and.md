@@ -502,7 +502,7 @@ stall).
   the reserve; records `boopd_discovery_probe_cost`; returns a summary.
 - [x] 5.3 `CheckRepo` and `ReadRateLimit`: thin wrappers over Phase 2, the
   latter already named by `InstallationWorkflow`.
-- [ ] 5.4 `RunRenovate`: the twelve steps of the design's flowchart with
+- [x] 5.4 `RunRenovate`: the twelve steps of the design's flowchart with
   the `RunInput` and `RunResult` types as specified: mint (scoped to the
   run's and the preset repository), `RateBefore`, build and create the
   suspended Job from the profile, Secret then unsuspend, wait `Running`
