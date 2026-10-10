@@ -54,3 +54,21 @@ func TestParse_DiagnosticsCarryPosition(t *testing.T) {
 		t.Errorf("diagnostics lack bad.hcl:3:\n%s", b.String())
 	}
 }
+
+func TestResolver_FromExample(t *testing.T) {
+	t.Parallel()
+	cfg, diags := config.Load(examplePath)
+	if diags.HasErrors() {
+		t.Fatal(diags.Error())
+	}
+	r, err := cfg.Resolver()
+	if err != nil {
+		t.Fatalf("Resolver() = %v", err)
+	}
+	if got := r.Resolve(nil, []string{"poetry"}); got != "strict" {
+		t.Errorf("Resolve(nil, poetry) = %q, want strict", got)
+	}
+	if got := r.Resolve([]string{"github>boop-bot/renovate-config:python"}, nil); got != "python" {
+		t.Errorf("Resolve(python preset) = %q, want python", got)
+	}
+}

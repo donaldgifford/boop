@@ -44,6 +44,7 @@ import (
 
 	"github.com/donaldgifford/boop/internal/jobspec"
 	"github.com/donaldgifford/boop/internal/platform"
+	"github.com/donaldgifford/boop/internal/profiles"
 	"github.com/donaldgifford/boop/internal/workflows"
 	"github.com/donaldgifford/hclkit/pkg/hclkit"
 	"github.com/donaldgifford/hclkit/pkg/hclkit/ctytypes"
@@ -174,6 +175,16 @@ type Budget struct {
 	MaxConcurrentRuns int
 	// DefaultEstimate is keyed by resource ("core", "graphql").
 	DefaultEstimate map[string]int
+}
+
+// Resolver builds the profile resolver from the file's order, rules and
+// fallbacks.
+func (c *Config) Resolver() (*profiles.Resolver, error) {
+	rules := make([]profiles.Rule, 0, len(c.ProfileRules))
+	for _, r := range c.ProfileRules {
+		rules = append(rules, profiles.Rule{Profile: r.Profile, Extends: r.Extends, Managers: r.Managers})
+	}
+	return profiles.New(c.Order, rules, c.DefaultProfile, c.UnknownProfile)
 }
 
 // Option tunes Load and Parse.

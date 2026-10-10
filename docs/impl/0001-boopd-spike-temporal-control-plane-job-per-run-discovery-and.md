@@ -370,7 +370,7 @@ Phase 0 moves it.
 - [x] 3.3 Secret-backed values: the App private key and the Redis URL are
   read from the mounted files named by the refs at start, never from env;
   a missing file fails startup with the path in the error.
-- [ ] 3.4 `internal/profiles`: `Resolve(extends []string, managers
+- [x] 3.4 `internal/profiles`: `Resolve(extends []string, managers
   []string) string` applies `profile_rule`s (preset substrings and manager
   names), takes the strictest match by `order`, falls back to
   `default_profile` when `extends` is known but matches nothing and to
