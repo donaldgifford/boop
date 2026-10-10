@@ -49,6 +49,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Bug Fixes
 
 - *(chart)* Ct install against a bare cluster
+- *(activities)* Heartbeat RunRenovate while the pod is pending
 
 ### Documentation
 
