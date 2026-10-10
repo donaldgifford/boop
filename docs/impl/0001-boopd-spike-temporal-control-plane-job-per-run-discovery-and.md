@@ -302,7 +302,7 @@ OQ11; INV-0001 § Renovate behaviours to reproduce).
   endpoints) with `skipForks` and `skipArchived`, 100 per page, and
   exposes paging so `DiscoverInstallation` can probe and signal per page
   and heartbeat the page number.
-- [ ] 2.5 Config probe (OQ3 `a`): `ProbeConfig(ctx, nodeIDs, path)` sends
+- [x] 2.5 Config probe (OQ3 `a`): `ProbeConfig(ctx, nodeIDs, path)` sends
   the GraphQL query from the design, one query per 100 repositories,
   reads `rateLimit.cost` and returns, per repository, whether the file
   exists and its `extends` list parsed from `text` (JSON and JSON5-free

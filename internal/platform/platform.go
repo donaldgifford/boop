@@ -115,9 +115,9 @@ type Client interface {
 	// assigning shards.
 	Discover(ctx context.Context, filter DiscoveryFilter) ([]Repository, error)
 
-	// HasRenovateConfig returns true when the repo has at least one of:
-	// renovate.json, .renovaterc, .renovaterc.json, .github/renovate.json,
-	// .gitlab/renovate.json on its default branch.
+	// HasRenovateConfig returns true when the repo has the configured
+	// Renovate config file (DefaultConfigPath unless overridden) on its
+	// default branch.
 	HasRenovateConfig(ctx context.Context, repo *Repository) (bool, error)
 
 	// MintAccessToken returns a token that can authenticate to the platform's
@@ -145,16 +145,11 @@ type Minter interface {
 	Revoke(ctx context.Context, token string) error
 }
 
-// ConfigPaths is the ordered list of files HasRenovateConfig probes. First
-// 200 OK wins. Exposed so tests can match the same set without duplicating
-// the constants.
-var ConfigPaths = []string{
-	"renovate.json",
-	".renovaterc",
-	".renovaterc.json",
-	".github/renovate.json",
-	".gitlab/renovate.json",
-}
+// DefaultConfigPath is the Renovate config file a repository must carry
+// to be onboarded (ADR-0005). repo-guardian writes it; config may name a
+// different single path, and every probe checks only that one path
+// (DESIGN-0001 OQ3).
+const DefaultConfigPath = "renovate.json"
 
 // Error sentinels. Reconcilers distinguish transient (worth a retry) from
 // permanent (set Ready=False with a clear reason and stop) so they can

@@ -76,6 +76,14 @@ func WithHTTPClient(httpClient *http.Client) ClientOption {
 	}
 }
 
+// WithConfigPath sets the single Renovate config path the client probes;
+// empty keeps platform.DefaultConfigPath.
+func WithConfigPath(path string) ClientOption {
+	return func(c *Client) {
+		c.configPath = path
+	}
+}
+
 // WithBaseURL overrides the GHES base URL after construction.
 func WithBaseURL(base string) ClientOption {
 	return func(c *Client) {
@@ -89,6 +97,7 @@ type Client struct {
 	httpClient *http.Client
 	baseURL    string
 	limiter    *rate.Limiter
+	configPath string
 
 	// appTransport is set when the Client was constructed via NewWithApp.
 	// MintAccessToken pulls a fresh installation token from it.
@@ -223,6 +232,14 @@ func (t *tokenTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req2 := req.Clone(req.Context())
 	req2.Header.Set("Authorization", "Bearer "+t.token)
 	return t.base.RoundTrip(req2)
+}
+
+// path is the config path the client probes.
+func (c *Client) path() string {
+	if c.configPath == "" {
+		return platform.DefaultConfigPath
+	}
+	return c.configPath
 }
 
 // wait blocks until the rate limiter admits one request or ctx is cancelled.
