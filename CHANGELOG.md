@@ -43,6 +43,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(chart)* Render boopd.hcl from values into a mounted ConfigMap
 - *(chart)* Worker Role and RoleBinding in the runs namespace
 - *(chart)* Temporal connection values and worker-only credential mounts
+- *(chart)* Restricted namespace, runs ResourceQuota and egress NetworkPolicies
 
 ### Documentation
 
