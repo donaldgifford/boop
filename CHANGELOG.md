@@ -50,6 +50,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 - *(chart)* Ct install against a bare cluster
 - *(activities)* Heartbeat RunRenovate while the pod is pending
+- *(observability)* Close the health server when shutdown runs out
 
 ### Documentation
 
