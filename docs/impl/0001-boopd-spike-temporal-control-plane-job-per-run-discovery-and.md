@@ -367,7 +367,7 @@ Phase 0 moves it.
   `reserve_fraction` in [0, 0.5]; Secret refs have name and key; App ids
   and keys present; allowlist entries are positive ints. Errors are
   `hclkit.Diagnostics` written GCC-style, all of them, not the first.
-- [ ] 3.3 Secret-backed values: the App private key and the Redis URL are
+- [x] 3.3 Secret-backed values: the App private key and the Redis URL are
   read from the mounted files named by the refs at start, never from env;
   a missing file fails startup with the path in the error.
 - [ ] 3.4 `internal/profiles`: `Resolve(extends []string, managers

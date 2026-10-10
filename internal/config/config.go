@@ -104,6 +104,8 @@ type Renovate struct {
 	Global map[string]any
 	// RedisSecretRef names the Redis URL Secret, if any.
 	RedisSecretRef *SecretRef
+	// RedisURL is read from RedisSecretRef by ReadSecrets.
+	RedisURL Secret
 }
 
 // SecretRef names one key of a Kubernetes Secret the chart mounts.
@@ -151,6 +153,9 @@ type App struct {
 	Cadence   time.Duration
 	Discovery Discovery
 	Budget    Budget
+	// PrivateKey is the App's PEM key, read from PrivateKeySecretRef by
+	// ReadSecrets.
+	PrivateKey Secret
 }
 
 // Discovery is an app's discovery block.
