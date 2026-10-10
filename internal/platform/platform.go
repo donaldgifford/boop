@@ -83,6 +83,39 @@ type Installation struct {
 // Suspended reports whether the installation is suspended.
 func (i *Installation) Suspended() bool { return !i.SuspendedAt.IsZero() }
 
+// RepoState is CheckRepo's answer about one repository (DESIGN-0001
+// § RepoWorkflow). The fourth answer, "could not tell", is an error, so
+// an outage never looks like an offboarding.
+type RepoState int
+
+const (
+	// RepoUnknown is the zero value; CheckRepo never returns it without
+	// an error.
+	RepoUnknown RepoState = iota
+	// RepoGone means the installation can no longer see the repository,
+	// or it is archived.
+	RepoGone
+	// RepoNoConfig means the repository is there but its default branch
+	// lacks the config file.
+	RepoNoConfig
+	// RepoPresent means the repository is there with the config file.
+	RepoPresent
+)
+
+// String implements fmt.Stringer.
+func (s RepoState) String() string {
+	switch s {
+	case RepoGone:
+		return "gone"
+	case RepoNoConfig:
+		return "no-config"
+	case RepoPresent:
+		return "present"
+	default:
+		return "unknown"
+	}
+}
+
 // DiscoveryFilter is the platform-agnostic shape of a Scan's spec.discovery.
 // The Run reconciler translates v1alpha1.DiscoverySpec into a DiscoveryFilter
 // before calling Client.Discover.

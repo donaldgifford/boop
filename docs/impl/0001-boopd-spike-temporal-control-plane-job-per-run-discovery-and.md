@@ -315,7 +315,7 @@ OQ11; INV-0001 § Renovate behaviours to reproduce).
 - [x] 2.7 Limiter from the discovered limit: a `WithRateLimit` value derived
   as `limit / 3600` per second, burst 10, replacing the copied 4,500/hr
   default once a reading exists.
-- [ ] 2.8 `CheckRepo(ctx, repoID)`: repository visible to the installation,
+- [x] 2.8 `CheckRepo(ctx, repoID)`: repository visible to the installation,
   not archived, config file present on the default branch; distinguishes
   gone, no config, present and error (an outage must never look like an
   offboarding).
