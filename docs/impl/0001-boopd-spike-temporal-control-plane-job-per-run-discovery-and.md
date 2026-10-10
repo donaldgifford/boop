@@ -558,7 +558,7 @@ contract).
 
 #### Tasks
 
-- [ ] 6.1 `DiscoveryWorkflow`: `ListInstallations`, then one
+- [x] 6.1 `DiscoveryWorkflow`: `ListInstallations`, then one
   `DiscoverInstallation` per installation in parallel with the design's
   heartbeat timeout; suspend signals to budgets; a summary result.
   `EnsureSchedule` per configured App (`discovery/<app>`, interval

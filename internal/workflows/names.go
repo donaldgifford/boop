@@ -49,6 +49,7 @@ const (
 	CheckRepoActivity            = "CheckRepo"
 	ReadRateLimitActivity        = "ReadRateLimit"
 	AcquireBudgetActivity        = "AcquireBudget"
+	PlanRunActivity              = "PlanRun"
 	RunRenovateActivity          = "RunRenovate"
 )
 

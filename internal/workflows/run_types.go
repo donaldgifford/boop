@@ -201,3 +201,39 @@ const (
 	RepoNoConfig = "no-config"
 	RepoPresent  = "present"
 )
+
+// PlanRunInput is the PlanRun activity input: what the profile rules
+// read.
+type PlanRunInput struct {
+	InstallationID int64
+	Extends        []string
+	Managers       []string
+}
+
+// RunPlan is PlanRun's answer from the config file, which never travels
+// in a payload: the profile for the next run and the app's cadence.
+type RunPlan struct {
+	Profile string
+	Cadence time.Duration
+}
+
+// DiscoveryInput is DiscoveryWorkflow's input; the discovery/<app>
+// Schedule passes it.
+type DiscoveryInput struct {
+	App string
+}
+
+// DiscoveryResult is DiscoveryWorkflow's summary of one pass.
+type DiscoveryResult struct {
+	App           string
+	Installations int
+	Suspended     int
+	Failed        int
+	Seen          int
+	Onboarded     int
+	ProbeCost     int
+}
+
+// OffboardResults are the repository results that end a RepoWorkflow
+// (DESIGN-0001 § RunRenovate activity, Classification, first row).
+var OffboardResults = []string{"disabled-no-config", "archived", "not-found", "renamed", "pending-deletion", "mirror"}

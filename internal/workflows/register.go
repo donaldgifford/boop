@@ -27,10 +27,10 @@ type registration struct {
 	name string
 }
 
-// all is every boopd workflow, on the one task queue. RepoWorkflow and
-// DiscoveryWorkflow arrive with spike step 6.
+// all is every boopd workflow, on the one task queue.
 var all = []registration{
 	{InstallationWorkflow, InstallationWorkflowName},
+	{DiscoveryWorkflow, DiscoveryWorkflowName},
 }
 
 // Register registers the worker's workflows.

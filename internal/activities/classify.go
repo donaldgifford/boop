@@ -32,10 +32,9 @@ import (
 // Repository results by classification row (DESIGN-0001 § RunRenovate
 // activity, Classification).
 var (
-	// offboardResults end the workflow; the workflow tells them apart
-	// from the other skips by RepositoryResult.
-	offboardResults = []string{"disabled-no-config", "archived", "not-found", "renamed", "pending-deletion", "mirror"}
-	skipResults     = []string{
+	// workflows.OffboardResults end the workflow; the workflow tells
+	// them apart from the other skips by RepositoryResult.
+	skipResults = []string{
 		"fork", "fork-missing", "fork-mode-forked", "cannot-fork", "forbidden", "blocked", "disabled",
 		"disabled-by-config", "disabled-closed-onboarding", "empty", "no-package-files", "uninitiated",
 	}
@@ -114,7 +113,7 @@ func classify(end *runEnd, now time.Time) classification {
 	}
 	result := scan.Finished.Result
 	switch {
-	case slices.Contains(offboardResults, result), slices.Contains(skipResults, result):
+	case slices.Contains(workflows.OffboardResults, result), slices.Contains(skipResults, result):
 		return crossCheck(&classification{Outcome: workflows.OutcomeSkipped, Reason: result}, end.Exit)
 	case slices.Contains(successResults, result):
 		return crossCheck(&classification{Outcome: workflows.OutcomeSucceeded, Reason: result}, end.Exit)
