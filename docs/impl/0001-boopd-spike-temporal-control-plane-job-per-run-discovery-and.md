@@ -647,7 +647,7 @@ and the first real environment.
   `existingSecret` for each; the Temporal values block copied from
   repo-guardian's chart (`temporal.address`, `namespace`, `taskQueue`,
   `tls.*`, `auth.oidc.*`).
-- [ ] 7.5 Namespace posture: the PodSecurity `restricted` labels on the
+- [x] 7.5 Namespace posture: the PodSecurity `restricted` labels on the
   namespace (documented for the operator or rendered when
   `namespace.create`); an optional `ResourceQuota` on Job pods sized from
   `runs.maxConcurrent` (OQ12); optional NetworkPolicies keyed on

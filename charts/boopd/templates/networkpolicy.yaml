@@ -1,0 +1,28 @@
+{{- if .Values.networkPolicies.enabled -}}
+{{- $ns := .Values.boopd.runs.namespace | default .Release.Namespace -}}
+{{- range $class, $np := .Values.networkPolicies.egress }}
+---
+# Job pods labelled boopd.dev/egress={{ $class }} (a profile's pod.labels)
+# take no ingress and reach only DNS plus the listed egress.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "boopd.fullname" $ }}-egress-{{ $class }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "boopd.labels" $ | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      boopd.dev/egress: {{ $class | quote }}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+    {{- with $np }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}
+{{- end }}

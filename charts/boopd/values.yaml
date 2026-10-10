@@ -86,7 +86,8 @@ boopd:
     python:
       inherit: baseline
       pod:
-        # Set to the cluster's sandboxing RuntimeClass, if it has one.
+        # The Python profile's RuntimeClass (gVisor, Kata): set to the
+        # cluster's sandboxing runtime, if it has one.
         runtimeClassName: ""
         labels:
           boopd.dev/egress: python
@@ -169,6 +170,36 @@ configMap:
   data: {}
   # -- Use an existing ConfigMap for envFrom instead of rendering one
   existingConfigMap: ""
+
+namespace:
+  # -- Render the runs namespace with the PodSecurity `restricted`
+  # labels (kept on uninstall). Otherwise label it yourself:
+  # `pod-security.kubernetes.io/enforce=restricted`.
+  create: false
+
+resourceQuota:
+  # -- Render a ResourceQuota on the runs namespace with `pods` sized
+  # from boopd.runs.maxConcurrent (plus the worker replicas when they
+  # share the namespace), so Jobs beyond the cap are refused at
+  # admission (IMPL-0001 OQ12).
+  enabled: false
+  # -- Extra `spec.hard` entries, e.g. `limits.memory`.
+  hard: {}
+
+networkPolicies:
+  # -- Render one NetworkPolicy per egress class, selecting Job pods by
+  # the `boopd.dev/egress` label their profile sets. Each policy denies
+  # ingress and allows DNS plus the listed egress rules.
+  enabled: false
+  # -- Egress rules (NetworkPolicyEgressRule list) per class.
+  # @default -- See values.yaml
+  egress:
+    baseline:
+      - ports:
+          - {port: 443, protocol: TCP}
+    python:
+      - ports:
+          - {port: 443, protocol: TCP}
 
 rbac:
   # -- Create the worker's Role and RoleBinding in the runs namespace:

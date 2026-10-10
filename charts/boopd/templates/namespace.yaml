@@ -1,0 +1,16 @@
+{{- if .Values.namespace.create -}}
+{{- $ns := .Values.boopd.runs.namespace | default .Release.Namespace -}}
+# The runs namespace with the PodSecurity restricted labels. Job pods and
+# the worker both meet restricted (DESIGN-0001 § Job spec). Without
+# namespace.create, label the namespace yourself:
+#   kubectl label ns <ns> pod-security.kubernetes.io/enforce=restricted
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $ns }}
+  labels:
+    {{- include "boopd.labels" . | nindent 4 }}
+    {{- include "boopd.podSecurityLabels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+{{- end }}

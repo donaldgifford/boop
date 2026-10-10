@@ -41,3 +41,11 @@ tests:
       boopd.renovate.image: ghcr.io/renovatebot/renovate:44-full
     asserts:
       - failedTemplate: {}
+
+  - it: gives the Python profile a RuntimeClass when set
+    set:
+      boopd.profiles.python.pod.runtimeClassName: gvisor
+    asserts:
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'runtime_class_name = "gvisor"'

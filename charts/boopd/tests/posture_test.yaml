@@ -1,0 +1,79 @@
+---
+suite: namespace posture
+templates:
+  - templates/namespace.yaml
+  - templates/resourcequota.yaml
+  - templates/networkpolicy.yaml
+tests:
+  - it: renders nothing by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: labels the runs namespace restricted
+    template: templates/namespace.yaml
+    set:
+      namespace.create: true
+      boopd.runs.namespace: boopd
+    asserts:
+      - isKind:
+          of: Namespace
+      - equal:
+          path: metadata.name
+          value: boopd
+      - equal:
+          path: metadata.labels["pod-security.kubernetes.io/enforce"]
+          value: restricted
+      - equal:
+          path: metadata.labels["pod-security.kubernetes.io/warn"]
+          value: restricted
+
+  - it: sizes the quota from maxConcurrent plus the worker replicas
+    template: templates/resourcequota.yaml
+    set:
+      resourceQuota.enabled: true
+    asserts:
+      - equal:
+          path: spec.hard.pods
+          value: "22"
+
+  - it: counts only Job pods when runs live in their own namespace
+    template: templates/resourcequota.yaml
+    set:
+      resourceQuota.enabled: true
+      boopd.runs.namespace: boopd-runs
+    asserts:
+      - equal:
+          path: spec.hard.pods
+          value: "20"
+
+  - it: refuses a quota with no cap to size it from
+    template: templates/resourcequota.yaml
+    set:
+      resourceQuota.enabled: true
+      boopd.runs.maxConcurrent: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: maxConcurrent > 0
+
+  - it: selects Job pods by their egress class
+    template: templates/networkpolicy.yaml
+    set:
+      networkPolicies.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: spec.podSelector.matchLabels["boopd.dev/egress"]
+          value: baseline
+        documentIndex: 0
+      - equal:
+          path: spec.ingress
+          value: []
+        documentIndex: 0
+      - contains:
+          path: spec.egress
+          content:
+            ports:
+              - {port: 443, protocol: TCP}
+        documentIndex: 1

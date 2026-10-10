@@ -311,3 +311,13 @@ Mounted into the worker only; files are 0440 under the pod's fsGroup.
   readOnly: true
 {{- end }}
 {{- end }}
+
+{{/*
+PodSecurity admission labels for the runs namespace.
+*/}}
+{{- define "boopd.podSecurityLabels" -}}
+pod-security.kubernetes.io/enforce: restricted
+pod-security.kubernetes.io/enforce-version: latest
+pod-security.kubernetes.io/audit: restricted
+pod-security.kubernetes.io/warn: restricted
+{{- end }}

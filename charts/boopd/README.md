@@ -60,6 +60,9 @@ Prometheus Operator CRDs in the cluster.
 | livenessProbe.initialDelaySeconds | int | `5` |  |
 | livenessProbe.periodSeconds | int | `15` |  |
 | nameOverride | string | `""` | Override the chart name |
+| namespace.create | bool | `false` | Render the runs namespace with the PodSecurity `restricted` labels (kept on uninstall). Otherwise label it yourself: `pod-security.kubernetes.io/enforce=restricted`. |
+| networkPolicies.egress | object | See values.yaml | Egress rules (NetworkPolicyEgressRule list) per class. |
+| networkPolicies.enabled | bool | `false` | Render one NetworkPolicy per egress class, selecting Job pods by the `boopd.dev/egress` label their profile sets. Each policy denies ingress and allows DNS plus the listed egress rules. |
 | nodeSelector | object | `{}` | Node selector |
 | podAnnotations | object | `{}` | Pod annotations |
 | podLabels | object | `{}` | Pod labels |
@@ -73,6 +76,8 @@ Prometheus Operator CRDs in the cluster.
 | readinessProbe.initialDelaySeconds | int | `5` |  |
 | readinessProbe.periodSeconds | int | `10` |  |
 | replicaCount | int | `2` | Worker replicas. A fixed, small count (ADR-0008 as amended by ADR-0009): runs are Jobs, so the worker never scales with load. |
+| resourceQuota.enabled | bool | `false` | Render a ResourceQuota on the runs namespace with `pods` sized from boopd.runs.maxConcurrent (plus the worker replicas when they share the namespace), so Jobs beyond the cap are refused at admission (IMPL-0001 OQ12). |
+| resourceQuota.hard | object | `{}` | Extra `spec.hard` entries, e.g. `limits.memory`. |
 | resources | object | `{"limits":{"cpu":"500m","memory":"256Mi"},"requests":{"cpu":"100m","memory":"128Mi"}}` | Container resource requests and limits |
 | revisionHistoryLimit | int | `3` | Number of old ReplicaSets retained for rollback. Defaults to 3 to keep the kubectl `get rs` view tidy; bump if you need more rollback headroom. Kubernetes default is 10. |
 | secrets.create | bool | `true` | Create the Secret resource (false = use existingSecret) |
