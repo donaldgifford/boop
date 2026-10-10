@@ -81,8 +81,11 @@ Check tasks off there as they land. The summary below tracks INV-0001
    runs itself, tracks `core` and `graphql`, counts open leases against
    the per-resource EWMA, caps concurrent runs and honours a
    secondary-limit `retryAt` (DESIGN-0001 § InstallationWorkflow).
-6. `RunRenovate`, `RepoWorkflow`, `DiscoveryWorkflow`, `cmd/boopd worker`
-   — next.
+6. Activities — done (IMPL-0001 Phase 5): `ListInstallations`,
+   `DiscoverInstallation`, `CheckRepo`, `ReadRateLimit`, `RunRenovate`
+   with classification, run metrics; e2e in k3d against
+   `test/fakegithub`. `RepoWorkflow`, `DiscoveryWorkflow` and
+   `cmd/boopd worker` (Phase 6) — next.
 7. Chart (Role, profiles, PodSecurity labels) and homelab deploy. No
    custom Renovate image; Jobs run the upstream one.
 8. Run the success criteria; record results in a new investigation.
@@ -116,7 +119,8 @@ internal/                 # library code; not importable outside this module
 internal/platform/        # GitHub discovery, config probe, token minting
 internal/temporal/        # Temporal client config, worker, versioning, schedules
 internal/workflows/       # deterministic workflow code; InstallationWorkflow budget entity
-internal/activities/      # side effects, registered by name: AcquireBudget
+internal/activities/      # side effects, registered by name: discovery, CheckRepo, ReadRateLimit, AcquireBudget, RunRenovate
+internal/observability/   # boopd metric set over OTel (logs, exporter and health in Phase 6)
 internal/jobspec/         # Job + env builder for one Renovate run (ported from renovate-operator)
 internal/config/          # HCL config file via hclkit: decode, defaults, validation, secrets, BuildInput
 internal/profiles/        # pure profile resolver: extends + managers -> strictest profile
@@ -124,6 +128,7 @@ internal/kube/            # Job lifecycle Runner: suspended create, Secret, unsu
 internal/renovate/        # log scanner + report parser: progress, Repository finished, update tuples
 test/stub-renovate/       # stub Renovate image for e2e (bake target stub-renovate; never pushed)
 test/e2e/                 # k3d e2e suite, build tag e2e; `just e2e`
+test/fakegithub/          # in-process GitHub (App, mint/revoke, paging, probes, /rate_limit) for tests
 examples/boopd.hcl        # the design's example config; `boop config validate` keeps it loadable
 docs/investigation/       # INV-0001 is the founding document
 charts/boop/   # Helm chart + unittest suites + values.schema.json
