@@ -19,6 +19,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(platform)* Add CheckRepo with gone, no-config, present and error
 - *(config)* Decode the HCL config file with hclkit
 - *(config)* Apply defaults and validate every rule with positions
+- *(config)* Read secret-backed values from mounted files
 
 ### Documentation
 
