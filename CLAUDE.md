@@ -89,8 +89,15 @@ Check tasks off there as they land. The summary below tracks INV-0001
    `DiscoveryWorkflow` on per-App schedules, search attributes,
    `internal/observability` (slog, Prometheus exporter, health) and
    `boopd worker`, with the worker e2e.
-7. Chart (Role, profiles, PodSecurity labels) and homelab deploy. No
-   custom Renovate image; Jobs run the upstream one.
+7. Chart — done (IMPL-0001 Phase 7): `charts/boopd` runs the worker
+   (two replicas, grace period above StartToClose), renders `boopd.hcl`
+   from `.Values.boopd` into a ConfigMap, a Role with the design's verbs
+   (plus `patch` on jobs to unsuspend), worker-only credential mounts,
+   the Temporal block from repo-guardian, optional restricted namespace,
+   runs quota and egress NetworkPolicies, and a local `redis` subchart.
+   The chart e2e is the CI gate. No custom Renovate image; Jobs run the
+   upstream one. Deferred to a human: the `just k3d-install` run against
+   a scratch repository (7.9) and the homelab deploy (7.10).
 8. Run the success criteria; record results in a new investigation.
 
 Sibling checkouts used as sources: `~/code/renovate-operator`,
@@ -136,7 +143,7 @@ test/e2e/                 # k3d e2e suite, build tag e2e; `just e2e`
 test/fakegithub/          # in-process GitHub (App, mint/revoke, paging, probes, /rate_limit) for tests
 examples/boopd.hcl        # the design's example config; `boopd config validate` keeps it loadable
 docs/investigation/       # INV-0001 is the founding document
-charts/boopd/   # Helm chart + unittest suites + values.schema.json
+charts/boopd/             # Helm chart + unittest suites + values.schema.json; charts/redis is the cache subchart
 Dockerfile                # multi-stage distroless build (VERSION/COMMIT/DATE args)
 docker-bake.hcl           # bake targets: default (local), ci, release
 justfile                  # task runner; imports docker.just + helm.just
@@ -167,6 +174,12 @@ The chart manages the container environment — the service must honor:
 
 - `LISTEN_ADDR` / `METRICS_ADDR` / `LOG_LEVEL` (from `config.*` values)
   and `POD_NAME` (injected from the pod spec).
+- `TEMPORAL_*` from the `temporal.*` values (address, namespace, task
+  queue, build ID, mTLS/CA/OIDC paths under `/etc/boopd/temporal-*`).
+- `worker --config /etc/boopd/boopd.hcl`: the file is rendered from
+  `.Values.boopd`; the Secrets it names are mounted at
+  `<secretsDir>/<name>/<key>`. `just helm-test` and CI run
+  `boopd config validate` on the rendered file.
 - `configMap.data` / `secrets.stringData` arrive via `envFrom`;
   `extraEnv` appends raw entries. Colliding with the chart-managed
   names fails the render (`validateEnvCollisions` helper).
