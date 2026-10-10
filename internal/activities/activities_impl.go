@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/client"
 
 	"github.com/donaldgifford/boop/internal/config"
 	"github.com/donaldgifford/boop/internal/kube"
@@ -37,7 +36,7 @@ import (
 type Deps struct {
 	Config    *config.Config
 	GitHub    GitHub
-	Temporal  client.Client
+	Temporal  Starter
 	TaskQueue string
 	Runner    *kube.Runner
 	Metrics   Metrics
@@ -51,7 +50,7 @@ type Deps struct {
 type Activities struct {
 	cfg       *config.Config
 	gh        GitHub
-	temporal  client.Client
+	temporal  Starter
 	taskQueue string
 	runner    *kube.Runner
 	metrics   Metrics
@@ -175,9 +174,10 @@ func (a *Activities) ListInstallations(ctx context.Context, in *workflows.ListIn
 // name. The budget activity registers separately (Budget.Register).
 func (a *Activities) Register(r Registry) {
 	for name, fn := range map[string]any{
-		workflows.ListInstallationsActivity: a.ListInstallations,
-		workflows.CheckRepoActivity:         a.CheckRepo,
-		workflows.ReadRateLimitActivity:     a.ReadRateLimit,
+		workflows.ListInstallationsActivity:    a.ListInstallations,
+		workflows.DiscoverInstallationActivity: a.DiscoverInstallation,
+		workflows.CheckRepoActivity:            a.CheckRepo,
+		workflows.ReadRateLimitActivity:        a.ReadRateLimit,
 	} {
 		r.RegisterActivityWithOptions(fn, activity.RegisterOptions{Name: name})
 	}

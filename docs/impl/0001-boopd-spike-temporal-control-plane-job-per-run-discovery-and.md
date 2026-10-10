@@ -492,7 +492,7 @@ stall).
 - [x] 5.1 `ListInstallations`: the App client's list, filtered by the
   config allowlist, returning ids and `suspended` flags; the workflow
   signals `suspend` to each installation's budget accordingly.
-- [ ] 5.2 `DiscoverInstallation`: one installation per activity; pages
+- [x] 5.2 `DiscoverInstallation`: one installation per activity; pages
   repositories, probes each page (GraphQL or REST), `SignalWithStart`s
   `repo/github/<id>` with `discovered {slug, defaultBranch,
   installationID, discoveryInterval, extends}` for every repository with

@@ -35,6 +35,10 @@ type Secret struct {
 	value []byte
 }
 
+// NewSecret wraps a copy of b, for callers that hold the value already
+// (tests, keys from elsewhere).
+func NewSecret(b []byte) Secret { return Secret{value: bytes.Clone(b)} }
+
 // Bytes returns a copy of the value.
 func (s Secret) Bytes() []byte { return bytes.Clone(s.value) }
 
