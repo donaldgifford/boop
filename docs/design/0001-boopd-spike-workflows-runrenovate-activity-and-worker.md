@@ -1128,8 +1128,8 @@ until the comparison passes.
 ## Open Questions
 
 Each question lists **a**, my recommendation, then alternatives, and records
-the decision under its heading. The body of this document is written on the
-decided option; where a question is still open, on **a**.
+the decision under its heading. Every question is decided, and the body of
+this document is written on the decided option.
 
 ### OQ1: How does a repository's ecosystem set get learned?
 
@@ -1265,7 +1265,7 @@ smaller one, so it may bind first.
 
 ### OQ8: How does the report leave the pod?
 
-**Open.** Everything else is decided; this one is pending confirmation.
+**Decision (2026-10-10): a.**
 
 With a Job there is no shared filesystem between the pod and the worker.
 `reportType` is marked experimental by Renovate, and the report drops
