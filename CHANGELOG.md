@@ -37,6 +37,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(workflows)* DiscoveryWorkflow and the discovery schedules
 - *(workflows)* RepoWorkflow owns one repository
 - *(observability)* Logger, Prometheus exporter, health and budget gauges
+- *(temporal)* Register missing search attributes on the namespace
 
 ### Documentation
 
