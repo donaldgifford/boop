@@ -69,6 +69,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Phase 5 activities in the package doc and CLAUDE.md
 - Phase 6 layout, worker role and boopd rename
 - Phase 7 chart status and configuration contract
+- *(impl-0001)* Fixture contents and phase 8 deferred to the homelab
 
 ### Testing
 
