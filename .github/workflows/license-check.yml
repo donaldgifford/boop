@@ -26,8 +26,14 @@ jobs:
       - name: Install go-licenses
         run: go install github.com/google/go-licenses@latest
 
+      # --ignore: nexus-proto-annotations (via go.temporal.io/api) is MIT
+      # upstream, but its v0.1.0 module zip carries no LICENSE file, so
+      # go-licenses cannot classify it. Keep in step with the justfile.
       - name: Check licenses
-        run: go-licenses check ./... --allowed_licenses=Apache-2.0,MIT,BSD-2-Clause,BSD-3-Clause,ISC,MPL-2.0
+        run: >-
+          go-licenses check ./...
+          --allowed_licenses=Apache-2.0,MIT,BSD-2-Clause,BSD-3-Clause,ISC,MPL-2.0
+          --ignore github.com/nexus-rpc/nexus-proto-annotations
 
       - name: Generate license report
         if: always()

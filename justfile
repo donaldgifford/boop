@@ -19,6 +19,10 @@ build_dir         := "build"
 bin_dir           := build_dir + "/bin"
 coverage_out      := "coverage.out"
 allowed_licenses  := "Apache-2.0,MIT,BSD-2-Clause,BSD-3-Clause,ISC,MPL-2.0"
+# Modules go-licenses cannot classify. nexus-proto-annotations (via
+# go.temporal.io/api) is MIT upstream, but its v0.1.0 module zip carries
+# no LICENSE file. Keep in step with .github/workflows/license-check.yml.
+license_ignore    := "github.com/nexus-rpc/nexus-proto-annotations"
 goimports_local   := "github.com/" + project_owner
 
 # Version info derived from git; falls back to dev when not in a repo or tag-less.
@@ -127,7 +131,7 @@ fmt:
 # Check dependency licenses against the allow list
 [group('license')]
 license-check:
-    @go-licenses check ./... --allowed_licenses={{ allowed_licenses }}
+    @go-licenses check ./... --allowed_licenses={{ allowed_licenses }} --ignore {{ license_ignore }}
 
 # Generate CSV report of all dependency licenses
 [group('license')]
