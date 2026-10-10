@@ -46,6 +46,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(chart)* Restricted namespace, runs ResourceQuota and egress NetworkPolicies
 - *(chart)* Redis subchart for Renovate's datasource cache
 
+### Bug Fixes
+
+- *(chart)* Ct install against a bare cluster
+
 ### Documentation
 
 - Review DESIGN-0001 and align ADRs with the spike design
