@@ -1,7 +1,7 @@
 ---
 id: DESIGN-0001
 title: "boopd spike: workflows, RunRenovate activity and worker"
-status: Draft
+status: Approved
 author: Donald Gifford
 created: 2026-10-01
 ---

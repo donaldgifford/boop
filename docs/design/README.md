@@ -32,5 +32,5 @@ docz create design "Your Design Title"
 
 | ID | Title | Status | Date | Author | Link |
 |----|-------|--------|------|--------|------|
-| DESIGN-0001 | boopd spike: workflows, RunRenovate activity and worker | Draft | 2026-10-01 | Donald Gifford | [0001-boopd-spike-workflows-runrenovate-activity-and-worker.md](0001-boopd-spike-workflows-runrenovate-activity-and-worker.md) |
+| DESIGN-0001 | boopd spike: workflows, RunRenovate activity and worker | Approved | 2026-10-01 | Donald Gifford | [0001-boopd-spike-workflows-runrenovate-activity-and-worker.md](0001-boopd-spike-workflows-runrenovate-activity-and-worker.md) |
 <!-- END DOCZ AUTO-GENERATED -->

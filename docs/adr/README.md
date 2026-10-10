@@ -39,5 +39,5 @@ docz create adr "Your ADR Title"
 | ADR-0006 | Postgres product store written by activities | Proposed | 2026-10-01 | Donald Gifford | [0006-postgres-product-store-written-by-activities.md](0006-postgres-product-store-written-by-activities.md) |
 | ADR-0007 | Share code through donaldgifford/x after the spike | Proposed | 2026-10-01 | Donald Gifford | [0007-share-code-through-x-after-the-spike.md](0007-share-code-through-x-after-the-spike.md) |
 | ADR-0008 | Scale runs within the installation budget; choose the scaling mechanism after the spike | Proposed | 2026-10-01 | Donald Gifford | [0008-scale-runs-within-the-installation-budget.md](0008-scale-runs-within-the-installation-budget.md) |
-| ADR-0009 | Run each Renovate run as a Kubernetes Job | Proposed | 2026-10-07 | Donald Gifford | [0009-run-each-renovate-run-as-a-kubernetes-job.md](0009-run-each-renovate-run-as-a-kubernetes-job.md) |
+| ADR-0009 | Run each Renovate run as a Kubernetes Job | Accepted | 2026-10-07 | Donald Gifford | [0009-run-each-renovate-run-as-a-kubernetes-job.md](0009-run-each-renovate-run-as-a-kubernetes-job.md) |
 <!-- END DOCZ AUTO-GENERATED -->

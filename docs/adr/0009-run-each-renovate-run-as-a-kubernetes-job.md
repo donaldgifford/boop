@@ -1,7 +1,7 @@
 ---
 id: ADR-0009
 title: "Run each Renovate run as a Kubernetes Job"
-status: Proposed
+status: Accepted
 author: Donald Gifford
 created: 2026-10-07
 ---
