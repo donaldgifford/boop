@@ -24,6 +24,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(config)* Build jobspec inputs from config and add config validate
 - *(kube)* Drive one Renovate Job through its lifecycle
 - *(kube)* Reconnect the log follower and drop replayed lines
+- *(kube)* Count API requests by verb, resource and code
 
 ### Documentation
 
