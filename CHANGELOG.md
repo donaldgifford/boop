@@ -15,6 +15,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(platform)* Expose installation discovery page by page
 - *(platform)* Probe for the config file over GraphQL, REST as fallback
 - *(platform)* Read core and graphql from /rate_limit
+- *(platform)* Derive the client limiter from the discovered limit
 
 ### Documentation
 
