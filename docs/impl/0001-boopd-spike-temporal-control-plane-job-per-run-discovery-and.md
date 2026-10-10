@@ -418,7 +418,7 @@ and the k3d end-to-end harness every later phase extends (OQ3).
   `sinceTime` from the last line's timestamp and drop lines at or before
   it; bounded retries; a line callback that receives the raw line and its
   timestamp.
-- [ ] 4.3 `boopd_kube_requests_total{verb,resource,code}` through a
+- [x] 4.3 `boopd_kube_requests_total{verb,resource,code}` through a
   client-go transport wrapper (the metric registry arrives in Phase 6;
   the wrapper takes an interface).
 - [ ] 4.4 `internal/renovate`: the log scanner matching `msg` exactly for
