@@ -1,6 +1,12 @@
 ---
-# -- Number of replicas
-replicaCount: 1
+# -- Worker replicas. A fixed, small count (ADR-0008 as amended by
+# ADR-0009): runs are Jobs, so the worker never scales with load.
+replicaCount: 2
+
+# -- Seconds Kubernetes waits after SIGTERM. Must exceed the RunRenovate
+# StartToClose (58m) so a draining worker lets in-flight runs reach their
+# soft deadlines (DESIGN-0001 § Worker shutdown).
+terminationGracePeriodSeconds: 3600
 
 # -- Number of old ReplicaSets retained for rollback. Defaults to 3 to
 # keep the kubectl `get rs` view tidy; bump if you need more rollback
@@ -24,6 +30,12 @@ fullnameOverride: ""
 
 # -- Override the container command (default: image entrypoint)
 command: []
+# -- Container args. The default runs the worker role against the
+# chart-rendered config file.
+args:
+  - worker
+  - --config
+  - /etc/boopd/boopd.hcl
 
 config:
   # -- Container HTTP port (published to the container as LISTEN_ADDR)

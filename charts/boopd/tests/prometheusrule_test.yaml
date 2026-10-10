@@ -18,7 +18,7 @@ tests:
           of: PrometheusRule
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-boop
+          value: RELEASE-NAME-boopd
       - equal:
           path: spec.groups[0].rules[0].alert
           value: DeploymentReplicasUnavailable
@@ -32,7 +32,7 @@ tests:
     asserts:
       - matchRegex:
           path: spec.groups[0].rules[0].expr
-          pattern: deployment="RELEASE-NAME-boop"
+          pattern: deployment="RELEASE-NAME-boopd"
 
   - it: defaults severities to warning
     set:

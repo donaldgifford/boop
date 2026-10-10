@@ -628,7 +628,7 @@ and the first real environment.
 
 #### Tasks
 
-- [ ] 7.1 Chart rename and shape: `boopd` as the chart, image and binary
+- [x] 7.1 Chart rename and shape: `boopd` as the chart, image and binary
   name (OQ1); the Deployment becomes the worker with two replicas,
   `terminationGracePeriodSeconds` above StartToClose, the `worker`
   subcommand and `--config`.

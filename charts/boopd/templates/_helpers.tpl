@@ -1,7 +1,7 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "boop.name" -}}
+{{- define "boopd.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
@@ -11,7 +11,7 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this
 (by the DNS naming spec). If release name contains chart name it will be used
 as a full name.
 */}}
-{{- define "boop.fullname" -}}
+{{- define "boopd.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -27,16 +27,16 @@ as a full name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "boop.chart" -}}
+{{- define "boopd.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels.
 */}}
-{{- define "boop.labels" -}}
-helm.sh/chart: {{ include "boop.chart" . }}
-{{ include "boop.selectorLabels" . }}
+{{- define "boopd.labels" -}}
+helm.sh/chart: {{ include "boopd.chart" . }}
+{{ include "boopd.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -46,17 +46,17 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels.
 */}}
-{{- define "boop.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "boop.name" . }}
+{{- define "boopd.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "boopd.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Create the name of the service account to use.
 */}}
-{{- define "boop.serviceAccountName" -}}
+{{- define "boopd.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "boop.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "boopd.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
@@ -65,9 +65,9 @@ Create the name of the service account to use.
 {{/*
 Create the name of the secret the deployment consumes via envFrom.
 */}}
-{{- define "boop.secretName" -}}
+{{- define "boopd.secretName" -}}
 {{- if .Values.secrets.create }}
-{{- include "boop.fullname" . }}
+{{- include "boopd.fullname" . }}
 {{- else }}
 {{- required "secrets.existingSecret is required when secrets.create is false" .Values.secrets.existingSecret }}
 {{- end }}
@@ -76,8 +76,8 @@ Create the name of the secret the deployment consumes via envFrom.
 {{/*
 Create the name of the ConfigMap the deployment consumes via envFrom.
 */}}
-{{- define "boop.configMapName" -}}
-{{- .Values.configMap.existingConfigMap | default (include "boop.fullname" .) -}}
+{{- define "boopd.configMapName" -}}
+{{- .Values.configMap.existingConfigMap | default (include "boopd.fullname" .) -}}
 {{- end }}
 
 {{/*
@@ -89,7 +89,7 @@ entry would shadow the operator's attempt (explicit `env` beats
 
 Returns a space-separated string for has-element style checks.
 */}}
-{{- define "boop.reservedEnvVars" -}}
+{{- define "boopd.reservedEnvVars" -}}
 LISTEN_ADDR METRICS_ADDR LOG_LEVEL POD_NAME
 {{- end }}
 
@@ -101,8 +101,8 @@ shadowing the chart's own env entries.
 
 Renders empty on success; failure aborts the entire template render.
 */}}
-{{- define "boop.validateEnvCollisions" -}}
-{{- $reserved := splitList " " (trim (include "boop.reservedEnvVars" .)) -}}
+{{- define "boopd.validateEnvCollisions" -}}
+{{- $reserved := splitList " " (trim (include "boopd.reservedEnvVars" .)) -}}
 {{- $offenders := list -}}
 {{- range .Values.extraEnv -}}
 {{- if has .name $reserved -}}
@@ -142,5 +142,5 @@ entry once operators have had a release or two to notice:
 
 Renders empty on success; failure aborts the entire template render.
 */}}
-{{- define "boop.validateRemovedValues" -}}
+{{- define "boopd.validateRemovedValues" -}}
 {{- end }}

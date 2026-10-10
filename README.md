@@ -14,7 +14,7 @@ add:
 ```sh
 mise install        # toolchain: go, helm, ct, helm-docs, k3d, ...
 just helm-plugins   # one-time: install the helm-unittest + helm-diff plugins
-just helm-docs      # generate charts/boop/README.md
+just helm-docs      # generate charts/boopd/README.md
 just build          # build/bin/boopd
 ```
 
@@ -37,7 +37,7 @@ just k3d-install    # dev image → local k3d cluster → helm install
 ## Configuration
 
 App configuration reaches the container as environment variables,
-managed by the chart in `charts/boop`:
+managed by the chart in `charts/boopd`:
 
 - `config.port` / `config.metricsPort` / `config.logLevel` values map to
   `LISTEN_ADDR`, `METRICS_ADDR`, and `LOG_LEVEL`; `POD_NAME` is injected
@@ -58,14 +58,14 @@ tag — goreleaser publishes the GitHub Release with binary archives,
 the multi-arch image is built and signed with cosign (plus SLSA
 provenance), and the Helm chart is packaged at the tag-derived version
 (`Chart.yaml` keeps a `0.0.0-dev` placeholder by design) and
-is pushed to `oci://ghcr.io/donaldgifford/charts/boop`.
+is pushed to `oci://ghcr.io/donaldgifford/charts/boopd`.
 
 ## Layout
 
 | Path | Purpose |
 | --- | --- |
 | `cmd/boopd/` | Service entrypoint (`boopd worker`) |
-| `charts/boop/` | Helm chart + unittest suites |
+| `charts/boopd/` | Helm chart + unittest suites |
 | `docker-bake.hcl` | Image build targets (local / ci / release) |
 | `justfile`, `docker.just`, `helm.just` | Task runner recipes |
 | `.github/workflows/` | CI and release pipelines |

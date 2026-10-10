@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "boop Helm chart values",
+  "title": "boopd Helm chart values",
   "description": "Subset of values.yaml that is enforced at `helm install`/`helm upgrade` time. Unknown keys are accepted (no additionalProperties: false) — removed knobs are caught by the validateRemovedValues template guard instead.",
   "type": "object",
   "properties": {
@@ -12,6 +12,17 @@
       "type": "integer",
       "minimum": 0
     },
+    "terminationGracePeriodSeconds": {
+      "type": "integer",
+      "minimum": 3481,
+      "description": "Must exceed the RunRenovate StartToClose (58m = 3480s)."
+    },
+    "args": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "image": {
       "type": "object",
       "properties": {
@@ -21,7 +32,11 @@
         },
         "pullPolicy": {
           "type": "string",
-          "enum": ["Always", "IfNotPresent", "Never"]
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
         },
         "tag": {
           "type": "string"
@@ -43,7 +58,12 @@
         },
         "logLevel": {
           "type": "string",
-          "enum": ["debug", "info", "warn", "error"]
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ]
         }
       }
     },
@@ -83,7 +103,11 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["ClusterIP", "NodePort", "LoadBalancer"]
+          "enum": [
+            "ClusterIP",
+            "NodePort",
+            "LoadBalancer"
+          ]
         },
         "httpPort": {
           "type": "integer",

@@ -11,13 +11,28 @@ tests:
           of: Deployment
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-boop
+          value: RELEASE-NAME-boopd
       - equal:
           path: spec.replicas
-          value: 1
+          value: 2
       - equal:
           path: spec.revisionHistoryLimit
           value: 3
+
+  - it: runs the worker role with a grace period above StartToClose
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: [worker, --config, /etc/boopd/boopd.hcl]
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 3600
+
+  - it: rejects a grace period at or below StartToClose
+    set:
+      terminationGracePeriodSeconds: 3480
+    asserts:
+      - failedTemplate: {}
 
   - it: derives the image from repository + appVersion by default
     asserts:
@@ -80,7 +95,7 @@ tests:
           path: spec.template.spec.containers[0].envFrom
           content:
             configMapRef:
-              name: RELEASE-NAME-boop
+              name: RELEASE-NAME-boopd
 
   - it: prefers an existing ConfigMap for envFrom
     set:
@@ -101,7 +116,7 @@ tests:
           path: spec.template.spec.containers[0].envFrom
           content:
             secretRef:
-              name: RELEASE-NAME-boop
+              name: RELEASE-NAME-boopd
 
   - it: uses an existing Secret for envFrom when create is false
     set:
@@ -142,7 +157,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.serviceAccountName
-          value: RELEASE-NAME-boop
+          value: RELEASE-NAME-boopd
 
   - it: honors command override
     set:

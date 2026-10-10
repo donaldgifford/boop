@@ -2,17 +2,17 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "boop.fullname" . }}
+  name: {{ include "boopd.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "boop.labels" . | nindent 4 }}
+    {{- include "boopd.labels" . | nindent 4 }}
     {{- with .Values.serviceMonitor.labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
   selector:
     matchLabels:
-      {{- include "boop.selectorLabels" . | nindent 6 }}
+      {{- include "boopd.selectorLabels" . | nindent 6 }}
   endpoints:
     - port: metrics
       interval: {{ .Values.serviceMonitor.interval }}

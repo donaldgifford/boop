@@ -9,6 +9,7 @@ image:
 command:
   - sleep
   - "900"
+args: []
 
 livenessProbe: null
 readinessProbe: null

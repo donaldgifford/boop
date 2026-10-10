@@ -1,18 +1,18 @@
-{{- include "boop.validateEnvCollisions" . -}}
-{{- include "boop.validateRemovedValues" . -}}
+{{- include "boopd.validateEnvCollisions" . -}}
+{{- include "boopd.validateRemovedValues" . -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "boop.fullname" . }}
+  name: {{ include "boopd.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "boop.labels" . | nindent 4 }}
+    {{- include "boopd.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   selector:
     matchLabels:
-      {{- include "boop.selectorLabels" . | nindent 6 }}
+      {{- include "boopd.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       {{- with .Values.podAnnotations }}
@@ -20,7 +20,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "boop.labels" . | nindent 8 }}
+        {{- include "boopd.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -29,8 +29,8 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "boop.serviceAccountName" . }}
-      terminationGracePeriodSeconds: 60
+      serviceAccountName: {{ include "boopd.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -41,6 +41,10 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           {{- with .Values.command }}
           command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.args }}
+          args:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           ports:
@@ -56,11 +60,11 @@ spec:
           envFrom:
             {{- if $hasConfigMap }}
             - configMapRef:
-                name: {{ include "boop.configMapName" . }}
+                name: {{ include "boopd.configMapName" . }}
             {{- end }}
             {{- if $hasSecret }}
             - secretRef:
-                name: {{ include "boop.secretName" . }}
+                name: {{ include "boopd.secretName" . }}
             {{- end }}
           {{- end }}
           env:

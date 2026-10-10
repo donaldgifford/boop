@@ -1,9 +1,9 @@
 # git-cliff configuration for the boop Helm chart CHANGELOG.
 #
 # This config is invoked from the chart publish workflow with
-#   git-cliff --config charts/boop/cliff.toml \
+#   git-cliff --config charts/boopd/cliff.toml \
 #             --include-path 'charts/**' \
-#             --output charts/boop/CHANGELOG.md
+#             --output charts/boopd/CHANGELOG.md
 #
 # The path filter is applied at invocation time (rather than via the
 # include_path config option) so the same config can be reused for
@@ -13,7 +13,7 @@
 header = """
 # Helm Chart Changelog
 
-Changes to the `boop` Helm chart only. For application-level
+Changes to the `boopd` Helm chart only. For application-level
 changes, see the root [CHANGELOG.md](../../CHANGELOG.md).
 """
 

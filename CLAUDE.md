@@ -111,7 +111,7 @@ artifacts on every release.
   `internal/` (private to the module).
 - Built into a distroless container via `docker buildx bake`
   (`docker-bake.hcl` defines the local / ci / release targets).
-- Helm chart in `charts/boop/` with helm-unittest suites in
+- Helm chart in `charts/boopd/` with helm-unittest suites in
   `tests/` — the chart is the deployment contract, not an afterthought.
 
 ## Layout
@@ -135,7 +135,7 @@ test/e2e/                 # k3d e2e suite, build tag e2e; `just e2e`
 test/fakegithub/          # in-process GitHub (App, mint/revoke, paging, probes, /rate_limit) for tests
 examples/boopd.hcl        # the design's example config; `boopd config validate` keeps it loadable
 docs/investigation/       # INV-0001 is the founding document
-charts/boop/   # Helm chart + unittest suites + values.schema.json
+charts/boopd/   # Helm chart + unittest suites + values.schema.json
 Dockerfile                # multi-stage distroless build (VERSION/COMMIT/DATE args)
 docker-bake.hcl           # bake targets: default (local), ci, release
 justfile                  # task runner; imports docker.just + helm.just
@@ -190,7 +190,7 @@ Do NOT push tags by hand — the release train owns them.
 ## Conventions
 
 - Conventional Commits; changelogs are git-cliff-generated (root
-  `cliff.toml` for the repo, `charts/boop/cliff.toml` for
+  `cliff.toml` for the repo, `charts/boopd/cliff.toml` for
   the chart-only changelog).
 - Lint gates: `golangci-lint` (config in `.golangci.yml`), `yamllint`,
   `markdownlint-cli2`, `actionlint`. Run `just --list` for the menu.

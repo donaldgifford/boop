@@ -20,7 +20,7 @@ tests:
           of: ConfigMap
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-boop
+          value: RELEASE-NAME-boopd
       - equal:
           path: data.APP_MODE
           value: standard

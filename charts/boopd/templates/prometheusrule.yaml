@@ -11,16 +11,16 @@ overrides like enabled=false or threshold=0 are honored.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: {{ include "boop.fullname" . }}
+  name: {{ include "boopd.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "boop.labels" . | nindent 4 }}
+    {{- include "boopd.labels" . | nindent 4 }}
     {{- with .Values.prometheusRule.labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
   groups:
-    - name: {{ include "boop.fullname" . }}.rules
+    - name: {{ include "boopd.fullname" . }}.rules
       rules:
         {{- $ru := $alerts.replicasUnavailable | default dict }}
         {{- $ruEnabled := true }}{{- if hasKey $ru "enabled" }}{{- $ruEnabled = $ru.enabled }}{{- end }}
@@ -28,15 +28,15 @@ spec:
         {{- if $ruEnabled }}
         - alert: DeploymentReplicasUnavailable
           expr: >-
-            kube_deployment_status_replicas_unavailable{namespace="{{ .Release.Namespace }}",deployment="{{ include "boop.fullname" . }}"}
+            kube_deployment_status_replicas_unavailable{namespace="{{ .Release.Namespace }}",deployment="{{ include "boopd.fullname" . }}"}
             > {{ $ruThreshold }}
           for: {{ $ru.for | default "10m" }}
           labels:
             severity: {{ $ru.severity | default "warning" }}
           annotations:
-            summary: {{ include "boop.name" . }} has unavailable replicas
+            summary: {{ include "boopd.name" . }} has unavailable replicas
             description: >-
-              Deployment {{ include "boop.fullname" . }} in namespace
+              Deployment {{ include "boopd.fullname" . }} in namespace
               {{ .Release.Namespace }} has had more than {{ $ruThreshold }}
               unavailable replica(s) for {{ $ru.for | default "10m" }}.
         {{- end }}
@@ -52,7 +52,7 @@ spec:
           labels:
             severity: {{ $cr.severity | default "warning" }}
           annotations:
-            summary: {{ include "boop.name" . }} container is restarting
+            summary: {{ include "boopd.name" . }} container is restarting
             description: >-
               Container {{ .Chart.Name }} in namespace {{ .Release.Namespace }}
               restarted more than {{ $crThreshold }} times in the last 15

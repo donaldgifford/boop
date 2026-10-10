@@ -1,8 +1,8 @@
 ---
 # yaml-language-server: $schema=https://json.schemastore.org/chart.json
 apiVersion: v2
-name: boop
-description: Give your repo a little boop
+name: boopd
+description: boopd runs Renovate per repository with Temporal as the control plane
 type: application
 # version/appVersion are placeholders, never bumped by hand — releases
 # are lockstep with the app: the release train packages the chart with
