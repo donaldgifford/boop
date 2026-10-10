@@ -48,6 +48,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Add IMPL-0001, the spike implementation plan with phases, criteria and open questions
 - *(impl)* Record the IMPL-0001 decisions; config is HCL via hclkit, tests lean on k3d e2e
 - *(impl)* Mark task 4.5 deferred until a scratch repository exists
+- Phase 5 activities in the package doc and CLAUDE.md
 
 ### Testing
 
@@ -58,6 +59,8 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(e2e)* Run the kube lifecycle against k3d; read deadlines first
 - *(kube)* Pin the create-suspended, Secret, unsuspend request order
 - *(fakegithub)* In-process GitHub for activity tests
+- *(e2e)* RunRenovate end to end in k3d
+- *(activities)* A failed mint is an infrastructure error
 
 ### Miscellaneous Tasks
 
