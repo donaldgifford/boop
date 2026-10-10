@@ -30,6 +30,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(workflows)* Activity types for runs, discovery and CheckRepo
 - *(activities)* ListInstallations, CheckRepo and ReadRateLimit
 - *(activities)* DiscoverInstallation pages, probes and signals
+- *(activities)* Classify a run by the design's table
 
 ### Documentation
 
