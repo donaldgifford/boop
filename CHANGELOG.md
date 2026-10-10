@@ -10,6 +10,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(jobspec)* Port renovate-operator's Job builder for one repository per Job
 - *(temporal)* Port repo-guardian's Temporal plumbing and the installation budget entity
 - *(platform)* Carry repository id and node id from discovery
+- *(platform)* Add an App-level client that lists installations
 
 ### Documentation
 
