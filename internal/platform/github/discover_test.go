@@ -115,7 +115,7 @@ func TestDiscover_AppAuth_UsesInstallationEndpoint(t *testing.T) {
 	body := `{
   "total_count": 2,
   "repositories": [
-    {"id":1,"name":"private-a","full_name":"donaldgifford/private-a","default_branch":"main","fork":false,"archived":false,"private":true,"owner":{"login":"donaldgifford"}},
+    {"id":1,"node_id":"R_kgDOprivA","name":"private-a","full_name":"donaldgifford/private-a","default_branch":"main","fork":false,"archived":false,"private":true,"owner":{"login":"donaldgifford"}},
     {"id":2,"name":"private-b","full_name":"donaldgifford/private-b","default_branch":"main","fork":false,"archived":false,"private":true,"owner":{"login":"donaldgifford"}}
   ]
 }`
@@ -143,6 +143,14 @@ func TestDiscover_AppAuth_UsesInstallationEndpoint(t *testing.T) {
 	}
 	if fake.getReposCalls == 0 {
 		t.Error("expected at least one /installation/repositories call")
+	}
+	for _, r := range got {
+		if r.Slug != "donaldgifford/private-a" {
+			continue
+		}
+		if r.ID != 1 || r.NodeID != "R_kgDOprivA" {
+			t.Errorf("Discover() private-a = {ID:%d NodeID:%q}, want {ID:1 NodeID:\"R_kgDOprivA\"}", r.ID, r.NodeID)
+		}
 	}
 }
 

@@ -35,6 +35,15 @@ import (
 // reads are surfaced; richer metadata stays inside the platform-specific
 // client.
 type Repository struct {
+	// ID is the platform's numeric repository id. It is stable across
+	// renames and transfers, so it names the repository's workflow
+	// (ADR-0002: repo/github/<id>).
+	ID int64
+
+	// NodeID is the platform's global node id, the handle the GraphQL
+	// config probe passes to nodes(ids:) (DESIGN-0001 § DiscoveryWorkflow).
+	NodeID string
+
 	// Slug is the platform-qualified path ("owner/repo"). The same string
 	// flows into RENOVATE_REPOSITORIES.
 	Slug string
@@ -88,7 +97,7 @@ type Client interface {
 	// HasRenovateConfig returns true when the repo has at least one of:
 	// renovate.json, .renovaterc, .renovaterc.json, .github/renovate.json,
 	// .gitlab/renovate.json on its default branch.
-	HasRenovateConfig(ctx context.Context, repo Repository) (bool, error)
+	HasRenovateConfig(ctx context.Context, repo *Repository) (bool, error)
 
 	// MintAccessToken returns a token that can authenticate to the platform's
 	// git API. For GitHub App auth this is a freshly-minted installation

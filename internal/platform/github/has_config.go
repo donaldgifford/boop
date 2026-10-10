@@ -30,7 +30,7 @@ import (
 // HasRenovateConfig probes the canonical Renovate config paths in order; the
 // first 200 OK wins. 404s are expected and fall through to the next path.
 // Any other error short-circuits with classifyErr.
-func (c *Client) HasRenovateConfig(ctx context.Context, repo platform.Repository) (bool, error) {
+func (c *Client) HasRenovateConfig(ctx context.Context, repo *platform.Repository) (bool, error) {
 	owner, name, ok := splitSlug(repo.Slug)
 	if !ok {
 		return false, fmt.Errorf("github: invalid slug %q", repo.Slug)

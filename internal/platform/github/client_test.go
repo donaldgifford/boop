@@ -75,7 +75,7 @@ func TestDiscover_HappyPath_PaginatedOrg(t *testing.T) {
 	t.Parallel()
 
 	page1 := strings.NewReplacer("__NEXT__", "1").Replace(`[
-  {"id":1,"name":"a","full_name":"o/a","default_branch":"main","fork":false,"archived":false,"topics":["go"]},
+  {"id":1,"node_id":"R_kgDOa","name":"a","full_name":"o/a","default_branch":"main","fork":false,"archived":false,"topics":["go"]},
   {"id":2,"name":"b","full_name":"o/b","default_branch":"main","fork":true,"archived":false,"topics":[]}
 ]`)
 	page2 := `[{"id":3,"name":"c","full_name":"o/c","default_branch":"main","fork":false,"archived":true,"topics":[]}]`
@@ -107,6 +107,9 @@ func TestDiscover_HappyPath_PaginatedOrg(t *testing.T) {
 	}
 	if got[0].DefaultBranch != testDefaultBranch || len(got[0].Topics) != 1 || got[0].Topics[0] != "go" {
 		t.Errorf("repo metadata not propagated: %+v", got[0])
+	}
+	if got[0].ID != 1 || got[0].NodeID != "R_kgDOa" {
+		t.Errorf("Discover()[0] = {ID:%d NodeID:%q}, want {ID:1 NodeID:\"R_kgDOa\"}", got[0].ID, got[0].NodeID)
 	}
 }
 
@@ -186,7 +189,7 @@ func TestHasRenovateConfig_FirstHitWins(t *testing.T) {
 	}
 	c := newFakeClient(t, handlers)
 
-	got, err := c.HasRenovateConfig(context.Background(), platform.Repository{Slug: "o/r", DefaultBranch: testDefaultBranch})
+	got, err := c.HasRenovateConfig(context.Background(), &platform.Repository{Slug: "o/r", DefaultBranch: testDefaultBranch})
 	if err != nil {
 		t.Fatalf("HasRenovateConfig err = %v", err)
 	}
@@ -199,7 +202,7 @@ func TestHasRenovateConfig_AllMissing(t *testing.T) {
 	t.Parallel()
 
 	c := newFakeClient(t, map[string]http.HandlerFunc{})
-	got, err := c.HasRenovateConfig(context.Background(), platform.Repository{Slug: "o/r", DefaultBranch: testDefaultBranch})
+	got, err := c.HasRenovateConfig(context.Background(), &platform.Repository{Slug: "o/r", DefaultBranch: testDefaultBranch})
 	if err != nil {
 		t.Fatalf("HasRenovateConfig err = %v", err)
 	}
@@ -211,7 +214,7 @@ func TestHasRenovateConfig_AllMissing(t *testing.T) {
 func TestHasRenovateConfig_InvalidSlug(t *testing.T) {
 	t.Parallel()
 	c := newFakeClient(t, map[string]http.HandlerFunc{})
-	if _, err := c.HasRenovateConfig(context.Background(), platform.Repository{Slug: "no-slash"}); err == nil {
+	if _, err := c.HasRenovateConfig(context.Background(), &platform.Repository{Slug: "no-slash"}); err == nil {
 		t.Error("expected error on invalid slug")
 	}
 }

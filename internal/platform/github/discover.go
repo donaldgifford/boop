@@ -190,6 +190,8 @@ func anyPatternMatches(fullName string, patterns []string) bool {
 
 func toRepo(r *gogithub.Repository) platform.Repository {
 	return platform.Repository{
+		ID:            r.GetID(),
+		NodeID:        r.GetNodeID(),
 		Slug:          r.GetFullName(),
 		DefaultBranch: r.GetDefaultBranch(),
 		Archived:      r.GetArchived(),

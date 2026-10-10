@@ -281,7 +281,7 @@ OQ11; INV-0001 § Renovate behaviours to reproduce).
 
 #### Tasks
 
-- [ ] 2.1 `Repository` gains `ID int64` and `NodeID string` from the REST
+- [x] 2.1 `Repository` gains `ID int64` and `NodeID string` from the REST
   response (ADR-0002: the numeric id is the workflow ID; the probe needs
   the node id). `toRepo` fills them; the copied tests assert them.
 - [ ] 2.2 An App-level client: `NewAppClient(appID, key, endpoint)` on
