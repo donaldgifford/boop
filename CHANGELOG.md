@@ -39,6 +39,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Mark spike step 4 done and add internal/jobspec to the layout
 - Add IMPL-0001, the spike implementation plan with phases, criteria and open questions
 - *(impl)* Record the IMPL-0001 decisions; config is HCL via hclkit, tests lean on k3d e2e
+- *(impl)* Mark task 4.5 deferred until a scratch repository exists
 
 ### Testing
 
