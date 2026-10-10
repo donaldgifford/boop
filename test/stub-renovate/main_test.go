@@ -58,3 +58,29 @@ func TestConfigFromEnv(t *testing.T) {
 		t.Error("configFromEnv(bad exit code) err = nil")
 	}
 }
+
+func TestLookup_CustomEnvVariables(t *testing.T) {
+	t.Parallel()
+	env := map[string]string{
+		"STUB_EXIT_CODE":  "4",
+		"RENOVATE_CONFIG": `{"extends":["x"],"customEnvVariables":{"STUB_EXIT_CODE":"9","STUB_HANG_AFTER":"6","STUB_DROP_REPORT":"true"}}`,
+	}
+	cfg, err := configFromEnv(lookup(func(k string) string { return env[k] }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.exitCode != 4 || cfg.hangAfter != 6 || !cfg.dropReport {
+		t.Errorf("configFromEnv() = %+v, want the environment first, then customEnvVariables", cfg)
+	}
+}
+
+func TestRun_DropReport(t *testing.T) {
+	t.Parallel()
+	var out strings.Builder
+	if err := run(&config{fixture: "live", hangAfter: -1, dropReport: true}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "Printing report") || !strings.Contains(out.String(), "Repository finished") {
+		t.Errorf("output kept the report or lost the finished line:\n%s", out.String())
+	}
+}

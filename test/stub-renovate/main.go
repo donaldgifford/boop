@@ -57,12 +57,13 @@ type config struct {
 	exitCode    int
 	reportBytes int
 	hangAfter   int
+	dropReport  bool
 	markerDirs  []string
 	slug        string
 }
 
 func main() {
-	cfg, err := configFromEnv(os.Getenv)
+	cfg, err := configFromEnv(lookup(os.Getenv))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "stub-renovate:", err)
 		os.Exit(2)
@@ -72,6 +73,24 @@ func main() {
 		os.Exit(2)
 	}
 	os.Exit(cfg.exitCode)
+}
+
+// lookup reads a knob from the environment, falling back to
+// RENOVATE_CONFIG's customEnvVariables: a boopd profile sets the knobs
+// that way, since the Job's environment is the builder's alone.
+func lookup(getenv func(string) string) func(string) string {
+	var rc struct {
+		CustomEnvVariables map[string]string `json:"customEnvVariables"`
+	}
+	if err := json.Unmarshal([]byte(getenv("RENOVATE_CONFIG")), &rc); err != nil {
+		rc.CustomEnvVariables = nil
+	}
+	return func(k string) string {
+		if v := getenv(k); v != "" {
+			return v
+		}
+		return rc.CustomEnvVariables[k]
+	}
 }
 
 func configFromEnv(getenv func(string) string) (*config, error) {
@@ -96,6 +115,7 @@ func configFromEnv(getenv func(string) string) (*config, error) {
 			}
 		}
 	}
+	cfg.dropReport = getenv("STUB_DROP_REPORT") == "true"
 	if v := getenv("STUB_MARKER_DIRS"); v != "" {
 		cfg.markerDirs = strings.Split(v, ",")
 	}
@@ -124,6 +144,9 @@ func run(cfg *config, out io.Writer) error {
 			hang()
 		}
 		line := sc.Text()
+		if cfg.dropReport && strings.Contains(line, `"msg":"Printing report"`) {
+			continue
+		}
 		if cfg.slug != "" {
 			line = strings.ReplaceAll(line, fixtureSlug, cfg.slug)
 		}

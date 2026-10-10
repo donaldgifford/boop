@@ -524,7 +524,7 @@ stall).
   `boopd_token_revocations_total`).
 - [x] 5.7 `Activities` struct wiring the clients, the `Minter`, the config
   and the registry; `Register` under the `workflows` names.
-- [ ] 5.8 e2e: `RunRenovate` end to end in the k3d harness with the stub
+- [x] 5.8 e2e: `RunRenovate` end to end in the k3d harness with the stub
   image and an in-process `httptest` GitHub (mint, `/rate_limit`, revoke):
   the happy path returns the fixture's `RunResult`; the pending timeout
   deletes the Job and fails `pending`; the soft deadline deletes a hung
