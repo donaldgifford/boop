@@ -440,7 +440,7 @@ and the k3d end-to-end harness every later phase extends (OQ3).
   (OQ10 `c`: the fixture repositories are made by hand). The parser
   tests run over synthetic fixtures in `internal/renovate/testdata`
   until then; its README has the steps.
-- [ ] 4.6 Stub Renovate image, `test/stub-renovate/`: a small static Go
+- [x] 4.6 Stub Renovate image, `test/stub-renovate/`: a small static Go
   binary on a distroless base that replays a fixture log line by line
   with a configurable delay, exit code and report size, can hang on
   request (for the stall and deadline scenarios) and can write marker

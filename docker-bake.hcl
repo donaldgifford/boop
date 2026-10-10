@@ -99,3 +99,17 @@ target "boop-release" {
   ]
   output = ["type=registry"]
 }
+
+// Stub Renovate image for the e2e harness (IMPL-0001 task 4.6). Built
+// locally and in the E2E CI job, imported into k3d, never pushed: it is
+// in no group, so `bake`, `bake ci` and `bake release` never build it.
+variable "STUB_IMAGE" {
+  default = "ghcr.io/donaldgifford/boopd-stub-renovate:dev"
+}
+
+target "stub-renovate" {
+  context    = "."
+  dockerfile = "test/stub-renovate/Dockerfile"
+  tags       = ["${STUB_IMAGE}"]
+  output     = ["type=docker"]
+}
