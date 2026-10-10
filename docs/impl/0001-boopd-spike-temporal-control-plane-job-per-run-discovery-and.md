@@ -379,7 +379,7 @@ Phase 0 moves it.
   types by one constructor, so the chart's config file is the only
   source. `boopd config validate <file>` loads and validates without
   starting anything, for the chart's CI and for operators.
-- [ ] 3.6 Tests: a golden config under `internal/config/testdata`
+- [x] 3.6 Tests: a golden config under `internal/config/testdata`
   matching the design's example; every validation rule with a failing
   case asserting the diagnostic's position; the resolver's table including
   the Python tightening and the unknown case; `examples/boopd.hcl` kept
