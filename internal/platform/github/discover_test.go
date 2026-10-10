@@ -18,6 +18,7 @@ package github_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -326,5 +327,106 @@ func TestDiscover_AppAuth_PaginatesInstallationRepos(t *testing.T) {
 	}
 	if fake.getReposCalls != 2 {
 		t.Errorf("expected 2 /installation/repositories calls, got %d", fake.getReposCalls)
+	}
+}
+
+// TestDiscoverPages_PagesAndFilters drives two pages through DiscoverPages
+// and checks the per-page callback: page numbers, the unfiltered count and
+// the skipForks/skipArchived filter, with no owner set.
+func TestDiscoverPages_PagesAndFilters(t *testing.T) {
+	t.Parallel()
+
+	const instID int64 = 7
+	var srvURL string
+	fake := &installationReposServer{
+		t:              t,
+		installationID: instID,
+		pages: map[string]string{
+			"1": `{"total_count":3,"repositories":[
+  {"id":1,"node_id":"N1","full_name":"o/a","default_branch":"main","owner":{"login":"o"}},
+  {"id":2,"node_id":"N2","full_name":"o/fork","default_branch":"main","fork":true,"owner":{"login":"o"}}
+]}`,
+			"2": `{"total_count":3,"repositories":[
+  {"id":3,"node_id":"N3","full_name":"o/old","default_branch":"main","archived":true,"owner":{"login":"o"}}
+]}`,
+		},
+		getReposNextLink: func(page int) string {
+			if page == 1 {
+				return fmt.Sprintf(`<%s/api/v3/installation/repositories?page=2&per_page=100>; rel="next"`, srvURL)
+			}
+			return ""
+		},
+	}
+	srv := httptest.NewServer(fake.handler())
+	t.Cleanup(srv.Close)
+	srvURL = srv.URL
+
+	var pages []ghclient.Page
+	err := newAppClient(t, srv, instID).DiscoverPages(context.Background(),
+		platform.DiscoveryFilter{SkipForks: true, SkipArchived: true},
+		func(p ghclient.Page) error {
+			pages = append(pages, p)
+			return nil
+		})
+	if err != nil {
+		t.Fatalf("DiscoverPages() err = %v", err)
+	}
+	if len(pages) != 2 {
+		t.Fatalf("DiscoverPages() delivered %d pages, want 2", len(pages))
+	}
+	if pages[0].Number != 1 || pages[0].Seen != 2 || len(pages[0].Repos) != 1 || pages[0].Repos[0].ID != 1 {
+		t.Errorf("page 1 = %+v, want Number 1, Seen 2, only repo 1", pages[0])
+	}
+	if pages[1].Number != 2 || pages[1].Seen != 1 || len(pages[1].Repos) != 0 {
+		t.Errorf("page 2 = %+v, want Number 2, Seen 1, no repos", pages[1])
+	}
+	if fake.getReposCalls != 2 {
+		t.Errorf("server saw %d listing calls, want 2", fake.getReposCalls)
+	}
+}
+
+func TestDiscoverPages_CallbackErrorStops(t *testing.T) {
+	t.Parallel()
+
+	const instID int64 = 8
+	var srvURL string
+	fake := &installationReposServer{
+		t:              t,
+		installationID: instID,
+		pages: map[string]string{
+			"1": `{"repositories":[{"id":1,"full_name":"o/a","owner":{"login":"o"}}]}`,
+			"2": `{"repositories":[{"id":2,"full_name":"o/b","owner":{"login":"o"}}]}`,
+		},
+		getReposNextLink: func(page int) string {
+			if page == 1 {
+				return fmt.Sprintf(`<%s/api/v3/installation/repositories?page=2>; rel="next"`, srvURL)
+			}
+			return ""
+		},
+	}
+	srv := httptest.NewServer(fake.handler())
+	t.Cleanup(srv.Close)
+	srvURL = srv.URL
+
+	stop := errors.New("stop")
+	err := newAppClient(t, srv, instID).DiscoverPages(context.Background(), platform.DiscoveryFilter{},
+		func(ghclient.Page) error { return stop })
+	if !errors.Is(err, stop) {
+		t.Errorf("DiscoverPages() err = %v, want the callback's error", err)
+	}
+	if fake.getReposCalls != 1 {
+		t.Errorf("server saw %d listing calls, want 1 (paging stops)", fake.getReposCalls)
+	}
+}
+
+func TestDiscoverPages_RefusesTokenClient(t *testing.T) {
+	t.Parallel()
+	c, err := ghclient.NewWithToken(ghclient.TokenAuth{Token: "t"})
+	if err != nil {
+		t.Fatalf("NewWithToken: %v", err)
+	}
+	err = c.DiscoverPages(context.Background(), platform.DiscoveryFilter{}, func(ghclient.Page) error { return nil })
+	if err == nil {
+		t.Error("DiscoverPages() on a token client err = nil, want error")
 	}
 }

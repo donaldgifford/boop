@@ -297,7 +297,7 @@ OQ11; INV-0001 § Renovate behaviours to reproduce).
   revokes with `DELETE /installation/token`. Never assume a token length.
   `MintAccessToken` on the installation client stays for discovery's
   own token.
-- [ ] 2.4 Installation-scoped discovery: `Discover` for an installation
+- [x] 2.4 Installation-scoped discovery: `Discover` for an installation
   pages `GET /installation/repositories` (INV-0004: never the owner
   endpoints) with `skipForks` and `skipArchived`, 100 per page, and
   exposes paging so `DiscoverInstallation` can probe and signal per page
