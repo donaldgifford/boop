@@ -36,6 +36,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(activities)* Minter seam and registration under workflow names
 - *(workflows)* DiscoveryWorkflow and the discovery schedules
 - *(workflows)* RepoWorkflow owns one repository
+- *(observability)* Logger, Prometheus exporter, health and budget gauges
 
 ### Documentation
 
