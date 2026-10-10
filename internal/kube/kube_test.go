@@ -3,6 +3,7 @@ package kube_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -181,5 +182,47 @@ func TestRunner_ExitCode_FailureTargetBeatsTheKill(t *testing.T) {
 	got, err := kube.NewRunner(cs, ns).ExitCode(context.Background(), "j")
 	if err != nil || got != (kube.Exit{Code: -1, Reason: "DeadlineExceeded"}) {
 		t.Errorf("ExitCode() = %+v, %v; want DeadlineExceeded over the SIGTERM exit", got, err)
+	}
+}
+
+// TestRunner_Order checks the requests the lifecycle's first three steps
+// send, in order: the Job created suspended, then its Secret, then the
+// patch that unsuspends it.
+func TestRunner_Order(t *testing.T) {
+	t.Parallel()
+	cs := fake.NewClientset()
+	r := kube.NewRunner(cs, ns)
+	ctx := context.Background()
+	created, err := r.CreateSuspended(ctx, job("run-7-0"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	created.UID = "uid-7"
+	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "run-7-0"}}
+	if _, err := r.CreateSecret(ctx, secret); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Unsuspend(ctx, "run-7-0"); err != nil {
+		t.Fatal(err)
+	}
+
+	actions := cs.Actions()
+	got := make([]string, 0, len(actions))
+	for _, a := range actions {
+		got = append(got, a.GetVerb()+" "+a.GetResource().Resource)
+		switch act := a.(type) {
+		case k8stesting.CreateActionImpl:
+			if j, ok := act.GetObject().(*batchv1.Job); ok && (j.Spec.Suspend == nil || !*j.Spec.Suspend) {
+				t.Error("job created without spec.suspend: true")
+			}
+		case k8stesting.PatchActionImpl:
+			if string(act.GetPatch()) != `{"spec":{"suspend":false}}` {
+				t.Errorf("unsuspend patch = %s", act.GetPatch())
+			}
+		}
+	}
+	want := []string{"create jobs", "create secrets", "patch jobs"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("actions = %q, want %q", got, want)
 	}
 }

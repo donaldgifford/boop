@@ -461,7 +461,7 @@ and the k3d end-to-end harness every later phase extends (OQ3).
   `activeDeadlineSeconds` reports `DeadlineExceeded`; a pod that cannot
   schedule (impossible node selector) hits the pending timeout and is
   deleted.
-- [ ] 4.9 Unit tests for what e2e cannot reach cheaply: the follower
+- [x] 4.9 Unit tests for what e2e cannot reach cheaply: the follower
   against an `httptest` log server that drops the stream mid-line and
   replays (dedupe by timestamp); `renovate` golden tests over the
   fixtures, including a truncated report line; the fake clientset for

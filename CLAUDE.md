@@ -120,6 +120,10 @@ internal/activities/      # side effects, registered by name: AcquireBudget
 internal/jobspec/         # Job + env builder for one Renovate run (ported from renovate-operator)
 internal/config/          # HCL config file via hclkit: decode, defaults, validation, secrets, BuildInput
 internal/profiles/        # pure profile resolver: extends + managers -> strictest profile
+internal/kube/            # Job lifecycle Runner: suspended create, Secret, unsuspend, log follow, exit, delete
+internal/renovate/        # log scanner + report parser: progress, Repository finished, update tuples
+test/stub-renovate/       # stub Renovate image for e2e (bake target stub-renovate; never pushed)
+test/e2e/                 # k3d e2e suite, build tag e2e; `just e2e`
 examples/boopd.hcl        # the design's example config; `boop config validate` keeps it loadable
 docs/investigation/       # INV-0001 is the founding document
 charts/boop/   # Helm chart + unittest suites + values.schema.json
