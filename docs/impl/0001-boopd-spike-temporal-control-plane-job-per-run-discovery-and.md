@@ -489,7 +489,7 @@ stall).
 
 #### Tasks
 
-- [ ] 5.1 `ListInstallations`: the App client's list, filtered by the
+- [x] 5.1 `ListInstallations`: the App client's list, filtered by the
   config allowlist, returning ids and `suspended` flags; the workflow
   signals `suspend` to each installation's budget accordingly.
 - [ ] 5.2 `DiscoverInstallation`: one installation per activity; pages
@@ -500,7 +500,7 @@ stall).
   heartbeat's page on retry; reads `/rate_limit` before each page and
   sleeps to the reset while heartbeating if a tracked resource is under
   the reserve; records `boopd_discovery_probe_cost`; returns a summary.
-- [ ] 5.3 `CheckRepo` and `ReadRateLimit`: thin wrappers over Phase 2, the
+- [x] 5.3 `CheckRepo` and `ReadRateLimit`: thin wrappers over Phase 2, the
   latter already named by `InstallationWorkflow`.
 - [ ] 5.4 `RunRenovate`: the twelve steps of the design's flowchart with
   the `RunInput` and `RunResult` types as specified: mint (scoped to the
