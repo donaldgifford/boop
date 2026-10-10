@@ -975,6 +975,12 @@ same version.
   - `boopd_token_mints_total{outcome}` and
     `boopd_token_revocations_total{outcome}`;
   - `boopd_kube_requests_total{verb,resource,code}`.
+- **Runs in flight.** `RepoWorkflow` upserts search attributes
+  (`InstallationID`, `Profile`, `Phase`, `LastOutcome`, `NextDue`) so the
+  Temporal UI and CLI can list and filter running and due repositories
+  without a `boopd` API; `kubectl get jobs -l app.kubernetes.io/name=boopd`
+  shows the same runs from the cluster side. The v1 API reads these and the
+  store (ADR-0006).
 - **Health.** `/healthz` and `/readyz` on `LISTEN_ADDR`. Ready means
   connected to Temporal, the worker started, and the API server answered a
   `SelfSubjectAccessReview` for `create jobs` in the namespace.
@@ -1121,11 +1127,13 @@ until the comparison passes.
 
 ## Open Questions
 
-Each question lists **a**, my recommendation, then alternatives. The body of
-this document assumes **a** everywhere. Mark your choice, or fill in
-*other*.
+Each question lists **a**, my recommendation, then alternatives, and records
+the decision under its heading. The body of this document is written on the
+decided option; where a question is still open, on **a**.
 
 ### OQ1: How does a repository's ecosystem set get learned?
+
+**Decision (2026-10-10): a.**
 
 The profile must be chosen before the Job exists, so the first run cannot
 rely on anything Renovate reports.
@@ -1149,6 +1157,8 @@ rely on anything Renovate reports.
 
 ### OQ2: What scope does the per-run token have?
 
+**Decision (2026-10-10): a.**
+
 GitHub lets the mint call restrict a token with `repository_ids` (up to 500)
 and `permissions`. Lifetime is fixed at one hour; the worker revokes the
 token when the run ends whichever option is chosen.
@@ -1165,6 +1175,8 @@ token when the run ends whichever option is chosen.
 - **other:**
 
 ### OQ3: How does discovery probe for the config file?
+
+**Decision (2026-10-10): a.**
 
 Discovery is the one place `boopd` touches every repository the installation
 can see, so this is the fleet's dominant cost.
@@ -1186,6 +1198,8 @@ can see, so this is the fleet's dominant cost.
 
 ### OQ4: What is the cadence model and its defaults?
 
+**Decision (2026-10-10): a.**
+
 - **a (recommended): fixed per-repository cadence with deterministic
   jitter**, `cadence: 24h`, `discovery.every: 6h`, absence after three
   missed passes (18 h). Simple, predictable, and the budget data from the
@@ -1199,6 +1213,8 @@ can see, so this is the fleet's dominant cost.
 - **other:**
 
 ### OQ5: How are GitHub's secondary limits handled?
+
+**Decision (2026-10-10): a.**
 
 `/rate_limit` shows none of them. The binding one for a fleet is 500
 content-creating requests per hour per installation (and 80 per minute).
@@ -1219,6 +1235,8 @@ content-creating requests per hour per installation (and 80 per minute).
 
 ### OQ6: What are the default spend estimates before the EWMA has samples?
 
+**Decision (2026-10-10): a.**
+
 Renovate's GitHub lookups use GraphQL heavily and GraphQL's budget is the
 smaller one, so it may bind first.
 
@@ -1230,6 +1248,8 @@ smaller one, so it may bind first.
 - **other:**
 
 ### OQ7: Redis and pod sizing?
+
+**Decision (2026-10-10): a.**
 
 - **a (recommended): one Redis per `boopd` install, shared by all
   installations**, with `AUTH`, `maxmemory` and `allkeys-lru`, and a Redis
@@ -1245,26 +1265,52 @@ smaller one, so it may bind first.
 
 ### OQ8: How does the report leave the pod?
 
+**Open.** Everything else is decided; this one is pending confirmation.
+
 With a Job there is no shared filesystem between the pod and the worker.
 `reportType` is marked experimental by Renovate, and the report drops
-`manager` from upgrades already.
+`manager` from upgrades already. Two things are easy to conflate here and
+should not be:
 
-- **a (recommended): `reportType: logging`, parsed from the pod log**, with
-  a fixture per Renovate minor, defensive parsing, and reconstruction from
-  the branch and PR events when the line is missing or truncated. One
-  stream carries progress and the report; no extra container. The Renovate
-  version is in every `RunResult`, so a parser mismatch is attributable.
-- **b: a sidecar in the Job pod** (the distroless `boopd` image) that waits
-  for `report.json` on a shared `emptyDir` and posts it to a results
-  endpoint. Bounded by nothing but the endpoint, but the endpoint does not
-  exist until the API (ADR-0006), and the sidecar needs a credential to
-  post with.
+- **The report** is one JSON object Renovate emits once, at the end of a
+  run. Getting it from the pod to the worker is this question.
+- **Visibility of runs in flight** (which repositories are running, their
+  status, progress) does not come from the pod at all. It lives in
+  Temporal, in `RepoWorkflow`'s state and `RunRenovate`'s heartbeats, and
+  in the Job objects' labels. The Temporal UI shows it in the spike; the v1
+  API and UI read Temporal and the store (ADR-0006). The store is written
+  by activities in the worker, never by Jobs, so no pod needs to call
+  anything for a UI to exist.
+
+- **a (recommended): `reportType: logging`, parsed from the pod log.**
+  Renovate's log is already structured JSON, and the `Printing report` line
+  *is* the report in a specific structure; the worker is reading the stream
+  anyway for progress. A fixture per Renovate minor pins the shape,
+  parsing is defensive, and tuples are reconstructed from the branch and
+  PR events when the line is missing or truncated. No second container, no
+  credential in the pod, no endpoint, nothing to deploy before the first
+  run. The Renovate version is in every `RunResult`, so a parser mismatch
+  is attributable. In v1 the same `RunResult` is what the worker writes to
+  the store.
+- **b: a results API on `boopd` that the Job calls.** Renovate cannot call
+  anything itself, so this needs a sidecar in the Job pod (the distroless
+  `boopd` image) that waits for `report.json` on a shared `emptyDir` and
+  posts it with a per-run bearer token from the same Secret; the API then
+  completes the activity asynchronously with its task token. It is the
+  right shape if the log line ever proves fragile, and the change is
+  contained inside `RunRenovate`. It costs the API role, auth and TLS
+  before the spike can run, a second container, a credential inside the
+  pod again, an egress allowance per profile, and a second path for data
+  the worker already has. It buys no visibility that Temporal does not
+  already provide.
 - **c: a sidecar that writes the report into a ConfigMap** owned by the Job.
   No endpoint needed; needs a service account token in the sidecar
   container and is capped at 1 MiB.
 - **other:**
 
 ### OQ9: What does the Python profile enforce?
+
+**Decision (2026-10-10): a.**
 
 Python is the one ecosystem in the fleet whose lockfile tools run
 third-party code (ADR-0009 § Context).
@@ -1285,6 +1331,8 @@ third-party code (ADR-0009 § Context).
 
 ### OQ10: Timeouts and limits
 
+**Decision (2026-10-10): a.**
+
 All of these are starting points for the spike to adjust.
 
 - **a (recommended):** `ScheduleToStart` 5 min, `StartToClose` 58 min, soft
@@ -1298,6 +1346,8 @@ All of these are starting points for the spike to adjust.
 - **other:**
 
 ### OQ11: Where does the App private key live?
+
+**Decision (2026-10-10): a.**
 
 Today the key is a Kubernetes Secret mounted in the worker. OpenBao could
 hold it instead and sign the App JWT without releasing it (Transit engine,
@@ -1323,6 +1373,8 @@ and the worker does it itself.
 - **other:**
 
 ### OQ12: How is cluster capacity capped?
+
+**Decision (2026-10-10): a.**
 
 Per-installation admission caps GitHub spend, not cluster load. With a Job
 per run, every admitted lease is a pod.
