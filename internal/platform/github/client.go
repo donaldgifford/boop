@@ -151,6 +151,16 @@ type Client struct {
 	staticToken string
 }
 
+// SetDiscoveredLimit re-tunes a live client's limiter from the
+// installation's discovered core limit (DiscoveredRate); a non-positive
+// limit changes nothing. Safe for concurrent use.
+func (c *Client) SetDiscoveredLimit(limit int) {
+	if r, burst, ok := DiscoveredRate(limit); ok {
+		c.limiter.SetLimit(r)
+		c.limiter.SetBurst(burst)
+	}
+}
+
 // NewWithApp constructs a Client backed by GitHub App installation auth.
 func NewWithApp(auth AppAuth, opts ...ClientOption) (*Client, error) {
 	if auth.AppID == 0 || auth.InstallationID == 0 {

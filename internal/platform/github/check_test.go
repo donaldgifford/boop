@@ -112,3 +112,22 @@ func TestRepoState_String(t *testing.T) {
 		}
 	}
 }
+
+func TestRepoIDBySlug(t *testing.T) {
+	t.Parallel()
+	c := newFakeClient(t, map[string]http.HandlerFunc{
+		"GET /api/v3/repos/boop-bot/renovate-config": func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"id":4242,"full_name":"boop-bot/renovate-config"}`))
+		},
+	})
+	id, err := c.RepoIDBySlug(context.Background(), "boop-bot/renovate-config")
+	if err != nil || id != 4242 {
+		t.Errorf("RepoIDBySlug() = %d, %v; want 4242", id, err)
+	}
+	if _, err := c.RepoIDBySlug(context.Background(), "boop-bot/missing"); !errors.Is(err, platform.ErrNotFound) {
+		t.Errorf("RepoIDBySlug(missing) err = %v, want ErrNotFound", err)
+	}
+	if _, err := c.RepoIDBySlug(context.Background(), "noslash"); err == nil {
+		t.Error("RepoIDBySlug(noslash) err = nil")
+	}
+}

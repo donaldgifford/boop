@@ -19,6 +19,7 @@ package github
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/donaldgifford/boop/internal/platform"
 )
@@ -64,4 +65,21 @@ func (c *Client) CheckRepo(ctx context.Context, repoID int64) (platform.RepoStat
 		return platform.RepoNoConfig, &repo, nil
 	}
 	return platform.RepoPresent, &repo, nil
+}
+
+// RepoIDBySlug returns the numeric id of owner/name, for the shared-preset
+// repository a run's token is scoped to (DESIGN-0001 OQ2).
+func (c *Client) RepoIDBySlug(ctx context.Context, slug string) (int64, error) {
+	owner, name, ok := splitSlug(slug)
+	if !ok {
+		return 0, fmt.Errorf("github: invalid slug %q", slug)
+	}
+	if err := c.wait(ctx); err != nil {
+		return 0, err
+	}
+	r, resp, err := c.gh.Repositories.Get(ctx, owner, name)
+	if err != nil {
+		return 0, classifyErr(resp, err)
+	}
+	return r.GetID(), nil
 }

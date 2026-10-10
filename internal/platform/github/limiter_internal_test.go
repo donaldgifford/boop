@@ -36,3 +36,19 @@ func TestWithDiscoveredLimit(t *testing.T) {
 		})
 	}
 }
+
+func TestSetDiscoveredLimit(t *testing.T) {
+	t.Parallel()
+	c, err := NewWithToken(TokenAuth{Token: "t"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.SetDiscoveredLimit(0)
+	if c.limiter.Limit() != defaultRateLimit {
+		t.Errorf("SetDiscoveredLimit(0) rate = %v, want the default", c.limiter.Limit())
+	}
+	c.SetDiscoveredLimit(7200)
+	if c.limiter.Limit() != 2 || c.limiter.Burst() != 10 {
+		t.Errorf("SetDiscoveredLimit(7200) = %v/%d, want 2/10", c.limiter.Limit(), c.limiter.Burst())
+	}
+}
