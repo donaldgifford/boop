@@ -21,6 +21,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(config)* Apply defaults and validate every rule with positions
 - *(config)* Read secret-backed values from mounted files
 - *(profiles)* Resolve a repository's profile from extends and managers
+- *(config)* Build jobspec inputs from config and add config validate
 
 ### Documentation
 
