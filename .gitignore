@@ -63,3 +63,6 @@ site/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Local k3d-install values and keys (helm.just)
+dev/

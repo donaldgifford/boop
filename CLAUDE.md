@@ -81,10 +81,23 @@ Check tasks off there as they land. The summary below tracks INV-0001
    runs itself, tracks `core` and `graphql`, counts open leases against
    the per-resource EWMA, caps concurrent runs and honours a
    secondary-limit `retryAt` (DESIGN-0001 § InstallationWorkflow).
-6. `RunRenovate`, `RepoWorkflow`, `DiscoveryWorkflow`, `cmd/boopd worker`
-   — next.
-7. Chart (Role, profiles, PodSecurity labels) and homelab deploy. No
-   custom Renovate image; Jobs run the upstream one.
+6. Activities — done (IMPL-0001 Phase 5): `ListInstallations`,
+   `DiscoverInstallation`, `CheckRepo`, `ReadRateLimit`, `RunRenovate`
+   with classification, run metrics; e2e in k3d against
+   `test/fakegithub`. Workflows and the worker role — done (Phase 6):
+   `RepoWorkflow` (convergence table, absence check, ContinueAsNew),
+   `DiscoveryWorkflow` on per-App schedules, search attributes,
+   `internal/observability` (slog, Prometheus exporter, health) and
+   `boopd worker`, with the worker e2e.
+7. Chart — done (IMPL-0001 Phase 7): `charts/boopd` runs the worker
+   (two replicas, grace period above StartToClose), renders `boopd.hcl`
+   from `.Values.boopd` into a ConfigMap, a Role with the design's verbs
+   (plus `patch` on jobs to unsuspend), worker-only credential mounts,
+   the Temporal block from repo-guardian, optional restricted namespace,
+   runs quota and egress NetworkPolicies, and a local `redis` subchart.
+   The chart e2e is the CI gate. No custom Renovate image; Jobs run the
+   upstream one. Deferred to a human: the `just k3d-install` run against
+   a scratch repository (7.9) and the homelab deploy (7.10).
 8. Run the success criteria; record results in a new investigation.
 
 Sibling checkouts used as sources: `~/code/renovate-operator`,
@@ -101,25 +114,36 @@ gains RBAC and profiles in step 7.
 The container image and the chart are published together as OCI
 artifacts on every release.
 
-- Service entrypoint under `cmd/boop/`; library code under
+- Service entrypoint under `cmd/boopd/`; library code under
   `internal/` (private to the module).
 - Built into a distroless container via `docker buildx bake`
   (`docker-bake.hcl` defines the local / ci / release targets).
-- Helm chart in `charts/boop/` with helm-unittest suites in
+- Helm chart in `charts/boopd/` with helm-unittest suites in
   `tests/` — the chart is the deployment contract, not an afterthought.
 
 ## Layout
 
 ```text
-cmd/boop/      # main package — keep thin, call into internal/
+cmd/boopd/                # main package: `boopd worker`, `boopd config validate`
 internal/                 # library code; not importable outside this module
 internal/platform/        # GitHub discovery, config probe, token minting
 internal/temporal/        # Temporal client config, worker, versioning, schedules
 internal/workflows/       # deterministic workflow code; InstallationWorkflow budget entity
-internal/activities/      # side effects, registered by name: AcquireBudget
+internal/activities/      # side effects, registered by name: discovery, CheckRepo, ReadRateLimit, AcquireBudget, RunRenovate
+internal/observability/   # slog logger, OTel meter provider + Prometheus exporter, boopd metric set, /healthz and /readyz
+internal/worker/          # worker role: search attributes, register, start, promote, schedules, readiness, graceful stop
 internal/jobspec/         # Job + env builder for one Renovate run (ported from renovate-operator)
+internal/config/          # HCL config file via hclkit: decode, defaults, validation, secrets, BuildInput
+internal/profiles/        # pure profile resolver: extends + managers -> strictest profile
+internal/kube/            # Job lifecycle Runner: suspended create, Secret, unsuspend, log follow, exit, delete
+internal/renovate/        # log scanner + report parser: progress, Repository finished, update tuples
+test/stub-renovate/       # stub Renovate image for e2e (bake target stub-renovate; never pushed)
+test/stub-github/         # test/fakegithub over TLS as an image for the chart e2e (bake target stub-github; never pushed)
+test/e2e/                 # k3d e2e suite, build tag e2e; `just e2e`
+test/fakegithub/          # in-process GitHub (App, mint/revoke, paging, probes, /rate_limit) for tests
+examples/boopd.hcl        # the design's example config; `boopd config validate` keeps it loadable
 docs/investigation/       # INV-0001 is the founding document
-charts/boop/   # Helm chart + unittest suites + values.schema.json
+charts/boopd/             # Helm chart + unittest suites + values.schema.json; charts/redis is the cache subchart
 Dockerfile                # multi-stage distroless build (VERSION/COMMIT/DATE args)
 docker-bake.hcl           # bake targets: default (local), ci, release
 justfile                  # task runner; imports docker.just + helm.just
@@ -130,7 +154,13 @@ mise.toml                 # pinned toolchain: go, golangci-lint, helm, ct, k3d, 
 ## Workflows
 
 - `just check` — lint + test (pre-commit gate)
-- `just build` — binary into `build/bin/boop`
+- `just e2e` — create the k3d cluster, build and import the boopd,
+  stub Renovate and stub GitHub images, run `go test -tags e2e
+  ./test/e2e/...` against it (`just e2e-down` deletes the cluster). The
+  chart e2e (`TestChart_*`) helm-installs `charts/boopd` with the stubs
+  and a host dev server; CI's "E2E Tests" job does the same and is the
+  chart gate
+- `just build` — binary into `build/bin/boopd`
 - `just docker-build` — host-native image via bake
 - `just helm-test` — chart lint (helm + ct) and helm-unittest suites
 - `just helm-docs` — regenerate the chart README from README.md.gotmpl
@@ -144,6 +174,12 @@ The chart manages the container environment — the service must honor:
 
 - `LISTEN_ADDR` / `METRICS_ADDR` / `LOG_LEVEL` (from `config.*` values)
   and `POD_NAME` (injected from the pod spec).
+- `TEMPORAL_*` from the `temporal.*` values (address, namespace, task
+  queue, build ID, mTLS/CA/OIDC paths under `/etc/boopd/temporal-*`).
+- `worker --config /etc/boopd/boopd.hcl`: the file is rendered from
+  `.Values.boopd`; the Secrets it names are mounted at
+  `<secretsDir>/<name>/<key>`. `just helm-test` and CI run
+  `boopd config validate` on the rendered file.
 - `configMap.data` / `secrets.stringData` arrive via `envFrom`;
   `extraEnv` appends raw entries. Colliding with the chart-managed
   names fails the render (`validateEnvCollisions` helper).
@@ -171,7 +207,7 @@ Do NOT push tags by hand — the release train owns them.
 ## Conventions
 
 - Conventional Commits; changelogs are git-cliff-generated (root
-  `cliff.toml` for the repo, `charts/boop/cliff.toml` for
+  `cliff.toml` for the repo, `charts/boopd/cliff.toml` for
   the chart-only changelog).
 - Lint gates: `golangci-lint` (config in `.golangci.yml`), `yamllint`,
   `markdownlint-cli2`, `actionlint`. Run `just --list` for the menu.

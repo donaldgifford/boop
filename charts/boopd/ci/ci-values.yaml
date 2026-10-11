@@ -1,0 +1,45 @@
+---
+# Values for chart-testing (`ct install`) and the local k3d loop. The
+# real image may not be published yet when CI installs the chart, so run
+# a busybox stand-in and disable the HTTP probes.
+image:
+  repository: busybox
+  tag: latest
+
+# Exit on SIGTERM: the worker's grace period is an hour.
+command:
+  - sh
+  - -c
+  - trap "exit 0" TERM; sleep 900 & wait
+args: []
+
+livenessProbe: null
+readinessProbe: null
+
+resources: {}
+
+boopd:
+  profileRules:
+    - extends: ["github>boop-bot/renovate-config:python"]
+      managers: [pip_requirements, poetry]
+      profile: python
+  apps:
+    boop-bot:
+      appId: 123456
+      installations: [42]
+      cadence: 24h
+      privateKeySecretRef: {name: boop-bot-app, key: private-key.pem}
+      discovery: {every: 6h, probe: graphql, skipForks: true, skipArchived: false}
+      budget: {reserveFraction: 0.1, maxConcurrentRuns: 10, defaultEstimate: {core: 300, graphql: 150}}
+
+temporal:
+  address: temporal-frontend:7233
+
+# The App key Secret the config names; ct installs into a bare cluster.
+extraObjects:
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: boop-bot-app
+    stringData:
+      private-key.pem: not-a-key

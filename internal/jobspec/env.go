@@ -154,13 +154,13 @@ func endpointFor(endpoint string) string {
 // overrides and the run's dryRun, then prepends the shared preset to
 // extends. Later entries win. Returns "" when there is nothing to pass.
 func renovateConfig(in *BuildInput) (string, error) {
-	if err := validatePreset(in.App.SharedPreset); err != nil {
+	if err := ValidatePreset(in.App.SharedPreset); err != nil {
 		return "", err
 	}
-	if err := validateOptions("global", in.App.Global); err != nil {
+	if err := ValidateOptions("global", in.App.Global); err != nil {
 		return "", err
 	}
-	if err := validateOptions("profile "+in.Profile.Name, in.Profile.Renovate); err != nil {
+	if err := ValidateOptions("profile "+in.Profile.Name, in.Profile.Renovate); err != nil {
 		return "", err
 	}
 
@@ -188,10 +188,11 @@ func renovateConfig(in *BuildInput) (string, error) {
 	return string(out), nil
 }
 
-// validatePreset enforces the .json rule for GitHub-hosted presets: Renovate
+// ValidatePreset enforces the .json rule for GitHub-hosted presets: Renovate
 // fetches "github>owner/repo:file" as file.json, and a .json5 name fails at
-// run time with a misleading "preset not found".
-func validatePreset(preset string) error {
+// run time with a misleading "preset not found". The config package calls
+// it at load time; BuildEnv calls it again at build time.
+func ValidatePreset(preset string) error {
 	if preset == "" {
 		return nil
 	}
@@ -212,9 +213,11 @@ func validatePreset(preset string) error {
 	return nil
 }
 
-// validateOptions rejects options the builder owns or Renovate's script and
-// env controls, and checks the shape of customEnvVariables.
-func validateOptions(where string, opts map[string]any) error {
+// ValidateOptions rejects options the builder owns or Renovate's script and
+// env controls, and checks the shape of customEnvVariables. where names
+// the options' origin in the error ("global", "profile python"). The
+// config package calls it at load time; BuildEnv calls it again.
+func ValidateOptions(where string, opts map[string]any) error {
 	for _, key := range forbiddenOptions {
 		if _, ok := opts[key]; ok {
 			return fmt.Errorf("%w: %s.%s", ErrForbiddenOption, where, key)

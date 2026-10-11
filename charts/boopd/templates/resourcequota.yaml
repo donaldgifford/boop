@@ -1,0 +1,26 @@
+{{- if .Values.resourceQuota.enabled -}}
+{{- $ns := .Values.boopd.runs.namespace | default .Release.Namespace -}}
+{{- $pods := int .Values.boopd.runs.maxConcurrent -}}
+{{- if not $pods -}}
+{{- fail "resourceQuota.enabled needs boopd.runs.maxConcurrent > 0: the quota is sized from it" -}}
+{{- end -}}
+{{- if eq $ns .Release.Namespace -}}
+{{- $pods = add $pods .Values.replicaCount -}}
+{{- end -}}
+# A cluster-side backstop for runs.max_concurrent (IMPL-0001 OQ12): Job
+# pods beyond the cap are refused at admission, not left Pending. Worker
+# replicas count against it when they share the namespace.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ include "boopd.fullname" . }}-runs
+  namespace: {{ $ns }}
+  labels:
+    {{- include "boopd.labels" . | nindent 4 }}
+spec:
+  hard:
+    pods: {{ $pods | quote }}
+    {{- with .Values.resourceQuota.hard }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

@@ -25,23 +25,10 @@ import (
 	"github.com/donaldgifford/boop/internal/platform"
 )
 
-func TestConfigPaths_OrderAndCoverage(t *testing.T) {
+func TestDefaultConfigPath(t *testing.T) {
 	t.Parallel()
-
-	want := []string{
-		"renovate.json",
-		".renovaterc",
-		".renovaterc.json",
-		".github/renovate.json",
-		".gitlab/renovate.json",
-	}
-	if len(platform.ConfigPaths) != len(want) {
-		t.Fatalf("ConfigPaths len = %d, want %d", len(platform.ConfigPaths), len(want))
-	}
-	for i, p := range platform.ConfigPaths {
-		if p != want[i] {
-			t.Errorf("ConfigPaths[%d] = %q, want %q", i, p, want[i])
-		}
+	if platform.DefaultConfigPath != "renovate.json" {
+		t.Errorf("DefaultConfigPath = %q, want renovate.json", platform.DefaultConfigPath)
 	}
 }
 

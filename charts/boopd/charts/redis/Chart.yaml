@@ -1,0 +1,7 @@
+---
+apiVersion: v2
+name: redis
+description: Renovate's datasource cache for boopd (IMPL-0001 OQ7)
+type: application
+version: 0.0.0-dev
+appVersion: "8.2"

@@ -19,6 +19,7 @@ version: "2"
 
 run:
   timeout: 5m
+  build-tags: [integration, e2e]  # lint the tagged test files too
   tests: true
   relative-path-mode: wd
   allow-parallel-runners: true

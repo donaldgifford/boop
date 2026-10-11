@@ -56,3 +56,60 @@ func rateLimitOptions(ctx workflow.Context, installationID int64) workflow.Conte
 		Priority: TaskPriority(PriorityNormal, installationID),
 	})
 }
+
+// RunRenovate options (DESIGN-0001 § RunRenovate activity, OQ10). The
+// workflow decides every retry, so the activity runs once.
+const (
+	RunScheduleToStart = 5 * time.Minute
+	RunStartToClose    = 58 * time.Minute
+	RunHeartbeat       = time.Minute
+)
+
+// runOptions runs RunRenovate at priority p.
+func runOptions(ctx workflow.Context, p Priority, installationID int64) workflow.Context {
+	return workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		ScheduleToStartTimeout: RunScheduleToStart,
+		StartToCloseTimeout:    RunStartToClose,
+		HeartbeatTimeout:       RunHeartbeat,
+		RetryPolicy:            &temporal.RetryPolicy{MaximumAttempts: 1},
+		Priority:               TaskPriority(p, installationID),
+	})
+}
+
+// shortOptions run the quick activities (PlanRun, CheckRepo,
+// AcquireBudget, ListInstallations): a few retries, then the workflow
+// decides.
+func shortOptions(ctx workflow.Context, p Priority, installationID int64) workflow.Context {
+	return workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    5 * time.Second,
+			BackoffCoefficient: 2,
+			MaximumInterval:    time.Minute,
+			MaximumAttempts:    5,
+		},
+		Priority: TaskPriority(p, installationID),
+	})
+}
+
+// DiscoverInstallation options. A pass over a large installation can
+// sleep to a rate-limit reset; it heartbeats every page and every
+// reserve tick, and a retry resumes from the last heartbeat's page.
+const (
+	DiscoverStartToClose = 3 * time.Hour
+	DiscoverHeartbeat    = 2 * time.Minute
+	discoverMaxAttempts  = 3
+)
+
+func discoverOptions(ctx workflow.Context, installationID int64) workflow.Context {
+	return workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: DiscoverStartToClose,
+		HeartbeatTimeout:    DiscoverHeartbeat,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    30 * time.Second,
+			BackoffCoefficient: 2,
+			MaximumAttempts:    discoverMaxAttempts,
+		},
+		Priority: TaskPriority(PriorityNormal, installationID),
+	})
+}

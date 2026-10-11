@@ -75,7 +75,7 @@ func TestDiscover_HappyPath_PaginatedOrg(t *testing.T) {
 	t.Parallel()
 
 	page1 := strings.NewReplacer("__NEXT__", "1").Replace(`[
-  {"id":1,"name":"a","full_name":"o/a","default_branch":"main","fork":false,"archived":false,"topics":["go"]},
+  {"id":1,"node_id":"R_kgDOa","name":"a","full_name":"o/a","default_branch":"main","fork":false,"archived":false,"topics":["go"]},
   {"id":2,"name":"b","full_name":"o/b","default_branch":"main","fork":true,"archived":false,"topics":[]}
 ]`)
 	page2 := `[{"id":3,"name":"c","full_name":"o/c","default_branch":"main","fork":false,"archived":true,"topics":[]}]`
@@ -107,6 +107,9 @@ func TestDiscover_HappyPath_PaginatedOrg(t *testing.T) {
 	}
 	if got[0].DefaultBranch != testDefaultBranch || len(got[0].Topics) != 1 || got[0].Topics[0] != "go" {
 		t.Errorf("repo metadata not propagated: %+v", got[0])
+	}
+	if got[0].ID != 1 || got[0].NodeID != "R_kgDOa" {
+		t.Errorf("Discover()[0] = {ID:%d NodeID:%q}, want {ID:1 NodeID:\"R_kgDOa\"}", got[0].ID, got[0].NodeID)
 	}
 }
 
@@ -169,29 +172,51 @@ func TestDiscover_TopicAndPatternFilter(t *testing.T) {
 	}
 }
 
-func TestHasRenovateConfig_FirstHitWins(t *testing.T) {
+func TestHasRenovateConfig_ConfiguredPathOnly(t *testing.T) {
 	t.Parallel()
 
-	handlers := map[string]http.HandlerFunc{
-		// renovate.json 404, .renovaterc 404, .renovaterc.json hits.
-		"GET /api/v3/repos/o/r/contents/renovate.json": func(w http.ResponseWriter, _ *http.Request) {
-			http.Error(w, "Not Found", http.StatusNotFound)
+	found := func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"name":"renovate.json","type":"file","content":"e30K","encoding":"base64"}`))
+	}
+	tests := []struct {
+		name string
+		opts []ghclient.ClientOption
+		have string
+		want bool
+	}{
+		{name: "default path present", have: "renovate.json", want: true},
+		{name: "only another path present", have: ".renovaterc", want: false},
+		{
+			name: "configured path present",
+			opts: []ghclient.ClientOption{ghclient.WithConfigPath(".github/renovate.json")},
+			have: ".github/renovate.json", want: true,
 		},
-		"GET /api/v3/repos/o/r/contents/.renovaterc": func(w http.ResponseWriter, _ *http.Request) {
-			http.Error(w, "Not Found", http.StatusNotFound)
-		},
-		"GET /api/v3/repos/o/r/contents/.renovaterc.json": func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte(`{"name":".renovaterc.json","type":"file","content":"e30K","encoding":"base64"}`))
+		{
+			name: "configured path absent, default present",
+			opts: []ghclient.ClientOption{ghclient.WithConfigPath(".github/renovate.json")},
+			have: "renovate.json", want: false,
 		},
 	}
-	c := newFakeClient(t, handlers)
-
-	got, err := c.HasRenovateConfig(context.Background(), platform.Repository{Slug: "o/r", DefaultBranch: testDefaultBranch})
-	if err != nil {
-		t.Fatalf("HasRenovateConfig err = %v", err)
-	}
-	if !got {
-		t.Error("expected true; .renovaterc.json should match")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(&fakeServer{t: t, handlers: map[string]http.HandlerFunc{
+				"GET /api/v3/repos/o/r/contents/" + tt.have: found,
+			}})
+			t.Cleanup(srv.Close)
+			opts := append([]ghclient.ClientOption{ghclient.WithRateLimit(rate.Inf, 1)}, tt.opts...)
+			c, err := ghclient.NewWithToken(ghclient.TokenAuth{Token: "t", BaseURL: srv.URL + "/"}, opts...)
+			if err != nil {
+				t.Fatalf("NewWithToken: %v", err)
+			}
+			got, err := c.HasRenovateConfig(context.Background(), &platform.Repository{Slug: "o/r", DefaultBranch: testDefaultBranch})
+			if err != nil {
+				t.Fatalf("HasRenovateConfig() err = %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("HasRenovateConfig() with %s present = %v, want %v", tt.have, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -199,7 +224,7 @@ func TestHasRenovateConfig_AllMissing(t *testing.T) {
 	t.Parallel()
 
 	c := newFakeClient(t, map[string]http.HandlerFunc{})
-	got, err := c.HasRenovateConfig(context.Background(), platform.Repository{Slug: "o/r", DefaultBranch: testDefaultBranch})
+	got, err := c.HasRenovateConfig(context.Background(), &platform.Repository{Slug: "o/r", DefaultBranch: testDefaultBranch})
 	if err != nil {
 		t.Fatalf("HasRenovateConfig err = %v", err)
 	}
@@ -211,7 +236,7 @@ func TestHasRenovateConfig_AllMissing(t *testing.T) {
 func TestHasRenovateConfig_InvalidSlug(t *testing.T) {
 	t.Parallel()
 	c := newFakeClient(t, map[string]http.HandlerFunc{})
-	if _, err := c.HasRenovateConfig(context.Background(), platform.Repository{Slug: "no-slash"}); err == nil {
+	if _, err := c.HasRenovateConfig(context.Background(), &platform.Repository{Slug: "no-slash"}); err == nil {
 		t.Error("expected error on invalid slug")
 	}
 }

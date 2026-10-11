@@ -1,0 +1,622 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "boopd Helm chart values",
+  "description": "Subset of values.yaml that is enforced at `helm install`/`helm upgrade` time. Unknown keys are accepted (no additionalProperties: false) — removed knobs are caught by the validateRemovedValues template guard instead.",
+  "type": "object",
+  "properties": {
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "revisionHistoryLimit": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "terminationGracePeriodSeconds": {
+      "type": "integer",
+      "minimum": 3481,
+      "description": "Must exceed the RunRenovate StartToClose (58m = 3480s)."
+    },
+    "args": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        },
+        "tag": {
+          "type": "string"
+        }
+      }
+    },
+    "config": {
+      "type": "object",
+      "properties": {
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "metricsPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "logLevel": {
+          "type": "string",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ]
+        }
+      }
+    },
+    "configMap": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "existingConfigMap": {
+          "type": "string"
+        }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "create": {
+          "type": "boolean"
+        },
+        "stringData": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "existingSecret": {
+          "type": "string"
+        }
+      }
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "ClusterIP",
+            "NodePort",
+            "LoadBalancer"
+          ]
+        },
+        "httpPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "metricsPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      }
+    },
+    "serviceMonitor": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "interval": {
+          "type": "string"
+        }
+      }
+    },
+    "prometheusRule": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "alerts": {
+          "type": "object",
+          "properties": {
+            "replicasUnavailable": {
+              "$ref": "#/$defs/alertOverride"
+            },
+            "containerRestarting": {
+              "$ref": "#/$defs/alertOverride"
+            }
+          }
+        }
+      }
+    },
+    "boopd": {
+      "type": "object",
+      "description": "boopd.hcl, rendered into the config ConfigMap (mirrors internal/config).",
+      "required": [
+        "secretsDir",
+        "renovate",
+        "runs",
+        "order",
+        "defaultProfile",
+        "unknownProfile"
+      ],
+      "properties": {
+        "secretsDir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "renovate": {
+          "type": "object",
+          "required": [
+            "image"
+          ],
+          "properties": {
+            "image": {
+              "type": "string",
+              "pattern": "@sha256:[0-9a-f]{64}$"
+            },
+            "configPath": {
+              "type": "string"
+            },
+            "sharedPreset": {
+              "type": "string"
+            },
+            "logLevel": {
+              "type": "string",
+              "enum": [
+                "",
+                "trace",
+                "debug",
+                "info",
+                "warn",
+                "error",
+                "fatal"
+              ]
+            },
+            "dryRun": {
+              "type": "string",
+              "enum": [
+                "",
+                "extract",
+                "lookup",
+                "full"
+              ]
+            },
+            "gitAuthor": {
+              "type": "string"
+            },
+            "global": {
+              "type": "object"
+            },
+            "redisSecretRef": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "maxProperties": 0
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "key"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "key": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "runs": {
+          "type": "object",
+          "properties": {
+            "namespace": {
+              "type": "string"
+            },
+            "pendingTimeout": {
+              "type": "string",
+              "pattern": "^$|^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+            },
+            "maxConcurrent": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "profiles": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "inherit": {
+                "type": "string"
+              },
+              "pod": {
+                "type": "object",
+                "properties": {
+                  "runtimeClassName": {
+                    "type": "string"
+                  },
+                  "labels": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "annotations": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "nodeSelector": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "terminationGracePeriodSeconds": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "workSizeLimit": {
+                    "type": "string"
+                  },
+                  "resources": {
+                    "type": "object",
+                    "properties": {
+                      "requests": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      },
+                      "limits": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "tolerations": {
+                    "type": "array",
+                    "items": {
+                      "type": "object"
+                    }
+                  }
+                }
+              },
+              "renovate": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "order": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "defaultProfile": {
+          "type": "string",
+          "minLength": 1
+        },
+        "unknownProfile": {
+          "type": "string",
+          "minLength": 1
+        },
+        "profileRules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "profile"
+            ],
+            "properties": {
+              "extends": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "managers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "profile": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "apps": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "appId",
+              "privateKeySecretRef"
+            ],
+            "properties": {
+              "endpoint": {
+                "type": "string",
+                "pattern": "^https://"
+              },
+              "appId": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "installations": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "cadence": {
+                "type": "string",
+                "pattern": "^$|^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+              },
+              "privateKeySecretRef": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "key"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "key": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "discovery": {
+                "type": "object",
+                "properties": {
+                  "every": {
+                    "type": "string",
+                    "pattern": "^$|^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+                  },
+                  "probe": {
+                    "type": "string",
+                    "enum": [
+                      "graphql",
+                      "rest"
+                    ]
+                  },
+                  "skipForks": {
+                    "type": "boolean"
+                  },
+                  "skipArchived": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "budget": {
+                "type": "object",
+                "properties": {
+                  "reserveFraction": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 0.5
+                  },
+                  "maxConcurrentRuns": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "defaultEstimate": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "rbac": {
+      "type": "object",
+      "properties": {
+        "create": {
+          "type": "boolean"
+        }
+      }
+    },
+    "temporal": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string",
+          "minLength": 1
+        },
+        "taskQueue": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tls": {
+          "type": "object",
+          "properties": {
+            "existingSecret": {
+              "type": "string"
+            },
+            "serverName": {
+              "type": "string"
+            },
+            "caSecret": {
+              "type": "string"
+            },
+            "disabled": {
+              "type": "boolean"
+            }
+          }
+        },
+        "auth": {
+          "type": "object",
+          "properties": {
+            "oidc": {
+              "type": "object",
+              "properties": {
+                "tokenUrl": {
+                  "type": "string"
+                },
+                "clientId": {
+                  "type": "string"
+                },
+                "existingSecret": {
+                  "type": "string"
+                },
+                "scopes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "audience": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "worker": {
+      "type": "object",
+      "properties": {
+        "buildId": {
+          "type": "string"
+        }
+      }
+    },
+    "namespace": {
+      "type": "object",
+      "properties": {
+        "create": {
+          "type": "boolean"
+        }
+      }
+    },
+    "resourceQuota": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "hard": {
+          "type": "object"
+        }
+      }
+    },
+    "networkPolicies": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "egress": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "redis": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "maxmemory": {
+          "type": "string",
+          "pattern": "^[0-9]+(kb|mb|gb)?$"
+        },
+        "keyPrefix": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resources": {
+          "type": "object"
+        }
+      }
+    },
+    "extraObjects": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  },
+  "$defs": {
+    "alertOverride": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "for": {
+          "type": "string"
+        },
+        "severity": {
+          "type": "string"
+        },
+        "threshold": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}

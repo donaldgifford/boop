@@ -14,9 +14,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 go build \
       -trimpath \
       -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" \
-      -o /out/boop ./cmd/boop
+      -o /out/boopd ./cmd/boopd
 
 FROM gcr.io/distroless/static-debian12:nonroot
-COPY --from=build /out/boop /usr/local/bin/boop
+COPY --from=build /out/boopd /usr/local/bin/boopd
 USER nonroot:nonroot
-ENTRYPOINT ["/usr/local/bin/boop"]
+ENTRYPOINT ["/usr/local/bin/boopd"]

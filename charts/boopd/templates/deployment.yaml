@@ -1,0 +1,131 @@
+{{- include "boopd.validateEnvCollisions" . -}}
+{{- include "boopd.validateRemovedValues" . -}}
+{{- include "boopd.validateTemporalAuth" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "boopd.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "boopd.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      {{- include "boopd.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include "boopd.configFile" . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "boopd.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "boopd.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - containerPort: {{ .Values.config.port }}
+              name: http
+              protocol: TCP
+            - containerPort: {{ .Values.config.metricsPort }}
+              name: metrics
+              protocol: TCP
+          {{- $hasConfigMap := or .Values.configMap.data .Values.configMap.existingConfigMap }}
+          {{- $hasSecret := or (and .Values.secrets.create .Values.secrets.stringData) .Values.secrets.existingSecret }}
+          {{- if or $hasConfigMap $hasSecret }}
+          envFrom:
+            {{- if $hasConfigMap }}
+            - configMapRef:
+                name: {{ include "boopd.configMapName" . }}
+            {{- end }}
+            {{- if $hasSecret }}
+            - secretRef:
+                name: {{ include "boopd.secretName" . }}
+            {{- end }}
+          {{- end }}
+          env:
+            - name: LISTEN_ADDR
+              value: ":{{ .Values.config.port }}"
+            - name: METRICS_ADDR
+              value: ":{{ .Values.config.metricsPort }}"
+            - name: LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- include "boopd.temporalEnv" . | nindent 12 }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/boopd/boopd.hcl
+              subPath: boopd.hcl
+              readOnly: true
+            {{- include "boopd.credentialMounts" . | nindent 12 }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "boopd.fullname" . }}-config
+        {{- include "boopd.credentialVolumes" . | nindent 8 }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

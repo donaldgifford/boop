@@ -1,0 +1,139 @@
+---
+suite: prometheusrule
+templates:
+  - templates/prometheusrule.yaml
+tests:
+  - it: renders nothing by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders the starter alerts first when enabled
+    set:
+      prometheusRule.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: PrometheusRule
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-boopd
+      - equal:
+          path: spec.groups[0].rules[0].alert
+          value: DeploymentReplicasUnavailable
+      - equal:
+          path: spec.groups[0].rules[1].alert
+          value: ContainerRestarting
+
+  - it: scopes the replicas alert to this release's deployment
+    set:
+      prometheusRule.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.groups[0].rules[0].expr
+          pattern: deployment="RELEASE-NAME-boopd"
+
+  - it: defaults severities to warning
+    set:
+      prometheusRule.enabled: true
+    asserts:
+      - equal:
+          path: spec.groups[0].rules[0].labels.severity
+          value: warning
+      - equal:
+          path: spec.groups[0].rules[1].labels.severity
+          value: warning
+
+  - it: honors per-alert severity and for overrides
+    set:
+      prometheusRule.enabled: true
+      prometheusRule.alerts.replicasUnavailable:
+        severity: critical
+        for: 5m
+    asserts:
+      - equal:
+          path: spec.groups[0].rules[0].labels.severity
+          value: critical
+      - equal:
+          path: spec.groups[0].rules[0].for
+          value: 5m
+
+  - it: honors threshold override in the expression
+    set:
+      prometheusRule.enabled: true
+      prometheusRule.alerts.containerRestarting:
+        threshold: 0
+    asserts:
+      - matchRegex:
+          path: spec.groups[0].rules[1].expr
+          pattern: "> 0$"
+
+  - it: disables an individual alert
+    set:
+      prometheusRule.enabled: true
+      prometheusRule.alerts.containerRestarting:
+        enabled: false
+    asserts:
+      - lengthEqual:
+          path: spec.groups[0].rules
+          count: 6
+      - equal:
+          path: spec.groups[0].rules[0].alert
+          value: DeploymentReplicasUnavailable
+
+  - it: merges additional labels
+    set:
+      prometheusRule.enabled: true
+      prometheusRule.labels:
+        role: alert-rules
+    asserts:
+      - equal:
+          path: metadata.labels.role
+          value: alert-rules
+
+  - it: carries the run and budget alerts
+    set:
+      prometheusRule.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.groups[0].rules[2].expr
+          pattern: 'result=~"disk-space\|out-of-memory"'
+      - equal:
+          path: spec.groups[0].rules[3].alert
+          value: BoopdRunOOMKilled
+      - matchRegex:
+          path: spec.groups[0].rules[3].expr
+          pattern: 'reason="OOMKilled"'
+      - matchRegex:
+          path: spec.groups[0].rules[4].expr
+          pattern: 'result="onboarding"'
+      - matchRegex:
+          path: spec.groups[0].rules[5].expr
+          pattern: boopd_repos_stalled
+      - matchRegex:
+          path: spec.groups[0].rules[6].expr
+          pattern: 'boopd_budget_remaining.*/ boopd_budget_limit.*< 0.1$'
+
+  - it: watches OOMKilled in the runs namespace
+    set:
+      prometheusRule.enabled: true
+      boopd.runs.namespace: boopd-runs
+    asserts:
+      - matchRegex:
+          path: spec.groups[0].rules[3].expr
+          pattern: 'namespace="boopd-runs"'
+
+  - it: honours a per-alert override
+    set:
+      prometheusRule.enabled: true
+      prometheusRule.alerts.onboardingResult.enabled: false
+      prometheusRule.alerts.budgetLow.threshold: 0.2
+    asserts:
+      - notContains:
+          path: spec.groups[0].rules
+          content: {alert: BoopdOnboardingResult}
+          any: true
+      - matchRegex:
+          path: spec.groups[0].rules[5].expr
+          pattern: '< 0.2$'

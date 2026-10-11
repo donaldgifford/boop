@@ -13,9 +13,9 @@ version: 2
 project_name: boop
 
 builds:
-  - id: boop
-    main: ./cmd/boop
-    binary: boop
+  - id: boopd
+    main: ./cmd/boopd
+    binary: boopd
     env:
       - CGO_ENABLED=0
     flags:
@@ -84,8 +84,8 @@ release:
     version:
 
     ```text
-    ghcr.io/donaldgifford/boop:{{ .Tag }}
-    oci://ghcr.io/donaldgifford/charts/boop --version {{ .Version }}
+    ghcr.io/donaldgifford/boopd:{{ .Tag }}
+    oci://ghcr.io/donaldgifford/charts/boopd --version {{ .Version }}
     ```
 
   footer: |

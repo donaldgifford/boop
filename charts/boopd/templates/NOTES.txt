@@ -1,0 +1,39 @@
+{{ include "boopd.fullname" . }} has been deployed!
+
+{{- if not .Values.boopd.apps }}
+WARNING: boopd.apps is empty. The worker refuses a config without a
+GitHub App and will not become ready; set boopd.apps.<name>.appId and
+privateKeySecretRef.
+
+{{ end -}}
+{{- if not .Values.temporal.address }}
+WARNING: temporal.address is empty. The worker cannot dial Temporal and
+will not start; set temporal.address to the frontend host:port.
+
+{{ end -}}
+Health check:     GET /healthz
+Readiness check:  GET /readyz
+Metrics:          GET :{{ .Values.config.metricsPort }}/metrics
+
+Port-forward the service locally:
+
+  kubectl -n {{ .Release.Namespace }} port-forward \
+    svc/{{ include "boopd.fullname" . }} \
+    {{ .Values.service.httpPort }}:{{ .Values.service.httpPort }}
+
+{{- if .Values.serviceMonitor.enabled }}
+
+ServiceMonitor is enabled — Prometheus Operator will scrape the
+`metrics` port every {{ .Values.serviceMonitor.interval }}.
+{{- end }}
+
+{{- if .Values.prometheusRule.enabled }}
+
+PrometheusRule is enabled with the starter alert pack
+(DeploymentReplicasUnavailable, ContainerRestarting). Tune or disable
+individual alerts under `prometheusRule.alerts`.
+{{- end }}
+
+To expose the HTTP endpoint, configure an Ingress or LoadBalancer to
+route traffic to the {{ include "boopd.fullname" . }} service
+on port {{ .Values.service.httpPort }}.

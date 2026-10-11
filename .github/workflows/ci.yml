@@ -78,6 +78,17 @@ jobs:
       - name: Lint Helm chart
         run: helm lint charts/*/
 
+      # The chart renders boopd.hcl from values; a bad value fails here,
+      # not at deploy (IMPL-0001 task 7.2).
+      - name: Validate rendered config
+        run: |
+          for v in charts/boopd/ci/ci-values.yaml charts/boopd/tests/values/example.yaml; do
+            out="${RUNNER_TEMP}/$(basename "$v" .yaml).hcl"
+            helm template boopd charts/boopd -f "$v" --show-only templates/config.yaml \
+              | yq '.data["boopd.hcl"]' > "$out"
+            go run ./cmd/boopd config validate "$out"
+          done
+
   test-go:
     name: Test Go
     runs-on: ubuntu-latest
@@ -119,6 +130,48 @@ jobs:
 
       - name: Run integration tests
         run: go test -v -race -count=1 -tags integration ./...
+
+  test-e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.go == 'true' || needs.changes.outputs.helm == 'true' || needs.changes.outputs.workflows == 'true'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Install k3d at the mise.toml pin
+        run: |
+          version="$(sed -n 's/^k3d = "\(.*\)"/\1/p' mise.toml)"
+          curl -fsSL "https://raw.githubusercontent.com/k3d-io/k3d/v${version}/install.sh" | TAG="v${version}" bash
+          k3d version
+
+      - name: Create the k3d cluster
+        run: k3d cluster create boop --wait
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v5
+
+      # The chart e2e (TestChart_*) is the chart gate: it helm-installs
+      # charts/boopd with the boopd image and both stubs (IMPL-0001 7.8).
+      - name: Build and import the boopd and stub images
+        run: |
+          docker buildx bake --load boopd stub-renovate stub-github
+          k3d image import ghcr.io/donaldgifford/boopd-stub-renovate:dev \
+            ghcr.io/donaldgifford/boopd-stub-github:dev ghcr.io/donaldgifford/boopd:dev --cluster boop
+
+      - name: Run the e2e suite
+        run: |
+          kubeconfig="$(k3d kubeconfig write boop)"
+          export KUBECONFIG="$kubeconfig"
+          go test -v -count=1 -timeout 15m -tags e2e ./test/e2e/...
 
   security:
     name: Security Scan
