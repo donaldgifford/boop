@@ -5,6 +5,16 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Features
+
+- *(discovery)* [**breaking**] Probe every Renovate config file name and parse JSON5
+
+### Documentation
+
+- *(design-0001)* Amend OQ3 to probe every Renovate config file name
+
+## [0.1.1] - 2026-10-12
+
 ### Bug Fixes
 
 - *(just)* K3d-install arguments are positional and stay on the k3d context
