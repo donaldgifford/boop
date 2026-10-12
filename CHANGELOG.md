@@ -3,6 +3,16 @@
 All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
+## [unreleased]
+
+### Bug Fixes
+
+- *(just)* K3d-install arguments are positional and stay on the k3d context
+
+### Documentation
+
+- *(impl-0001)* Task 7.9 done against boop-test-repo
+
 ## [0.1.0] - 2026-10-11
 
 ### Features
