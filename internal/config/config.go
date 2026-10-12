@@ -94,8 +94,9 @@ type Config struct {
 type Renovate struct {
 	// Image is the Renovate image, pinned by digest.
 	Image string
-	// ConfigPath is the one config file path discovery probes.
-	ConfigPath   string
+	// ConfigPaths are the config files discovery probes, in precedence
+	// order; a repository with any of them is onboarded.
+	ConfigPaths  []string
 	SharedPreset string
 	LogLevel     string
 	// DryRun is "", "extract", "lookup" or "full".
@@ -293,7 +294,10 @@ func (b *builder) renovate(r *renovateBlock) Renovate {
 		DryRun:    b.enum(dryRunEnum, r.DryRun, ""),
 		GitAuthor: deref(r.GitAuthor),
 	}
-	out.ConfigPath = derefOr(r.ConfigPath, platform.DefaultConfigPath)
+	out.ConfigPaths = slices.Clone(r.ConfigPaths)
+	if len(out.ConfigPaths) == 0 {
+		out.ConfigPaths = slices.Clone(platform.DefaultConfigPaths)
+	}
 	out.SharedPreset = deref(r.SharedPreset)
 	if r.Global != nil {
 		out.Global = b.options(r.Global, "global")

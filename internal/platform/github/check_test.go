@@ -27,11 +27,12 @@ func TestCheckRepo(t *testing.T) {
 			http.Error(w, "wrong ref", http.StatusBadRequest)
 			return
 		}
-		_, _ = w.Write([]byte(`{"type":"file","name":"renovate.json","content":"e30K","encoding":"base64"}`))
+		// The root listing; renovate.json5 is one of the default paths.
+		_, _ = w.Write([]byte(`[{"type":"file","name":"README.md"},{"type":"file","name":"renovate.json5"}]`))
 	}
 	const (
 		repoRoute   = "GET /api/v3/repositories/5"
-		configRoute = "GET /api/v3/repos/o/r/contents/renovate.json"
+		configRoute = "GET /api/v3/repos/o/r/contents/"
 	)
 
 	tests := []struct {

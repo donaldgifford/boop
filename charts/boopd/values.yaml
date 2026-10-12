@@ -56,7 +56,11 @@ boopd:
   renovate:
     # Must be pinned by digest; Renovate keeps the tag and digest current.
     image: ghcr.io/renovatebot/renovate:44-full@sha256:fc07a2877ce78abcaba5ac19e5bebb47b228785b6a74bf9834ff6119112bf260
-    configPath: renovate.json
+    # The files a repository is onboarded by, in precedence order. Empty
+    # means Renovate's own GitHub list (renovate.json{,c,5},
+    # .github/renovate.json{,c,5}, .renovaterc, .renovaterc.json{,c,5}),
+    # so boopd parses the file Renovate reads.
+    configPaths: []
     sharedPreset: ""
     logLevel: info
     dryRun: ""

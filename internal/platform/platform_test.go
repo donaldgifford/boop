@@ -18,6 +18,7 @@ package platform_test
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -25,10 +26,18 @@ import (
 	"github.com/donaldgifford/boop/internal/platform"
 )
 
-func TestDefaultConfigPath(t *testing.T) {
+// TestDefaultConfigPaths pins Renovate's GitHub lookup order: the first
+// present file is the one Renovate reads, so discovery must parse the
+// same one. Includes every name repo-guardian accepts.
+func TestDefaultConfigPaths(t *testing.T) {
 	t.Parallel()
-	if platform.DefaultConfigPath != "renovate.json" {
-		t.Errorf("DefaultConfigPath = %q, want renovate.json", platform.DefaultConfigPath)
+	want := []string{
+		"renovate.json", "renovate.jsonc", "renovate.json5",
+		".github/renovate.json", ".github/renovate.jsonc", ".github/renovate.json5",
+		".renovaterc", ".renovaterc.json", ".renovaterc.jsonc", ".renovaterc.json5",
+	}
+	if !slices.Equal(platform.DefaultConfigPaths, want) {
+		t.Errorf("DefaultConfigPaths = %q, want %q", platform.DefaultConfigPaths, want)
 	}
 }
 

@@ -37,8 +37,10 @@ Do not re-open these without a new document that says why:
 - Tests lean on end-to-end runs: a k3d cluster locally (`just e2e`) and
   in CI, with stub Renovate and GitHub images. Mocks and unit tests cover
   what e2e cannot reach cheaply (IMPL-0001 OQ3).
-- A repository is onboarded only if it contains the Renovate config file,
-  which repo-guardian writes. Renovate's own onboarding is off.
+- A repository is onboarded only if it contains a Renovate config file,
+  which repo-guardian writes. Any of Renovate's GitHub config file names
+  counts (`renovate.json5` in practice), parsed as JSON5 (DESIGN-0001 OQ3,
+  amended 2026-10-12). Renovate's own onboarding is off.
 - Postgres store behind an HTTP API and UI, but not in the spike. Where
   each piece of data lives is decided in the DESIGN after the spike.
 - Naming: repository `boop`, service `boopd` (binary, image, chart,

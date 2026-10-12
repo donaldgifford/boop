@@ -309,6 +309,12 @@ OQ11; INV-0001 § Renovate behaviours to reproduce).
   JSON only; above 64 KB or unparseable yields an empty list). The REST
   fallback `GET /repos/{slug}/contents/{path}` behind `discovery.probe:
   rest`. `ConfigPaths` collapses to the configured path.
+  Amended 2026-10-12 (DESIGN-0001 OQ3): `ProbeConfig(ctx, nodeIDs,
+  paths)` probes every path in `renovate.config_paths` (default:
+  Renovate's GitHub config file names in its order) as aliased fields of
+  the same query. It parses `extends` as JSON5 from the first file
+  present and reports a parse failure instead of hiding it. The REST
+  fallback and `CheckRepo` list the root and `.github`.
 - [x] 2.6 `ReadRateLimit(ctx) (*workflows.Readings, error)` on the
   installation client: `GET /rate_limit`, reading `resources.core` and
   `resources.graphql` only, with `ObservedAt` from the response `Date`.
@@ -358,7 +364,8 @@ Phase 0 moves it.
 - [x] 3.2 Defaults and validation: `pending_timeout` 10m, `cadence` 24h,
   `discovery.every` 6h, `budget.reserve_fraction` 0.10,
   `max_concurrent_runs` 10, `default_estimate` {core 300, graphql 150};
-  the image is pinned by digest; `config_path` is a relative file path;
+  the image is pinned by digest; `config_paths` (was `config_path`,
+  amended 2026-10-12) lists at most 16 distinct relative file paths;
   `shared_preset` passes `jobspec`'s preset check; every profile named in
   `order`, `default_profile`, `unknown_profile` and `profile_rule` exists
   (`validate.NewRefValidator`); `order` lists every profile exactly once
@@ -726,7 +733,7 @@ Strategy, run in the homelab, with the fixtures the design describes
   many-updates repository for the convergence run. This document lists
   what each must contain so they can be rebuilt.
   **Deferred - human required:** the repositories are created by hand on
-  the homelab organisation. Each carries `renovate.json` extending the
+  the homelab organisation. Each carries `renovate.json5` extending the
   shared preset, so discovery onboards it. Code runs only where a
   manager's artifact update executes repository code, so each fixture
   routes its probe through one. The findings leave as the step's stderr,

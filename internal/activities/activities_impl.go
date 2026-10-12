@@ -153,7 +153,7 @@ func (a *Activities) installation(ctx context.Context, installationID int64) (In
 	if err != nil {
 		return nil, err
 	}
-	return a.gh.Installation(app, installationID, a.cfg.Renovate.ConfigPath)
+	return a.gh.Installation(app, installationID, a.cfg.Renovate.ConfigPaths)
 }
 
 func (a *Activities) remember(app string, installationID int64) {

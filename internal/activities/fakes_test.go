@@ -23,7 +23,7 @@ func (f *fakeGitHub) App(app *config.App) (activities.AppAPI, error) {
 	return f.apps[app.Name], nil
 }
 
-func (f *fakeGitHub) Installation(_ *config.App, id int64, _ string) (activities.InstallationAPI, error) {
+func (f *fakeGitHub) Installation(_ *config.App, id int64, _ []string) (activities.InstallationAPI, error) {
 	return f.installs[id], nil
 }
 
@@ -111,11 +111,11 @@ func (f *fakeInstall) probe(nodeIDs []string) *github.ProbeResult {
 	return res
 }
 
-func (f *fakeInstall) ProbeConfig(_ context.Context, nodeIDs []string, _ string) (*github.ProbeResult, error) {
+func (f *fakeInstall) ProbeConfig(_ context.Context, nodeIDs, _ []string) (*github.ProbeResult, error) {
 	return f.probe(nodeIDs), nil
 }
 
-func (f *fakeInstall) ProbeConfigREST(_ context.Context, repos []platform.Repository, _ string) (*github.ProbeResult, error) {
+func (f *fakeInstall) ProbeConfigREST(_ context.Context, repos []platform.Repository, _ []string) (*github.ProbeResult, error) {
 	ids := make([]string, len(repos))
 	for i := range repos {
 		ids[i] = repos[i].NodeID

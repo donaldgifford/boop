@@ -38,7 +38,22 @@ type Metrics interface {
 	// ProbeCost adds one probe batch's spend to
 	// boopd_discovery_probe_cost{installation,resource}.
 	ProbeCost(installationID int64, resource string, cost int)
+	// ConfigProbed counts one probed repository in
+	// boopd_discovery_repos_total{installation,config}, config being
+	// ConfigPresent, ConfigAbsent or ConfigUnparsed.
+	ConfigProbed(installationID int64, config string)
 }
+
+// Values of boopd_discovery_repos_total's config attribute.
+const (
+	// ConfigPresent: a config file was found and parsed; onboarded.
+	ConfigPresent = "present"
+	// ConfigAbsent: none of the config files is there; skipped.
+	ConfigAbsent = "absent"
+	// ConfigUnparsed: a config file was found but its extends could not
+	// be read; onboarded without them.
+	ConfigUnparsed = "unparsed"
+)
 
 // NopMetrics is a Metrics that records nothing.
 type NopMetrics struct{}
@@ -63,3 +78,6 @@ func (NopMetrics) TokenRevocation(string) {}
 
 // ProbeCost implements Metrics.
 func (NopMetrics) ProbeCost(int64, string, int) {}
+
+// ConfigProbed implements Metrics.
+func (NopMetrics) ConfigProbed(int64, string) {}

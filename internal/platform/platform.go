@@ -96,9 +96,9 @@ const (
 	// or it is archived.
 	RepoGone
 	// RepoNoConfig means the repository is there but its default branch
-	// lacks the config file.
+	// has none of the config files.
 	RepoNoConfig
-	// RepoPresent means the repository is there with the config file.
+	// RepoPresent means the repository is there with a config file.
 	RepoPresent
 )
 
@@ -148,9 +148,9 @@ type Client interface {
 	// assigning shards.
 	Discover(ctx context.Context, filter DiscoveryFilter) ([]Repository, error)
 
-	// HasRenovateConfig returns true when the repo has the configured
-	// Renovate config file (DefaultConfigPath unless overridden) on its
-	// default branch.
+	// HasRenovateConfig returns true when the repo has one of the
+	// configured Renovate config files (DefaultConfigPaths unless
+	// overridden) on its default branch.
 	HasRenovateConfig(ctx context.Context, repo *Repository) (bool, error)
 
 	// MintAccessToken returns a token that can authenticate to the platform's
@@ -178,11 +178,25 @@ type Minter interface {
 	Revoke(ctx context.Context, token string) error
 }
 
-// DefaultConfigPath is the Renovate config file a repository must carry
-// to be onboarded (ADR-0005). repo-guardian writes it; config may name a
-// different single path, and every probe checks only that one path
-// (DESIGN-0001 OQ3).
-const DefaultConfigPath = "renovate.json"
+// DefaultConfigPaths are the files a repository may carry its Renovate
+// config in, in the order Renovate looks for them on GitHub
+// (configFileNames in Renovate's lib/config/app-strings.ts, without the
+// deprecated package.json and the other platforms' directories). A
+// repository is onboarded when it has any of them (ADR-0005); the first
+// present is the one Renovate reads, so it is the one discovery parses
+// (DESIGN-0001 OQ3). Config may replace the list.
+var DefaultConfigPaths = []string{
+	"renovate.json",
+	"renovate.jsonc",
+	"renovate.json5",
+	".github/renovate.json",
+	".github/renovate.jsonc",
+	".github/renovate.json5",
+	".renovaterc",
+	".renovaterc.json",
+	".renovaterc.jsonc",
+	".renovaterc.json5",
+}
 
 // Error sentinels. Reconcilers distinguish transient (worth a retry) from
 // permanent (set Ready=False with a clear reason and stop) so they can

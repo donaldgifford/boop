@@ -1,11 +1,13 @@
 package config_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/donaldgifford/boop/internal/config"
+	"github.com/donaldgifford/boop/internal/platform"
 )
 
 const examplePath = "../../examples/boopd.hcl"
@@ -18,8 +20,8 @@ func TestLoad_Example(t *testing.T) {
 		_, _ = diags.WriteTo(&b)
 		t.Fatalf("Load(%s) diagnostics:\n%s", examplePath, b.String())
 	}
-	if cfg.Renovate.DryRun != "full" || cfg.Renovate.ConfigPath != "renovate.json" {
-		t.Errorf("renovate = %+v, want dry_run full and renovate.json", cfg.Renovate)
+	if cfg.Renovate.DryRun != "full" || !slices.Equal(cfg.Renovate.ConfigPaths, platform.DefaultConfigPaths) {
+		t.Errorf("renovate = %+v, want dry_run full and the default config paths", cfg.Renovate)
 	}
 	if cfg.Runs.PendingTimeout != 10*time.Minute || cfg.Runs.Namespace != "boopd" || cfg.Runs.MaxConcurrent != 20 {
 		t.Errorf("runs = %+v, want boopd/10m/20", cfg.Runs)

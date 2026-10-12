@@ -292,10 +292,11 @@ an sdist build opts out by `profileRules`, knowingly.
 **How ecosystems are learned** (OQ1):
 
 - **From the config file at discovery.** The probe already asks GitHub for
-  the `renovate.json` object; asking for its `text` as well costs no extra
-  GraphQL points. `DiscoverInstallation` parses `extends` and sends it in
-  the `discovered` signal. repo-guardian writes that file, so the preset
-  list is reliable and present before the first run.
+  the config file objects; asking for their `text` as well costs no extra
+  GraphQL points. `DiscoverInstallation` parses `extends`, as JSON5, from
+  the first file present (the one Renovate reads) and sends it in the
+  `discovered` signal. repo-guardian writes that file, so the preset list
+  is reliable and present before the first run.
 - **From the last report.** `RunResult` carries the managers Renovate found
   (the keys of the report's `packageFiles`). `RepoWorkflow` stores them in
   `RepoState.Managers`, and the next run's profile is the strictest of both
@@ -322,8 +323,8 @@ sequenceDiagram
     loop each page of 100 repositories
       DI->>GH: GET /rate_limit, sleep to reset if under reserve
       DI->>GH: GET /installation/repositories?page=n
-      DI->>GH: GraphQL nodes(ids) object(expression HEAD:renovate.json) { text }
-      DI->>RW: SignalWithStart discovered {slug, branch, extends}, one per repo with the file
+      DI->>GH: GraphQL nodes(ids) c0..cN: object(expression HEAD:path) { text }
+      DI->>RW: SignalWithStart discovered {slug, branch, extends}, one per repo with a config file
       DI-->>DW: heartbeat {page, seen, onboarded}
     end
     DI-->>DW: summary
@@ -347,9 +348,10 @@ sequenceDiagram
   1. Page `GET /installation/repositories` (100 per page; `Discover`,
      renovate-operator INV-0004) and apply `skipForks` / `skipArchived`. The
      response carries each repository's numeric `id` and GraphQL `node_id`.
-  2. Probe each page for the config file (below) and read its `extends`.
+  2. Probe each page for the config files (below) and read `extends` from
+     the first one present.
   3. `SignalWithStart` `repo/github/<repo id>` with signal `discovered` for
-     every repository that has the file, carrying
+     every repository that has a config file, carrying
      `{slug, defaultBranch, installationID, discoveryInterval, extends}`.
   4. Heartbeat `{page, seen, onboarded}` after each page. A retry resumes
      from the last heartbeat's page.
@@ -359,38 +361,51 @@ sequenceDiagram
   second (ADR-0002).
 - **Config probe** (OQ3). Discovery is the one place `boopd` touches every
   repository the installation can see, so its cost is the fleet's cost:
-  - Only one path is probed: `renovate.configPath` (default
-    `renovate.json`), the file repo-guardian writes (ADR-0005). The copied
-    `ConfigPaths` list of five becomes that single configured path, which
-    cuts a non-onboarded repository from up to five REST calls to one.
-  - The probe is **one GraphQL query per 100 repositories**:
+  - The paths probed are `renovate.configPaths`, by default Renovate's own
+    GitHub list in its order: `renovate.json`, `renovate.jsonc`,
+    `renovate.json5`, `.github/renovate.json{,c,5}`, `.renovaterc` and
+    `.renovaterc.json{,c,5}` (Renovate's `configFileNames`, without the
+    deprecated `package.json`). A repository with any of them is onboarded,
+    and the first one present is the one parsed, because it is the one
+    Renovate reads. Amended 2026-10-12; OQ3 says why.
+  - The probe is **one GraphQL query per 100 repositories**, with one
+    aliased `object(expression:)` field per path, the expressions passed
+    as variables:
 
     ```graphql
-    query($ids: [ID!]!) {
+    query($ids: [ID!]!, $e0: String!, $e1: String!, …) {
       rateLimit { cost remaining resetAt }
       nodes(ids: $ids) {
         ... on Repository {
           id
-          config: object(expression: "HEAD:renovate.json") {
-            ... on Blob { byteSize text }
-          }
+          c0: object(expression: $e0) { ... on Blob { byteSize text } }  # HEAD:renovate.json
+          c1: object(expression: $e1) { ... on Blob { byteSize text } }  # HEAD:renovate.jsonc
+          …
         }
       }
     }
     ```
 
-    Neither `nodes(ids:)` nor `object(expression:)` is a connection, so by
+    Neither `nodes(ids:)` nor `object(expression:)` is a connection, and a
+    field per path adds none, so by
     GitHub's published formula the query costs the minimum, 1 point, for
     100 repositories; a 15,000-repository installation is about 150 points
     per pass against a 5,000-point hourly GraphQL budget (10,000 on
     Enterprise Cloud). How GitHub scores `nodes(ids:)` is not documented,
     so every query reads `rateLimit.cost` and the pass records it
     (`boopd_discovery_probe_cost`). 100 per query is a design choice, not a
-    documented limit. `text` is parsed for `extends` only; a file above
-    64 KB or that fails to parse yields an empty list, and the profile then
-    comes from the report alone.
-  - Fallback, behind `discovery.probe: rest`, is the REST contents call per
-    repository for the one path.
+    documented limit. `text` is parsed for `extends` only, as JSON5 (which
+    covers JSON and JSONC). A file above 64 KB or that fails to parse yields
+    an empty list, the profile then comes from the report alone, and the
+    pass logs a warning naming the repository and file. The repository is
+    still onboarded; Renovate reports its own config errors.
+  - Each probed repository counts once in
+    `boopd_discovery_repos_total{installation,config}`, `config` being
+    `present`, `absent` (not onboarded; logged at debug) or `unparsed`.
+  - Fallback, behind `discovery.probe: rest`, is REST per repository: list
+    each directory the paths live in (the root and `.github` by default)
+    and fetch the first path present, so at most three calls per
+    repository. `CheckRepo` uses the same listings.
   - Before each page, the activity reads `/rate_limit`; if either tracked
     resource is under the installation's reserve it sleeps until `reset`,
     heartbeating. Discovery takes no lease (it is not a run), but its spend
@@ -977,6 +992,8 @@ same version.
     repository);
   - `boopd_discovery_probe_cost{installation,resource}` (spend of one pass,
     from `rateLimit.cost`);
+  - `boopd_discovery_repos_total{installation,config}` (each probed
+    repository, by `present`, `absent` or `unparsed` config);
   - `boopd_budget_limit{installation,resource}` and
     `boopd_budget_remaining{installation,resource}` (discovered);
   - `boopd_rate_spend_per_run{installation,resource}` (the EWMA input);
@@ -1007,7 +1024,7 @@ Config file (ADR-0004), rendered from chart values:
 ```yaml
 renovate:
   image: ghcr.io/renovatebot/renovate:44-full@sha256:…   # Renovate keeps this current
-  configPath: renovate.json  # the one path discovery probes; what repo-guardian writes
+  configPaths: []            # empty: Renovate's own config file names, in its order
   sharedPreset: github>boop-bot/renovate-config:default.json
   global:                    # merged into RENOVATE_CONFIG; explicit false preserved
     dryRun: full             # spike comparison runs
@@ -1149,7 +1166,8 @@ rely on anything Renovate reports.
 
 - **a (recommended): `extends` from the config file at discovery, tightened
   by the managers in the last report.** The probe fetches the file's text
-  in the same GraphQL query at no extra cost; repo-guardian writes that
+  in the same GraphQL query at no extra cost (as JSON5, from the first
+  config file present; OQ3's 2026-10-12 amendment); repo-guardian writes that
   file, so the preset list is reliable and present before the first run.
   Managers from the report can only make the profile stricter.
 - **b: managers from the last report only, `unknownProfile` for the first
@@ -1187,16 +1205,40 @@ token when the run ends whichever option is chosen.
 
 **Decision (2026-10-10): a.**
 
+**Amended (2026-10-12): every Renovate config file name, parsed as JSON5.**
+The 2026-10-10 decision probed one path, `renovate.json`, on the grounds
+that repo-guardian writes it. That was wrong on two counts. repo-guardian
+accepts all of `renovate.json`, `renovate.json5`, `.renovaterc`,
+`.renovaterc.json`, `.github/renovate.json` and `.github/renovate.json5`.
+The fleet uses `renovate.json5` (41 of 46 configured repositories on
+2026-10-12). With one path, those repositories were skipped without a
+log or a metric. renovate-operator had the same gap (no `.json5` in its
+`ConfigPaths`). It was hidden because the deployed scan set
+`requireConfig: false`, which leaves config detection to Renovate.
+`boopd` has no such fallback: only repositories the probe finds are
+onboarded. So:
+
+- `renovate.configPaths` defaults to Renovate's GitHub list in
+  Renovate's order. The first file present is the one parsed, so `boopd`
+  reads the same file Renovate will. All paths go in one query as aliased
+  fields, so the pass still costs one query per 100 repositories.
+- Text is parsed as JSON5, which covers the JSON and JSONC names too. A
+  config that does not parse still onboards, with a warning and
+  `boopd_discovery_repos_total{config="unparsed"}`. A repository without
+  any config counts as `config="absent"` and logs at debug.
+- The REST fallback and `CheckRepo` list the root and `.github` instead
+  of one call per path.
+
 Discovery is the one place `boopd` touches every repository the installation
 can see, so this is the fleet's dominant cost.
 
 - **a (recommended): one GraphQL query per 100 repositories**, probing the
-  single configured path and fetching its text, reading `rateLimit.cost` on
+  configured paths and fetching their text, reading `rateLimit.cost` on
   every query, with the REST contents call as a config-switched fallback.
   By GitHub's formula the query costs 1 point, so a 15,000-repository
   installation is ~150 points per pass against 5,000 per hour. The scoring
   of `nodes(ids:)` is not documented, so the spike measures it.
-- **b: REST contents call per repository** for the one path. Documented and
+- **b: REST contents call per repository** for each path. Documented and
   simple; 15,000 calls per pass against a 12,500-per-hour REST limit, which
   only works with discovery every 6 h or slower and competes with runs.
 - **c: incremental probing** of repositories whose `pushed_at` changed since

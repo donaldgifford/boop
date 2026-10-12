@@ -1,0 +1,20 @@
+---
+suite: removed values guard
+# A value the chart no longer reads fails the render instead of being
+# ignored (boopd.validateRemovedValues).
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: rejects boopd.renovate.configPath
+    set:
+      boopd.renovate.configPath: renovate.json
+    asserts:
+      - failedTemplate:
+          errorPattern: "boopd.renovate.configPath was removed"
+
+  - it: accepts boopd.renovate.configPaths
+    set:
+      boopd.renovate.configPaths: [renovate.json5]
+    asserts:
+      - isKind:
+          of: Deployment

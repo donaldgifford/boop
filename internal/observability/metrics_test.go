@@ -50,6 +50,7 @@ func TestMetrics_Names(t *testing.T) {
 	m.TokenMint("success")
 	m.TokenRevocation("failure")
 	m.ProbeCost(1, "graphql", 3)
+	m.ConfigProbed(1, "absent")
 	m.RecordRequest("create", "jobs", "201")
 
 	got := collect(t, reader)
@@ -60,6 +61,7 @@ func TestMetrics_Names(t *testing.T) {
 	slices.Sort(names)
 	want := []string{
 		"boopd_discovery_probe_cost",
+		"boopd_discovery_repos_total",
 		"boopd_kube_requests_total",
 		"boopd_run_duration_seconds",
 		"boopd_run_overhead_seconds",

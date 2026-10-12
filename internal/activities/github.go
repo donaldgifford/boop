@@ -37,8 +37,8 @@ type AppAPI interface {
 // client.
 type InstallationAPI interface {
 	DiscoverPages(ctx context.Context, filter platform.DiscoveryFilter, fn func(github.Page) error) error
-	ProbeConfig(ctx context.Context, nodeIDs []string, path string) (*github.ProbeResult, error)
-	ProbeConfigREST(ctx context.Context, repos []platform.Repository, path string) (*github.ProbeResult, error)
+	ProbeConfig(ctx context.Context, nodeIDs, paths []string) (*github.ProbeResult, error)
+	ProbeConfigREST(ctx context.Context, repos []platform.Repository, paths []string) (*github.ProbeResult, error)
 	ReadRateLimit(ctx context.Context) (*workflows.Readings, error)
 	CheckRepo(ctx context.Context, repoID int64) (platform.RepoState, *platform.Repository, error)
 	RepoIDBySlug(ctx context.Context, slug string) (int64, error)
@@ -53,7 +53,7 @@ type RateReader interface {
 // GitHub builds the clients the activities use.
 type GitHub interface {
 	App(app *config.App) (AppAPI, error)
-	Installation(app *config.App, installationID int64, configPath string) (InstallationAPI, error)
+	Installation(app *config.App, installationID int64, configPaths []string) (InstallationAPI, error)
 	Token(app *config.App, token string) (RateReader, error)
 }
 
@@ -84,7 +84,7 @@ func (g *ghClients) App(app *config.App) (AppAPI, error) {
 	return c, nil
 }
 
-func (g *ghClients) Installation(app *config.App, installationID int64, configPath string) (InstallationAPI, error) {
+func (g *ghClients) Installation(app *config.App, installationID int64, configPaths []string) (InstallationAPI, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if c, ok := g.installs[installationID]; ok {
@@ -95,7 +95,7 @@ func (g *ghClients) Installation(app *config.App, installationID int64, configPa
 		InstallationID: installationID,
 		PEM:            app.PrivateKey.Bytes(),
 		BaseURL:        baseURL(app),
-	}, github.WithConfigPath(configPath))
+	}, github.WithConfigPaths(configPaths))
 	if err != nil {
 		return nil, fmt.Errorf("installation %d: %w", installationID, err)
 	}

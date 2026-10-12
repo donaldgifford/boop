@@ -50,7 +50,7 @@ func (a *Activities) DiscoverInstallation(ctx context.Context, in *workflows.Dis
 	if err != nil {
 		return nil, err
 	}
-	api, err := a.gh.Installation(app, in.InstallationID, a.cfg.Renovate.ConfigPath)
+	api, err := a.gh.Installation(app, in.InstallationID, a.cfg.Renovate.ConfigPaths)
 	if err != nil {
 		return nil, err
 	}
@@ -136,26 +136,27 @@ func underReserve(r *workflows.Readings, fraction float64, now time.Time) (time.
 	return until, !until.IsZero()
 }
 
-// discoverPage probes one page and signals every repository with the
-// file. It returns how many it signalled and the probe's cost.
+// discoverPage probes one page and signals every repository with a config
+// file, counting each by its config outcome. It returns how many it
+// signalled and the probe's cost.
 func (a *Activities) discoverPage(ctx context.Context, api InstallationAPI, app *config.App,
 	installationID int64, repos []platform.Repository,
 ) (onboarded, cost int, err error) {
 	if len(repos) == 0 {
 		return 0, 0, nil
 	}
-	path := a.cfg.Renovate.ConfigPath
+	paths := a.cfg.Renovate.ConfigPaths
 	var res *github.ProbeResult
 	resource := workflows.ResourceGraphQL
 	if app.Discovery.Probe == config.ProbeREST {
 		resource = workflows.ResourceCore
-		res, err = api.ProbeConfigREST(ctx, repos, path)
+		res, err = api.ProbeConfigREST(ctx, repos, paths)
 	} else {
 		ids := make([]string, len(repos))
 		for i := range repos {
 			ids[i] = repos[i].NodeID
 		}
-		res, err = api.ProbeConfig(ctx, ids, path)
+		res, err = api.ProbeConfig(ctx, ids, paths)
 	}
 	if err != nil {
 		return 0, 0, fmt.Errorf("probe: %w", err)
@@ -165,9 +166,18 @@ func (a *Activities) discoverPage(ctx context.Context, api InstallationAPI, app 
 	now := a.now()
 	for i := range repos {
 		repo := &repos[i]
-		probe, ok := res.Configs[repo.NodeID]
-		if !ok || !probe.Exists {
+		probe := res.Configs[repo.NodeID]
+		switch {
+		case !probe.Exists:
+			a.metrics.ConfigProbed(installationID, ConfigAbsent)
+			a.log.DebugContext(ctx, "no Renovate config, not onboarded", "app", app.Name, "repo", repo.Slug)
 			continue
+		case probe.ParseErr != nil:
+			a.metrics.ConfigProbed(installationID, ConfigUnparsed)
+			a.log.WarnContext(ctx, "Renovate config unparsed, onboarding without its extends",
+				"app", app.Name, "repo", repo.Slug, "path", probe.Path, "error", probe.ParseErr)
+		default:
+			a.metrics.ConfigProbed(installationID, ConfigPresent)
 		}
 		if err := a.signalDiscovered(ctx, app, installationID, repo, probe.Extends, now); err != nil {
 			return onboarded, res.Cost, err

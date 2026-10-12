@@ -24,6 +24,7 @@ import (
 	"github.com/donaldgifford/boop/internal/config"
 	"github.com/donaldgifford/boop/internal/jobspec"
 	"github.com/donaldgifford/boop/internal/kube"
+	"github.com/donaldgifford/boop/internal/platform"
 	"github.com/donaldgifford/boop/internal/renovate"
 	"github.com/donaldgifford/boop/internal/workflows"
 	"github.com/donaldgifford/boop/test/fakegithub"
@@ -97,7 +98,7 @@ func newRunHarness(t *testing.T, timings activities.RunTimings) *runHarness {
 	cfg := &config.Config{
 		Renovate: config.Renovate{
 			Image:        env.StubImage,
-			ConfigPath:   "renovate.json",
+			ConfigPaths:  platform.DefaultConfigPaths,
 			SharedPreset: "github>" + presetSlug + ":default.json",
 		},
 		Runs:           config.Runs{Namespace: env.Namespace, PendingTimeout: 15 * time.Second},

@@ -177,8 +177,14 @@
               "type": "string",
               "pattern": "@sha256:[0-9a-f]{64}$"
             },
-            "configPath": {
-              "type": "string"
+            "configPaths": {
+              "type": "array",
+              "maxItems": 16,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
             },
             "sharedPreset": {
               "type": "string"

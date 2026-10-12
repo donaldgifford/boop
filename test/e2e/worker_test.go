@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"hash/fnv"
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,6 +21,7 @@ import (
 	"github.com/donaldgifford/boop/internal/activities"
 	"github.com/donaldgifford/boop/internal/config"
 	"github.com/donaldgifford/boop/internal/kube"
+	"github.com/donaldgifford/boop/internal/platform"
 	"github.com/donaldgifford/boop/internal/temporal"
 	"github.com/donaldgifford/boop/internal/temporal/temporaltest"
 	"github.com/donaldgifford/boop/internal/worker"
@@ -94,12 +96,14 @@ func startWorker(t *testing.T, profile string, cadence time.Duration, timings ac
 			Slug:          runSlug,
 			DefaultBranch: "main",
 			HasConfig:     true,
-			Config:        `{"extends":["config:recommended"]}`,
+			// JSON5 at renovate.json5, as the fleet's repositories carry it.
+			ConfigPath: "renovate.json5",
+			Config:     "{\n  // the shared preset\n  extends: ['config:recommended',],\n}\n",
 		},
 		fakegithub.Repo{ID: repoID + 1, NodeID: "R_off", Slug: "boop-e2e/no-config", DefaultBranch: "main"},
 	)
 	cfg := &config.Config{
-		Renovate:       config.Renovate{Image: env.StubImage, ConfigPath: "renovate.json"},
+		Renovate:       config.Renovate{Image: env.StubImage, ConfigPaths: platform.DefaultConfigPaths},
 		Runs:           config.Runs{Namespace: env.Namespace, PendingTimeout: time.Minute},
 		Profiles:       profiles(),
 		Order:          []string{"default", "hang", "no-report", "unschedulable"},
@@ -204,6 +208,9 @@ func TestWorker_DiscoveryRunRecheck(t *testing.T) {
 	})
 	if s.LastRun.Outcome != workflows.OutcomeSucceeded || s.Profile != "default" {
 		t.Errorf("last run %+v profile %q, want Succeeded on default", s.LastRun, s.Profile)
+	}
+	if !slices.Equal(s.Extends, []string{"config:recommended"}) {
+		t.Errorf("state extends = %q, want config:recommended parsed from renovate.json5", s.Extends)
 	}
 	if wait := time.Until(s.NextDue); wait < cadence-2*time.Minute || wait > cadence {
 		t.Errorf("next due in %v, want about a cadence (%v)", wait, cadence)
