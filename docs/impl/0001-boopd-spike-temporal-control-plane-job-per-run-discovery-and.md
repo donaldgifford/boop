@@ -675,7 +675,7 @@ and the first real environment.
   Renovate image and one of your scratch repositories (OQ10) in
   `dryRun: full`, with the App key from a local file. Not in CI.
   **Deferred - human required:** the recipe is ready
-  (`just k3d-install values=dev/values.yaml app_key=<pem>`); the run
+  (`just k3d-install dev/values.yaml <pem>`); the run
   needs the `boop-bot` App key, a scratch repository and a Temporal
   frontend reachable from k3d.
 - [ ] 7.10 Homelab: a `boopd` namespace on repo-guardian's reference
