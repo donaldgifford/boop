@@ -136,7 +136,25 @@ type run struct {
 	mu        sync.Mutex // guards scan and firstLine
 	scan      *renovate.Scanner
 	firstLine time.Time
-	running   time.Time
+	// running is when boopd saw the pod Running (its clock; PodStart and
+	// Duration); started is when the container started (the kubelet's
+	// clock, the one log lines carry; overhead).
+	running time.Time
+	started time.Time
+}
+
+// runOverhead is container start to the first Renovate log line
+// (boopd_run_overhead_seconds). Both come from the kubelet; when the pod
+// reported no start, boopd's own sighting of Running stands in. Zero
+// when either end is missing.
+func runOverhead(started, running, firstLine time.Time) time.Duration {
+	if started.IsZero() {
+		started = running
+	}
+	if started.IsZero() || firstLine.IsZero() {
+		return 0
+	}
+	return max(firstLine.Sub(started), 0)
 }
 
 // complete writes the one run_complete line and the run metrics.
@@ -153,11 +171,8 @@ func (r *run) complete(ctx context.Context, err error) {
 	default:
 		outcome = workflows.ErrTypeInfrastructure
 	}
-	var overhead time.Duration
 	r.mu.Lock()
-	if !r.firstLine.IsZero() && !r.running.IsZero() {
-		overhead = max(r.firstLine.Sub(r.running), 0)
-	}
+	overhead := runOverhead(r.started, r.running, r.firstLine)
 	r.mu.Unlock()
 	r.a.metrics.RunCompleted(outcome, res.RepositoryResult, r.in.Profile, res.Duration, res.PodStart, overhead)
 
@@ -201,7 +216,8 @@ func (r *run) execute(ctx context.Context) (*workflows.RunResult, error) {
 		return nil, infraError("create job: "+err.Error(), r.res)
 	}
 
-	if _, err := r.a.runner.WaitRunning(ctx, r.name, r.a.cfg.Runs.PendingTimeout); err != nil {
+	pod, err := r.a.runner.WaitRunning(ctx, r.name, r.a.cfg.Runs.PendingTimeout)
+	if err != nil {
 		r.finish(ctx)
 		switch {
 		case errors.Is(err, kube.ErrPending):
@@ -216,6 +232,7 @@ func (r *run) execute(ctx context.Context) (*workflows.RunResult, error) {
 		}
 	}
 	r.running = r.a.now()
+	r.started = kube.ContainerStarted(pod)
 	r.res.PodStart = r.running.Sub(created)
 
 	end := r.follow(ctx)

@@ -984,8 +984,9 @@ same version.
   - `boopd_runs_active{profile}`;
   - `boopd_run_duration_seconds{profile}`;
   - `boopd_run_pod_start_seconds` (Job creation to pod `Running`);
-  - `boopd_run_overhead_seconds` (pod `Running` to first repository log
-    line);
+  - `boopd_run_overhead_seconds` (container start to first repository log
+    line, both by the kubelet's clock: the container status `startedAt`
+    and the log line timestamp, not when the worker saw `Running`);
   - `boopd_run_pending_timeouts_total`;
   - `boopd_repos_stalled`, `boopd_repos_incomplete`;
   - `boopd_discovery_missed` (absence timer fired but `CheckRepo` found the
