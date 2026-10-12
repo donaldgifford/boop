@@ -5,6 +5,16 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Bug Fixes
+
+- *(just)* K3d-install arguments are positional and stay on the k3d context
+
+### Documentation
+
+- *(impl-0001)* Task 7.9 done against boop-test-repo
+
+## [0.1.0] - 2026-10-11
+
 ### Features
 
 - *(jobspec)* Port renovate-operator's Job builder for one repository per Job
@@ -52,7 +62,6 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(chart)* Ct install against a bare cluster
 - *(activities)* Heartbeat RunRenovate while the pod is pending
 - *(observability)* Close the health server when shutdown runs out
-- *(just)* K3d-install arguments are positional and stay on the k3d context
 
 ### Documentation
 
@@ -71,7 +80,6 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Phase 6 layout, worker role and boopd rename
 - Phase 7 chart status and configuration contract
 - *(impl-0001)* Fixture contents and phase 8 deferred to the homelab
-- *(impl-0001)* Task 7.9 done against boop-test-repo
 
 ### Testing
 
