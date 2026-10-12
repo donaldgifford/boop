@@ -671,13 +671,18 @@ and the first real environment.
   the worker pod becomes ready, the Role suffices (no forbidden-verb
   errors in its log), one discovery pass runs, and one Job completes
   with its log forwarded. The same scenario is the CI chart gate.
-- [ ] 7.9 `just k3d-install` for the developer loop against the real
+- [x] 7.9 `just k3d-install` for the developer loop against the real
   Renovate image and one of your scratch repositories (OQ10) in
   `dryRun: full`, with the App key from a local file. Not in CI.
-  **Deferred - human required:** the recipe is ready
-  (`just k3d-install dev/values.yaml <pem>`); the run
-  needs the `boop-bot` App key, a scratch repository and a Temporal
-  frontend reachable from k3d.
+  **Done 2026-10-12** with the `boop-bot-dev` App on
+  `donaldgifford/boop-test-repo` and a host dev server
+  (`just k3d-install dev/values.yaml <pem>`): discovery started
+  `repo/github/1415416781`; one `recheck` ran Job
+  `run-1415416781-1` on Renovate 44.149.2, which ended `Succeeded` /
+  `done` in 18 s with 104 update tuples across six managers. 866
+  Renovate lines were forwarded with the correlation fields, and the Job
+  and its token Secret were gone afterwards. The installation must
+  include the shared-preset repository, since every run's token does.
 - [ ] 7.10 Homelab: a `boopd` namespace on repo-guardian's reference
   Temporal cluster with its own client identity (OQ6), a `boop-bot`
   GitHub App installed on the homelab organisation with the private key
