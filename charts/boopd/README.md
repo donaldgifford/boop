@@ -46,7 +46,7 @@ Prometheus Operator CRDs in the cluster.
 |-----|------|---------|-------------|
 | affinity | object | `{}` | Affinity rules |
 | args | list | `["worker","--config","/etc/boopd/boopd.hcl"]` | Container args. The default runs the worker role against the chart-rendered config file. |
-| boopd | object | See values.yaml | boopd.hcl, rendered into the `<fullname>-config` ConfigMap and mounted read-only at /etc/boopd/boopd.hcl. The keys mirror the config file's blocks in camelCase (examples/boopd.hcl is the annotated reference); an empty or absent key leaves the file's default. |
+| boopd | object | See values.yaml | boopd.hcl, rendered into the `<fullname>-config` ConfigMap and mounted read-only at /etc/boopd/boopd.hcl. The keys mirror the config file's blocks in camelCase (docs/config.md in the boop repository is the reference for every setting and its chart key); an empty or absent key leaves the file's default. |
 | command | list | `[]` | Override the container command (default: image entrypoint) |
 | config.logLevel | string | `"info"` | Log level (published as LOG_LEVEL) |
 | config.metricsPort | int | `9090` | Container metrics port (published as METRICS_ADDR) |

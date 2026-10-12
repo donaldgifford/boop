@@ -1,4 +1,5 @@
 # boopd config (ADR-0004, DESIGN-0001 § API / Interface Changes).
+# docs/config.md describes every setting, its default and its chart key.
 # The chart renders this file from its values; `boopd config validate`
 # checks it without starting anything.
 

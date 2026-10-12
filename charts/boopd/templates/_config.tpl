@@ -1,8 +1,9 @@
 {{/*
 boopd.hcl, the worker's config file (ADR-0004, DESIGN-0001 § API /
 Interface Changes), rendered from .Values.boopd. The values mirror the
-blocks internal/config decodes; examples/boopd.hcl is the annotated
-reference. `boopd config validate` checks the rendered file in CI.
+blocks internal/config decodes; docs/config.md is the reference and
+examples/boopd.hcl a complete file. `boopd config validate` checks the
+rendered file in CI.
 */}}
 
 {{/*
