@@ -52,6 +52,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(chart)* Ct install against a bare cluster
 - *(activities)* Heartbeat RunRenovate while the pod is pending
 - *(observability)* Close the health server when shutdown runs out
+- *(just)* K3d-install arguments are positional and stay on the k3d context
 
 ### Documentation
 
