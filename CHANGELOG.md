@@ -71,6 +71,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Phase 6 layout, worker role and boopd rename
 - Phase 7 chart status and configuration contract
 - *(impl-0001)* Fixture contents and phase 8 deferred to the homelab
+- *(impl-0001)* Task 7.9 done against boop-test-repo
 
 ### Testing
 
