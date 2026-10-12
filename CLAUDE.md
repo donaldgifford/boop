@@ -144,6 +144,7 @@ test/stub-github/         # test/fakegithub over TLS as an image for the chart e
 test/e2e/                 # k3d e2e suite, build tag e2e; `just e2e`
 test/fakegithub/          # in-process GitHub (App, mint/revoke, paging, probes, /rate_limit) for tests
 examples/boopd.hcl        # the design's example config; `boopd config validate` keeps it loadable
+docs/config.md            # boopd.hcl reference: every setting, default, chart key; a test keeps it complete
 docs/investigation/       # INV-0001 is the founding document
 charts/boopd/             # Helm chart + unittest suites + values.schema.json; charts/redis is the cache subchart
 Dockerfile                # multi-stage distroless build (VERSION/COMMIT/DATE args)

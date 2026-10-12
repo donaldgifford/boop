@@ -47,8 +47,9 @@ config:
 
 # -- boopd.hcl, rendered into the `<fullname>-config` ConfigMap and
 # mounted read-only at /etc/boopd/boopd.hcl. The keys mirror the config
-# file's blocks in camelCase (examples/boopd.hcl is the annotated
-# reference); an empty or absent key leaves the file's default.
+# file's blocks in camelCase (docs/config.md in the boop repository is
+# the reference for every setting and its chart key); an empty or absent
+# key leaves the file's default.
 # @default -- See values.yaml
 boopd:
   # Where the chart mounts the Secrets the config names: <dir>/<name>/<key>.
