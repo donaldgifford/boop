@@ -7,7 +7,10 @@ secrets_dir = "/etc/boopd/secrets"
 renovate {
   # Renovate keeps the tag and digest current.
   image         = "ghcr.io/renovatebot/renovate:44-full@sha256:0000000000000000000000000000000000000000000000000000000000000000"
-  config_path   = "renovate.json" # the one path discovery probes; what repo-guardian writes
+  # config_paths lists the files a repository is onboarded by, in
+  # precedence order. Omitted, it is Renovate's own GitHub list, so boopd
+  # parses the file Renovate reads: renovate.json{,c,5},
+  # .github/renovate.json{,c,5}, .renovaterc, .renovaterc.json{,c,5}.
   shared_preset = "github>boop-bot/renovate-config:default.json"
   log_level     = "info"
   git_author    = "boop-bot <boop-bot[bot]@users.noreply.github.com>"

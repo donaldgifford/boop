@@ -3,10 +3,12 @@ package config_test
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/donaldgifford/boop/internal/config"
+	"github.com/donaldgifford/boop/internal/platform"
 )
 
 // TestValidation breaks the example in one place per case and asserts
@@ -30,20 +32,33 @@ func TestValidation(t *testing.T) {
 		{name: "unknown attribute", old: `log_level     = "info"`, new: `log_lvl = "info"`, summary: "Unsupported argument", at: "log_lvl"},
 		{name: "unknown block", old: "runs {", new: "runz {}\nruns {", summary: "Unsupported block type", at: "runz"},
 		{name: "image not pinned", old: digest, new: "", summary: "Image not pinned", at: "44-full\""},
-		{name: "config_path absolute", old: `"renovate.json" #`, new: `"/renovate.json" #`, summary: "Invalid config_path", at: `"/renovate.json"`},
 		{
-			name:    "config_path escapes",
-			old:     `"renovate.json" #`,
-			new:     `"../renovate.json" #`,
-			summary: "Invalid config_path",
-			at:      `"../renovate.json"`,
+			name:    "config_paths absolute",
+			old:     "  shared_preset =",
+			new:     "  config_paths = [\"/renovate.json\"]\n  shared_preset =",
+			summary: "Invalid config_paths",
+			at:      `["/renovate.json"]`,
 		},
 		{
-			name:    "config_path unclean",
-			old:     `"renovate.json" #`,
-			new:     `"a//renovate.json" #`,
-			summary: "Invalid config_path",
-			at:      `"a//renovate.json"`,
+			name:    "config_paths escapes",
+			old:     "  shared_preset =",
+			new:     "  config_paths = [\"../renovate.json\"]\n  shared_preset =",
+			summary: "Invalid config_paths",
+			at:      `["../renovate.json"]`,
+		},
+		{
+			name:    "config_paths unclean",
+			old:     "  shared_preset =",
+			new:     "  config_paths = [\"a//renovate.json\"]\n  shared_preset =",
+			summary: "Invalid config_paths",
+			at:      `["a//renovate.json"]`,
+		},
+		{
+			name:    "config_paths duplicate",
+			old:     "  shared_preset =",
+			new:     "  config_paths = [\"renovate.json5\", \"renovate.json5\"]\n  shared_preset =",
+			summary: "Invalid config_paths",
+			at:      `["renovate.json5", "renovate.json5"]`,
 		},
 		{name: "shared_preset json5", old: "default.json\"", new: "default.json5\"", summary: "Invalid shared_preset", at: "default.json5"},
 		{name: "dry_run enum", old: `dry_run       = "full"`, new: `dry_run = "everything"`, summary: "Invalid value", at: `"everything"`},
@@ -220,10 +235,10 @@ func TestValidation_ReportsEveryError(t *testing.T) {
 	src := strings.NewReplacer(
 		"reserve_fraction    = 0.10", "reserve_fraction = 0.9",
 		"app_id        = 123456", "app_id = -4",
-		`"renovate.json" #`, `"/abs" #`,
+		"  shared_preset =", "  config_paths = [\"/abs\"]\n  shared_preset =",
 	).Replace(string(example))
 	_, diags := config.Parse("boopd.hcl", []byte(src))
-	want := []string{"Invalid reserve_fraction", "Invalid app_id", "Invalid config_path"}
+	want := []string{"Invalid reserve_fraction", "Invalid app_id", "Invalid config_paths"}
 	for _, w := range want {
 		found := false
 		for _, d := range diags.Diagnostics {
@@ -268,7 +283,6 @@ app "a" {
 		got, want any
 	}{
 		{"secrets_dir", cfg.SecretsDir, config.DefaultSecretsDir},
-		{"config_path", cfg.Renovate.ConfigPath, "renovate.json"},
 		{"log_level", cfg.Renovate.LogLevel, "info"},
 		{"dry_run", cfg.Renovate.DryRun, ""},
 		{"pending_timeout", cfg.Runs.PendingTimeout, config.DefaultPendingTimeout},
@@ -288,6 +302,9 @@ app "a" {
 		if c.got != c.want {
 			t.Errorf("default %s = %v, want %v", c.name, c.got, c.want)
 		}
+	}
+	if !slices.Equal(cfg.Renovate.ConfigPaths, platform.DefaultConfigPaths) {
+		t.Errorf("default config_paths = %q, want %q", cfg.Renovate.ConfigPaths, platform.DefaultConfigPaths)
 	}
 }
 

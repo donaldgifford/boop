@@ -40,8 +40,8 @@ type fileSchema struct {
 type renovateBlock struct {
 	Image             string          `hcl:"image"`
 	ImageRange        hcl.Range       `hcl:"image,attr_value_range"`
-	ConfigPath        *string         `hcl:"config_path,optional"`
-	ConfigPathRange   hcl.Range       `hcl:"config_path,attr_value_range"`
+	ConfigPaths       []string        `hcl:"config_paths,optional"`
+	ConfigPathsRange  hcl.Range       `hcl:"config_paths,attr_value_range"`
 	SharedPreset      *string         `hcl:"shared_preset,optional"`
 	SharedPresetRange hcl.Range       `hcl:"shared_preset,attr_value_range"`
 	LogLevel          hcl.Expression  `hcl:"log_level,optional"`

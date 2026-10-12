@@ -214,7 +214,7 @@ func (h *chartHarness) deployStubGitHub(ctx context.Context, t *testing.T) {
 		"repos": []fakegithub.Repo{
 			{
 				ID: h.repoID, NodeID: "R_on", Slug: runSlug, DefaultBranch: "main",
-				HasConfig: true, Config: `{"extends":["config:recommended"]}`,
+				HasConfig: true, ConfigPath: ".github/renovate.json5", Config: `{extends: ["config:recommended",],}`,
 			},
 			{ID: h.repoID + 1, NodeID: "R_off", Slug: "boop-e2e/no-config", DefaultBranch: "main"},
 		},

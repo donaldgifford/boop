@@ -6,7 +6,6 @@ renders the golden example (examples/boopd.hcl as values):
 
       renovate {
         image = "ghcr.io/renovatebot/renovate:44-full@sha256:0f5b1a9e4c3d2b1a0f9e8d7c6b5a4938271605f4e3d2c1b0a9f8e7d6c5b4a392"
-        config_path = "renovate.json"
         shared_preset = "github>boop-bot/renovate-config:default.json"
         log_level = "info"
         dry_run = "full"
@@ -78,7 +77,6 @@ renders the golden example (examples/boopd.hcl as values):
       app "boop-bot" {
         endpoint = "https://api.github.com"
         app_id = 123456
-        installations = []
         cadence = "24h"
 
         private_key_secret_ref {

@@ -81,8 +81,8 @@ func (b *builder) validateRenovate(r *Renovate, raw *renovateBlock) {
 	if !digestPinned.MatchString(r.Image) {
 		b.errorf(raw.ImageRange, "Image not pinned", "renovate.image %q must be pinned by digest (name:tag@sha256:<64 hex>).", r.Image)
 	}
-	if err := checkRelativeFile(r.ConfigPath); err != nil {
-		b.errorf(rangeOr(raw.ConfigPathRange, raw.DefRange), "Invalid config_path", "%v.", err)
+	if err := checkConfigPaths(r.ConfigPaths); err != nil {
+		b.errorf(rangeOr(raw.ConfigPathsRange, raw.DefRange), "Invalid config_paths", "%v.", err)
 	}
 	if err := jobspec.ValidatePreset(r.SharedPreset); err != nil {
 		b.errorf(rangeOr(raw.SharedPresetRange, raw.DefRange), "Invalid shared_preset", "%v.", err)
@@ -197,18 +197,41 @@ func (b *builder) validateSecretRef(ref *secretRefBlock, what string) {
 	}
 }
 
+// maxConfigPaths bounds config_paths: the GraphQL probe asks for every
+// path on every repository in one query.
+const maxConfigPaths = 16
+
+// checkConfigPaths checks config_paths: at most maxConfigPaths distinct
+// clean file paths relative to the repository root.
+func checkConfigPaths(paths []string) error {
+	if len(paths) > maxConfigPaths {
+		return fmt.Errorf("config_paths lists %d paths, more than %d", len(paths), maxConfigPaths)
+	}
+	seen := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		if err := checkRelativeFile(p); err != nil {
+			return err
+		}
+		if seen[p] {
+			return fmt.Errorf("config_paths lists %q twice", p)
+		}
+		seen[p] = true
+	}
+	return nil
+}
+
 // checkRelativeFile accepts a clean, relative path to a file inside the
 // repository.
 func checkRelativeFile(p string) error {
 	switch {
 	case p == "":
-		return fmt.Errorf("config_path must not be empty")
+		return fmt.Errorf("config_paths entries must not be empty")
 	case path.IsAbs(p):
-		return fmt.Errorf("config_path %q must be relative to the repository root", p)
+		return fmt.Errorf("config path %q must be relative to the repository root", p)
 	case strings.HasSuffix(p, "/"), path.Clean(p) != p:
-		return fmt.Errorf("config_path %q must be a clean file path", p)
+		return fmt.Errorf("config path %q must be a clean file path", p)
 	case p == "." || p == ".." || strings.HasPrefix(p, "../"):
-		return fmt.Errorf("config_path %q must stay inside the repository", p)
+		return fmt.Errorf("config path %q must stay inside the repository", p)
 	}
 	return nil
 }

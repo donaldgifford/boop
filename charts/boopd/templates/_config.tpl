@@ -16,8 +16,8 @@ only difference that matters is template interpolation, so "${" and
 
 {{/*
 Optional attributes: (list <map> (list "valueKey:hcl_name" ...) <indent>).
-A key that is absent, null or the empty string is omitted, so the
-config's own defaults apply; false and 0 are kept.
+A key that is absent, null, the empty string or an empty list is
+omitted, so the config's own defaults apply; false and 0 are kept.
 */}}
 {{- define "boopd.hclAttrs" -}}
 {{- $m := index . 0 | default dict -}}
@@ -26,7 +26,7 @@ config's own defaults apply; false and 0 are kept.
 {{- $k := first (splitList ":" $pair) -}}
 {{- if hasKey $m $k -}}
 {{- $v := get $m $k -}}
-{{- if not (or (kindIs "invalid" $v) (and (kindIs "string" $v) (eq $v ""))) }}
+{{- if not (or (kindIs "invalid" $v) (and (kindIs "string" $v) (eq $v "")) (and (kindIs "slice" $v) (empty $v))) }}
 {{ $pad }}{{ last (splitList ":" $pair) }} = {{ include "boopd.hclValue" $v }}
 {{- end -}}
 {{- end -}}
@@ -90,7 +90,7 @@ subchart, the key prefix its ACL user is limited to.
 secrets_dir = {{ include "boopd.hclValue" $c.secretsDir }}
 
 renovate {
-{{- include "boopd.hclAttrs" (list $c.renovate (list "image:image" "configPath:config_path" "sharedPreset:shared_preset" "logLevel:log_level" "dryRun:dry_run" "gitAuthor:git_author") 2) }}
+{{- include "boopd.hclAttrs" (list $c.renovate (list "image:image" "configPaths:config_paths" "sharedPreset:shared_preset" "logLevel:log_level" "dryRun:dry_run" "gitAuthor:git_author") 2) }}
 {{- with include "boopd.renovateGlobal" . | fromJson }}
 
   global {

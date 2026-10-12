@@ -36,6 +36,20 @@ tests:
           path: data["boopd.hcl"]
           pattern: 'git_author = "bot \$\$\{x\} %%\{y\}"'
 
+  - it: leaves config_paths to boopd's default when empty
+    asserts:
+      - notMatchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'config_paths'
+
+  - it: renders config_paths as a list
+    set:
+      boopd.renovate.configPaths: [renovate.json5, .github/renovate.json5]
+    asserts:
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'config_paths = \["renovate.json5",".github/renovate.json5"\]'
+
   - it: rejects an image not pinned by digest
     set:
       boopd.renovate.image: ghcr.io/renovatebot/renovate:44-full

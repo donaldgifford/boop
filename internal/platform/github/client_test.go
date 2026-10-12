@@ -172,43 +172,29 @@ func TestDiscover_TopicAndPatternFilter(t *testing.T) {
 	}
 }
 
-func TestHasRenovateConfig_ConfiguredPathOnly(t *testing.T) {
+func TestHasRenovateConfig_Paths(t *testing.T) {
 	t.Parallel()
-
-	found := func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"name":"renovate.json","type":"file","content":"e30K","encoding":"base64"}`))
-	}
 	tests := []struct {
-		name string
-		opts []ghclient.ClientOption
-		have string
-		want bool
+		name  string
+		paths []string
+		have  string
+		want  bool
 	}{
-		{name: "default path present", have: "renovate.json", want: true},
-		{name: "only another path present", have: ".renovaterc", want: false},
-		{
-			name: "configured path present",
-			opts: []ghclient.ClientOption{ghclient.WithConfigPath(".github/renovate.json")},
-			have: ".github/renovate.json", want: true,
-		},
-		{
-			name: "configured path absent, default present",
-			opts: []ghclient.ClientOption{ghclient.WithConfigPath(".github/renovate.json")},
-			have: "renovate.json", want: false,
-		},
+		{name: "renovate.json", have: "renovate.json", want: true},
+		{name: "renovate.json5", have: "renovate.json5", want: true},
+		{name: ".github/renovate.json5", have: ".github/renovate.json5", want: true},
+		{name: ".renovaterc", have: ".renovaterc", want: true},
+		{name: ".renovaterc.json", have: ".renovaterc.json", want: true},
+		{name: "not a Renovate name", have: "renovate.yaml", want: false},
+		{name: "only package.json", have: "package.json", want: false},
+		{name: "configured path present", paths: []string{"ci/renovate.json5"}, have: "ci/renovate.json5", want: true},
+		{name: "configured path absent, default present", paths: []string{"ci/renovate.json5"}, have: "renovate.json", want: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			srv := httptest.NewServer(&fakeServer{t: t, handlers: map[string]http.HandlerFunc{
-				"GET /api/v3/repos/o/r/contents/" + tt.have: found,
-			}})
-			t.Cleanup(srv.Close)
-			opts := append([]ghclient.ClientOption{ghclient.WithRateLimit(rate.Inf, 1)}, tt.opts...)
-			c, err := ghclient.NewWithToken(ghclient.TokenAuth{Token: "t", BaseURL: srv.URL + "/"}, opts...)
-			if err != nil {
-				t.Fatalf("NewWithToken: %v", err)
-			}
+			tree := &repoTree{files: map[string]map[string]string{"o/r": {tt.have: "{}", "README.md": "hi"}}}
+			c := newProbeClient(t, tree, ghclient.WithConfigPaths(tt.paths))
 			got, err := c.HasRenovateConfig(context.Background(), &platform.Repository{Slug: "o/r", DefaultBranch: testDefaultBranch})
 			if err != nil {
 				t.Fatalf("HasRenovateConfig() err = %v", err)
@@ -217,6 +203,15 @@ func TestHasRenovateConfig_ConfiguredPathOnly(t *testing.T) {
 				t.Errorf("HasRenovateConfig() with %s present = %v, want %v", tt.have, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestHasRenovateConfig_ListingError(t *testing.T) {
+	t.Parallel()
+	tree := &repoTree{fail: map[string]int{"o/r": http.StatusBadGateway}}
+	_, err := newProbeClient(t, tree).HasRenovateConfig(context.Background(), &platform.Repository{Slug: "o/r", DefaultBranch: testDefaultBranch})
+	if !errors.Is(err, platform.ErrTransient) {
+		t.Errorf("HasRenovateConfig() err = %v, want ErrTransient", err)
 	}
 }
 

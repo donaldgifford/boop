@@ -3,6 +3,7 @@ package activities_test
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"sync"
 	"testing"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/donaldgifford/boop/internal/activities"
 	"github.com/donaldgifford/boop/internal/config"
+	"github.com/donaldgifford/boop/internal/platform"
 	"github.com/donaldgifford/boop/internal/workflows"
 	"github.com/donaldgifford/boop/test/fakegithub"
 )
@@ -58,17 +60,27 @@ func (s *starter) ids() []string {
 	return out
 }
 
-// fleet is n repositories; every third has the config file, every
-// tenth is a fork.
+// fleetConfigs are the config files fleet rotates through: JSON at
+// renovate.json, JSON5 at renovate.json5 and .github/renovate.json5.
+var fleetConfigs = []struct{ path, text string }{
+	{"renovate.json", `{"extends":["local>acme/renovate-config"]}`},
+	{"renovate.json5", "{\n  // shared preset\n  extends: ['local>acme/renovate-config',],\n}"},
+	{".github/renovate.json5", `{extends: ["local>acme/renovate-config"]}`},
+}
+
+// fleet is n repositories; every third has a config file, rotating
+// through fleetConfigs, and every tenth is a fork.
 func fleet(n int) []fakegithub.Repo {
 	repos := make([]fakegithub.Repo, n)
 	for i := range repos {
 		id := int64(i + 1)
+		cfg := fleetConfigs[(i/3)%len(fleetConfigs)]
 		repos[i] = fakegithub.Repo{
 			ID: id, NodeID: fmt.Sprintf("R_%d", id), Slug: fmt.Sprintf("acme/r%d", id), DefaultBranch: "main",
-			Fork:      i%10 == 9,
-			HasConfig: i%3 == 0,
-			Config:    `{"extends":["local>acme/renovate-config"]}`,
+			Fork:       i%10 == 9,
+			HasConfig:  i%3 == 0,
+			Config:     cfg.text,
+			ConfigPath: cfg.path,
 		}
 	}
 	return repos
@@ -87,25 +99,42 @@ func onboardedIDs(repos []fakegithub.Repo, fromPage int) []string {
 }
 
 type discoveryHarness struct {
-	gh    *fakegithub.Server
-	start *starter
-	env   *testsuite.TestActivityEnvironment
-	beats []workflows.DiscoverProgress
-	mu    sync.Mutex
+	gh      *fakegithub.Server
+	start   *starter
+	env     *testsuite.TestActivityEnvironment
+	metrics *probedMetrics
+	beats   []workflows.DiscoverProgress
+	mu      sync.Mutex
+}
+
+// probedMetrics records ConfigProbed counts by config attribute.
+type probedMetrics struct {
+	activities.NopMetrics
+	mu     sync.Mutex
+	counts map[string]int
+}
+
+func (m *probedMetrics) ConfigProbed(_ int64, outcome string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.counts == nil {
+		m.counts = map[string]int{}
+	}
+	m.counts[outcome]++
 }
 
 func newDiscovery(t *testing.T, gh *fakegithub.Server, probe string) *discoveryHarness {
 	t.Helper()
-	h := &discoveryHarness{gh: gh, start: &starter{}}
+	h := &discoveryHarness{gh: gh, start: &starter{}, metrics: &probedMetrics{}}
 	cfg := &config.Config{
-		Renovate: config.Renovate{ConfigPath: "renovate.json"},
+		Renovate: config.Renovate{ConfigPaths: platform.DefaultConfigPaths},
 		Apps: []*config.App{{
 			Name: "main", AppID: 7, Endpoint: gh.BaseURL(), PrivateKey: config.NewSecret(gh.PEM),
 			Discovery: config.Discovery{Every: 6 * time.Hour, Probe: probe, SkipForks: true},
 			Budget:    config.Budget{ReserveFraction: 0.1},
 		}},
 	}
-	acts := activities.New(&activities.Deps{Config: cfg, Temporal: h.start, TaskQueue: "boopd"})
+	acts := activities.New(&activities.Deps{Config: cfg, Temporal: h.start, TaskQueue: "boopd", Metrics: h.metrics})
 	h.env = (&testsuite.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	acts.Register(h.env)
 	h.env.SetOnActivityHeartbeatListener(func(_ *activity.Info, d converter.EncodedValues) {
@@ -169,6 +198,7 @@ func TestDiscoverInstallation_GraphQL(t *testing.T) {
 	if r := h.gh.RateReads(); r != 3 {
 		t.Errorf("rate reads = %d, want one before each page", r)
 	}
+	assertExtends(t, h.start.calls)
 
 	c := h.start.calls[0]
 	if c.Signal != workflows.DiscoveredSignal || c.Type != workflows.RepoWorkflowName || c.Opts.ID != c.ID || c.Opts.TaskQueue != "boopd" {
@@ -203,6 +233,54 @@ func TestDiscoverInstallation_REST(t *testing.T) {
 	}
 	if q := h.gh.ProbeQueries(); q != 0 {
 		t.Errorf("GraphQL queries = %d with the REST probe", q)
+	}
+	assertExtends(t, h.start.calls)
+}
+
+// assertExtends checks every signal carries the fleet's extends,
+// whichever file and format it came from.
+func assertExtends(t *testing.T, calls []signalCall) {
+	t.Helper()
+	for i := range calls {
+		if c := &calls[i]; !slices.Equal(c.Arg.Extends, []string{"local>acme/renovate-config"}) {
+			t.Errorf("signal %s extends = %q, want the fleet preset", c.ID, c.Arg.Extends)
+		}
+	}
+}
+
+// Every repository discovery sees is counted once, by whether its
+// config was present, absent or unparsed; an unparsed one is still
+// onboarded, with no extends.
+func TestDiscoverInstallation_CountsConfigOutcomes(t *testing.T) {
+	t.Parallel()
+	repos := []fakegithub.Repo{
+		{ID: 1, NodeID: "R_1", Slug: "acme/json5", DefaultBranch: "main", HasConfig: true, ConfigPath: "renovate.json5", Config: `{extends: ["a"],}`},
+		{ID: 2, NodeID: "R_2", Slug: "acme/none", DefaultBranch: "main"},
+		{ID: 3, NodeID: "R_3", Slug: "acme/broken", DefaultBranch: "main", HasConfig: true, ConfigPath: ".renovaterc", Config: `{extends: [`},
+		{ID: 4, NodeID: "R_4", Slug: "acme/other-name", DefaultBranch: "main", HasConfig: true, ConfigPath: "renovate.yaml", Config: `{}`},
+	}
+	for _, probe := range []string{config.ProbeGraphQL, config.ProbeREST} {
+		t.Run(probe, func(t *testing.T) {
+			t.Parallel()
+			h := newDiscovery(t, fastFake(t, repos), probe)
+			sum, err := h.run()
+			if err != nil {
+				t.Fatalf("DiscoverInstallation: %v", err)
+			}
+			if got, want := h.start.ids(), []string{workflows.RepoWorkflowID(1), workflows.RepoWorkflowID(3)}; !slices.Equal(got, want) {
+				t.Errorf("signalled %v, want %v", got, want)
+			}
+			if sum.Seen != 4 || sum.Onboarded != 2 {
+				t.Errorf("summary = %+v, want 4 seen and 2 onboarded", *sum)
+			}
+			want := map[string]int{activities.ConfigPresent: 1, activities.ConfigAbsent: 2, activities.ConfigUnparsed: 1}
+			if !maps.Equal(h.metrics.counts, want) {
+				t.Errorf("ConfigProbed counts = %v, want %v", h.metrics.counts, want)
+			}
+			if c := h.start.calls[1]; c.Arg.Extends != nil {
+				t.Errorf("unparsed config's signal extends = %q, want none", c.Arg.Extends)
+			}
+		})
 	}
 }
 

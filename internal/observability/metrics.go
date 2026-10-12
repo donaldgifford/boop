@@ -45,6 +45,7 @@ const (
 	TokenMintsTotal       = "boopd_token_mints_total"       //nolint:gosec // G101: a metric name
 	TokenRevocationsTotal = "boopd_token_revocations_total" //nolint:gosec // G101: a metric name
 	DiscoveryProbeCost    = "boopd_discovery_probe_cost"
+	DiscoveryReposTotal   = "boopd_discovery_repos_total"
 	KubeRequestsTotal     = "boopd_kube_requests_total"
 )
 
@@ -65,6 +66,7 @@ type Metrics struct {
 	mints       metric.Int64Counter
 	revocations metric.Int64Counter
 	probeCost   metric.Int64Counter
+	repos       metric.Int64Counter
 	kube        metric.Int64Counter
 }
 
@@ -98,6 +100,10 @@ func NewMetrics(mp metric.MeterProvider) (*Metrics, error) {
 	out.mints = counter(TokenMintsTotal, "Run token mints by outcome.")
 	out.revocations = counter(TokenRevocationsTotal, "Run token revocations by outcome.")
 	out.probeCost = counter(DiscoveryProbeCost, "Discovery config-probe spend by installation and resource.")
+	out.repos = counter(
+		DiscoveryReposTotal,
+		"Repositories discovery probed, by installation and whether a config file was present, absent or unparsed.",
+	)
 	out.kube = counter(KubeRequestsTotal, "Kubernetes API requests by verb, resource and status code.")
 	if err := errors.Join(errs...); err != nil {
 		return nil, err
@@ -149,6 +155,12 @@ func (m *Metrics) TokenRevocation(outcome string) {
 func (m *Metrics) ProbeCost(installationID int64, resource string, cost int) {
 	m.probeCost.Add(context.Background(), int64(cost), metric.WithAttributes(
 		attribute.String("installation", strconv.FormatInt(installationID, 10)), attribute.String("resource", resource)))
+}
+
+// ConfigProbed implements activities.Metrics.
+func (m *Metrics) ConfigProbed(installationID int64, config string) {
+	m.repos.Add(context.Background(), 1, metric.WithAttributes(
+		attribute.String("installation", strconv.FormatInt(installationID, 10)), attribute.String("config", config)))
 }
 
 // RecordRequest implements kube.RequestRecorder.

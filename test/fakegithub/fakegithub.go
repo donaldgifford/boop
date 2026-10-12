@@ -26,6 +26,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -47,8 +48,18 @@ type Repo struct {
 	Fork          bool
 	Archived      bool
 	// Config is the config file's text; HasConfig says whether it exists.
-	Config    string
-	HasConfig bool
+	// ConfigPath is where it lives; empty means renovate.json.
+	Config     string
+	HasConfig  bool
+	ConfigPath string
+}
+
+// configPath is where the repository's config file lives.
+func (r *Repo) configPath() string {
+	if r.ConfigPath == "" {
+		return "renovate.json"
+	}
+	return r.ConfigPath
 }
 
 // Installation is one installation of the App.
@@ -375,13 +386,30 @@ func (s *Server) rateLimit(w http.ResponseWriter) {
 
 func (s *Server) probe(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Variables struct {
-			IDs []string `json:"ids"`
-		} `json:"variables"`
+		Variables map[string]json.RawMessage `json:"variables"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, message(err.Error()))
 		return
+	}
+	var ids []string
+	if err := json.Unmarshal(req.Variables["ids"], &ids); err != nil {
+		writeJSON(w, http.StatusBadRequest, message("ids: "+err.Error()))
+		return
+	}
+	// $e<i> is "HEAD:<path>", answered by field c<i>.
+	var paths []string
+	for i := 0; ; i++ {
+		raw, ok := req.Variables["e"+strconv.Itoa(i)]
+		if !ok {
+			break
+		}
+		var e string
+		if err := json.Unmarshal(raw, &e); err != nil {
+			writeJSON(w, http.StatusBadRequest, message("expression: "+err.Error()))
+			return
+		}
+		paths = append(paths, strings.TrimPrefix(e, "HEAD:"))
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -390,23 +418,71 @@ func (s *Server) probe(w http.ResponseWriter, r *http.Request) {
 	for i := range s.repos {
 		byNode[s.repos[i].NodeID] = &s.repos[i]
 	}
-	nodes := make([]any, 0, len(req.Variables.IDs))
-	for _, id := range req.Variables.IDs {
+	nodes := make([]any, 0, len(ids))
+	for _, id := range ids {
 		repo, ok := byNode[id]
-		switch {
-		case !ok:
+		if !ok {
 			nodes = append(nodes, nil)
-		case repo.HasConfig:
-			nodes = append(nodes, map[string]any{"id": id, "config": map[string]any{"byteSize": len(repo.Config), "text": repo.Config}})
-		default:
-			nodes = append(nodes, map[string]any{"id": id, "config": nil})
+			continue
 		}
+		node := map[string]any{"id": id}
+		for i, p := range paths {
+			var obj any
+			if repo.HasConfig && p == repo.configPath() {
+				obj = map[string]any{"byteSize": len(repo.Config), "text": repo.Config}
+			}
+			node["c"+strconv.Itoa(i)] = obj
+		}
+		nodes = append(nodes, node)
 	}
 	g := s.rates["graphql"]
 	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
 		"rateLimit": map[string]any{"cost": s.probeCost, "remaining": g.Remaining, "resetAt": g.Reset.UTC().Format(time.RFC3339)},
 		"nodes":     nodes,
 	}})
+}
+
+// contents answers GET contents/{path} for a repository whose only file
+// is its config: the file itself, or a listing of each directory on the
+// way to it.
+func (*Server) contents(w http.ResponseWriter, repo *Repo, parts []string) {
+	p := ""
+	if len(parts) == 4 {
+		p = strings.Trim(parts[3], "/")
+	}
+	cfg := repo.configPath()
+	switch {
+	case !repo.HasConfig:
+		if p == "" {
+			writeJSON(w, http.StatusOK, []any{})
+			return
+		}
+		notFound(w)
+	case p == cfg:
+		file := entry("file", cfg[strings.LastIndex(cfg, "/")+1:], p)
+		file["size"] = len(repo.Config)
+		file["encoding"] = "base64"
+		file["content"] = base64.StdEncoding.EncodeToString([]byte(repo.Config))
+		writeJSON(w, http.StatusOK, file)
+	case p == "" || strings.HasPrefix(cfg, p+"/"):
+		rel := strings.TrimPrefix(cfg, p+"/")
+		if p == "" {
+			rel = cfg
+		}
+		name, _, nested := strings.Cut(rel, "/")
+		kind := "file"
+		if nested {
+			kind = "dir"
+		}
+		writeJSON(w, http.StatusOK, []any{entry(kind, name, strings.TrimPrefix(p+"/"+name, "/"))})
+	default:
+		notFound(w)
+	}
+}
+
+// entry is one contents API object.
+func entry(kind, name, p string) map[string]any {
+	return map[string]any{"type": kind, "name": name, "path": p}
 }
 
 func (s *Server) repoByID(w http.ResponseWriter, id string) {
@@ -427,7 +503,8 @@ func (s *Server) repoByID(w http.ResponseWriter, id string) {
 }
 
 // repoPath serves /repos/{owner}/{name} and
-// /repos/{owner}/{name}/contents/{path}.
+// /repos/{owner}/{name}/contents/{path}: the config file, or a listing
+// of the directory it is in.
 func (s *Server) repoPath(w http.ResponseWriter, rest string) {
 	parts := strings.SplitN(rest, "/", 4)
 	if len(parts) < 2 {
@@ -445,8 +522,8 @@ func (s *Server) repoPath(w http.ResponseWriter, rest string) {
 		switch {
 		case len(parts) == 2:
 			writeJSON(w, http.StatusOK, repoJSON(repo))
-		case len(parts) == 4 && parts[2] == "contents" && repo.HasConfig:
-			writeJSON(w, http.StatusOK, map[string]any{"type": "file", "name": parts[3], "path": parts[3], "size": len(repo.Config)})
+		case len(parts) >= 3 && parts[2] == "contents":
+			s.contents(w, repo, parts)
 		default:
 			notFound(w)
 		}

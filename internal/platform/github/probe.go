@@ -23,6 +23,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,31 +39,25 @@ const (
 	probeBatch = 100
 
 	// maxConfigBytes bounds the config text parsed for extends; a larger
-	// file yields an empty list.
+	// file is reported unparsed.
 	maxConfigBytes = 64 << 10
 )
 
-// probeQuery is the config probe. The expression is a variable, so the
-// configured path is never spliced into the query text.
-const probeQuery = `query($ids: [ID!]!, $expr: String!) {
-  rateLimit { cost remaining resetAt }
-  nodes(ids: $ids) {
-    ... on Repository {
-      id
-      config: object(expression: $expr) {
-        ... on Blob { byteSize text }
-      }
-    }
-  }
-}`
-
 // ConfigProbe is one repository's probe answer.
 type ConfigProbe struct {
-	// Exists is true when the config file is on the default branch.
+	// Exists is true when one of the config files is on the default
+	// branch.
 	Exists bool
-	// Extends is the file's extends list; empty when the file is absent,
-	// above 64 KB or does not parse as JSON.
+	// Path is the first config file present, in precedence order: the
+	// one Renovate reads.
+	Path string
+	// Extends is that file's extends list.
 	Extends []string
+	// ParseErr is why the file's extends could not be read: above 64 KB,
+	// binary, or not JSON5. Extends is then empty and the profile comes
+	// from the report alone. The repository is still onboarded; Renovate
+	// reports its own config errors.
+	ParseErr error
 }
 
 // ProbeResult is the outcome of probing a set of repositories.
@@ -92,48 +88,74 @@ type probeResponse struct {
 			Remaining int       `json:"remaining"`
 			ResetAt   time.Time `json:"resetAt"`
 		} `json:"rateLimit"`
-		Nodes []*struct {
-			ID     string `json:"id"`
-			Config *struct {
-				ByteSize int     `json:"byteSize"`
-				Text     *string `json:"text"`
-			} `json:"config"`
-		} `json:"nodes"`
+		// Each node is a repository's id plus one field per path, c0 to
+		// c<n-1>, decoded by probeNode.
+		Nodes []map[string]json.RawMessage `json:"nodes"`
 	} `json:"data"`
 	Errors []struct {
 		Message string `json:"message"`
 	} `json:"errors"`
 }
 
-// ProbeConfig asks GitHub's GraphQL API whether each repository carries
-// the config file at path on its default branch (HEAD), one query per 100
-// node ids, and parses extends from the file's text (DESIGN-0001 OQ3).
-// Every query's rateLimit.cost is read and summed into the result.
-func (c *Client) ProbeConfig(ctx context.Context, nodeIDs []string, path string) (*ProbeResult, error) {
-	if path == "" {
-		path = c.path()
+// blob is one object(expression:) answer. A path that names a tree
+// matches no Blob fragment and decodes with ByteSize nil.
+type blob struct {
+	ByteSize *int    `json:"byteSize"`
+	Text     *string `json:"text"`
+}
+
+// probeQuery is the config probe for n paths: one aliased
+// object(expression:) field per path, c<i> reading $e<i>. The
+// expressions are variables, so no path is spliced into the query text.
+func probeQuery(n int) string {
+	var vars, fields strings.Builder
+	for i := range n {
+		fmt.Fprintf(&vars, ", $e%d: String!", i)
+		fmt.Fprintf(&fields, "\n      c%d: object(expression: $e%d) { ... on Blob { byteSize text } }", i, i)
+	}
+	return "query($ids: [ID!]!" + vars.String() + ") {\n" +
+		"  rateLimit { cost remaining resetAt }\n" +
+		"  nodes(ids: $ids) {\n" +
+		"    ... on Repository {\n" +
+		"      id" + fields.String() + "\n" +
+		"    }\n" +
+		"  }\n" +
+		"}"
+}
+
+// ProbeConfig asks GitHub's GraphQL API which config file each repository
+// carries on its default branch (HEAD), one query per 100 node ids with
+// every path in the same query, and parses extends from the first one
+// present (DESIGN-0001 OQ3). paths is in precedence order; empty means
+// the client's. Every query's rateLimit.cost is read and summed into the
+// result.
+func (c *Client) ProbeConfig(ctx context.Context, nodeIDs, paths []string) (*ProbeResult, error) {
+	if len(paths) == 0 {
+		paths = c.paths()
 	}
 	res := &ProbeResult{Configs: make(map[string]ConfigProbe, len(nodeIDs))}
 	for _, id := range nodeIDs {
 		res.Configs[id] = ConfigProbe{}
 	}
+	query := probeQuery(len(paths))
 	for start := 0; start < len(nodeIDs); start += probeBatch {
 		batch := nodeIDs[start:min(start+probeBatch, len(nodeIDs))]
-		if err := c.probeBatch(ctx, batch, path, res); err != nil {
+		if err := c.probeBatch(ctx, query, batch, paths, res); err != nil {
 			return nil, err
 		}
 	}
 	return res, nil
 }
 
-func (c *Client) probeBatch(ctx context.Context, ids []string, path string, res *ProbeResult) error {
+func (c *Client) probeBatch(ctx context.Context, query string, ids, paths []string, res *ProbeResult) error {
 	if err := c.wait(ctx); err != nil {
 		return err
 	}
-	req, err := c.gh.NewRequest(http.MethodPost, c.graphqlURL(), &graphqlRequest{
-		Query:     probeQuery,
-		Variables: map[string]any{"ids": ids, "expr": "HEAD:" + path},
-	})
+	vars := map[string]any{"ids": ids}
+	for i, p := range paths {
+		vars["e"+strconv.Itoa(i)] = "HEAD:" + p
+	}
+	req, err := c.gh.NewRequest(http.MethodPost, c.graphqlURL(), &graphqlRequest{Query: query, Variables: vars})
 	if err != nil {
 		return fmt.Errorf("github: build probe request: %w", err)
 	}
@@ -154,32 +176,56 @@ func (c *Client) probeBatch(ctx context.Context, ids []string, path string, res 
 	res.Remaining = out.Data.RateLimit.Remaining
 	res.ResetAt = out.Data.RateLimit.ResetAt
 	for _, n := range out.Data.Nodes {
-		if n == nil || n.ID == "" || n.Config == nil {
-			continue
+		id, probe := probeNode(n, paths)
+		if _, asked := res.Configs[id]; asked && probe.Exists {
+			res.Configs[id] = probe
 		}
-		if _, asked := res.Configs[n.ID]; !asked {
-			continue
-		}
-		text := ""
-		if n.Config.Text != nil {
-			text = *n.Config.Text
-		}
-		res.Configs[n.ID] = ConfigProbe{Exists: true, Extends: parseExtends(text, n.Config.ByteSize)}
 	}
 	return nil
 }
 
-// ProbeConfigREST is the fallback behind discovery.probe: rest: one
-// GET /repos/{slug}/contents/{path} per repository on its default
-// branch. Answers are keyed by NodeID, as ProbeConfig's are.
-func (c *Client) ProbeConfigREST(ctx context.Context, repos []platform.Repository, path string) (*ProbeResult, error) {
-	if path == "" {
-		path = c.path()
+// probeNode reads one node: its id and the first path that is a file.
+func probeNode(n map[string]json.RawMessage, paths []string) (string, ConfigProbe) {
+	var id string
+	if raw, ok := n["id"]; !ok || json.Unmarshal(raw, &id) != nil {
+		return "", ConfigProbe{}
+	}
+	for i, p := range paths {
+		raw, ok := n["c"+strconv.Itoa(i)]
+		if !ok {
+			continue
+		}
+		var b *blob
+		if json.Unmarshal(raw, &b) != nil || b == nil || b.ByteSize == nil {
+			continue
+		}
+		text := ""
+		if b.Text != nil {
+			text = *b.Text
+		}
+		return id, presentProbe(p, text, *b.ByteSize)
+	}
+	return id, ConfigProbe{}
+}
+
+func presentProbe(p, text string, byteSize int) ConfigProbe {
+	extends, err := parseExtends(text, byteSize)
+	return ConfigProbe{Exists: true, Path: p, Extends: extends, ParseErr: err}
+}
+
+// ProbeConfigREST is the fallback behind discovery.probe: rest. For each
+// repository it lists the directories the paths live in on the default
+// branch (the root and .github by default) and fetches the first path
+// present, so a repository costs at most one call per directory plus
+// one. Answers are keyed by NodeID, as ProbeConfig's are.
+func (c *Client) ProbeConfigREST(ctx context.Context, repos []platform.Repository, paths []string) (*ProbeResult, error) {
+	if len(paths) == 0 {
+		paths = c.paths()
 	}
 	res := &ProbeResult{Configs: make(map[string]ConfigProbe, len(repos))}
 	for i := range repos {
-		probe, err := c.probeREST(ctx, &repos[i], path)
-		res.Queries++
+		probe, calls, err := c.probeREST(ctx, &repos[i], paths)
+		res.Queries += calls
 		if err != nil {
 			return nil, err
 		}
@@ -188,57 +234,120 @@ func (c *Client) ProbeConfigREST(ctx context.Context, repos []platform.Repositor
 	return res, nil
 }
 
-func (c *Client) probeREST(ctx context.Context, repo *platform.Repository, path string) (ConfigProbe, error) {
-	owner, name, ok := splitSlug(repo.Slug)
-	if !ok {
-		return ConfigProbe{}, fmt.Errorf("github: invalid slug %q", repo.Slug)
+func (c *Client) probeREST(ctx context.Context, repo *platform.Repository, paths []string) (ConfigProbe, int, error) {
+	found, calls, err := c.locateConfig(ctx, repo, paths)
+	if err != nil || found == "" {
+		return ConfigProbe{}, calls, err
 	}
+	owner, name, _ := splitSlug(repo.Slug)
 	if err := c.wait(ctx); err != nil {
-		return ConfigProbe{}, err
+		return ConfigProbe{}, calls, err
 	}
 	opt := &gogithub.RepositoryContentGetOptions{Ref: repo.DefaultBranch}
-	file, _, resp, err := c.gh.Repositories.GetContents(ctx, owner, name, path, opt)
+	file, _, resp, err := c.gh.Repositories.GetContents(ctx, owner, name, found, opt)
+	calls++
 	if err != nil {
-		classified := classifyErr(resp, err)
-		if errors.Is(classified, platform.ErrNotFound) {
-			return ConfigProbe{}, nil
-		}
-		return ConfigProbe{}, classified
+		return ConfigProbe{}, calls, classifyErr(resp, err)
 	}
 	if file == nil {
-		// path names a directory, not a file.
-		return ConfigProbe{}, nil
+		return ConfigProbe{}, calls, nil
 	}
 	text, err := file.GetContent()
 	if err != nil {
 		// Undecodable content still counts as present, with no extends.
-		text = ""
+		return ConfigProbe{Exists: true, Path: found, ParseErr: fmt.Errorf("decode contents: %w", err)}, calls, nil
 	}
-	return ConfigProbe{Exists: true, Extends: parseExtends(text, file.GetSize())}, nil
+	return presentProbe(found, text, file.GetSize()), calls, nil
 }
 
-// parseExtends returns the config's extends list. Renovate accepts a
-// string or an array of strings. Files above 64 KB, text that is not
-// JSON and any other extends shape yield nil.
-func parseExtends(text string, byteSize int) []string {
-	if byteSize > maxConfigBytes || len(text) > maxConfigBytes || text == "" {
-		return nil
+// locateConfig returns the first of paths that is a file on the
+// repository's default branch, or "" when none is. It lists each path's
+// directory once; a missing directory lists empty. calls is how many
+// requests it sent. GitHub lists at most 1,000 entries per directory.
+func (c *Client) locateConfig(ctx context.Context, repo *platform.Repository, paths []string) (found string, calls int, err error) {
+	owner, name, ok := splitSlug(repo.Slug)
+	if !ok {
+		return "", 0, fmt.Errorf("github: invalid slug %q", repo.Slug)
+	}
+	opt := &gogithub.RepositoryContentGetOptions{Ref: repo.DefaultBranch}
+	listings := make(map[string]map[string]bool)
+	for _, p := range paths {
+		dir := path.Dir(p)
+		if dir == "." {
+			dir = ""
+		}
+		files, listed := listings[dir]
+		if !listed {
+			calls++
+			if files, err = c.listFiles(ctx, owner, name, dir, opt); err != nil {
+				return "", calls, err
+			}
+			listings[dir] = files
+		}
+		if files[path.Base(p)] {
+			return p, calls, nil
+		}
+	}
+	return "", calls, nil
+}
+
+// listFiles returns the names of the files in one directory; a missing
+// directory has none.
+func (c *Client) listFiles(ctx context.Context, owner, name, dir string, opt *gogithub.RepositoryContentGetOptions) (map[string]bool, error) {
+	if err := c.wait(ctx); err != nil {
+		return nil, err
+	}
+	_, entries, resp, err := c.gh.Repositories.GetContents(ctx, owner, name, dir, opt)
+	if err != nil {
+		if classified := classifyErr(resp, err); !errors.Is(classified, platform.ErrNotFound) {
+			return nil, classified
+		}
+	}
+	files := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		if e.GetType() == "file" {
+			files[e.GetName()] = true
+		}
+	}
+	return files, nil
+}
+
+// errExtendsShape is parseExtends' error for an extends that is neither
+// a string nor a list of strings.
+var errExtendsShape = errors.New("extends is not a string or a list of strings")
+
+// parseExtends returns the config's extends list, reading the text as
+// JSON5 (which covers JSON and JSONC). Renovate accepts a string or an
+// array of strings; a config without extends yields nil and no error.
+func parseExtends(text string, byteSize int) ([]string, error) {
+	if byteSize > maxConfigBytes || len(text) > maxConfigBytes {
+		return nil, fmt.Errorf("config is %d bytes, above the %d-byte parse limit", max(byteSize, len(text)), maxConfigBytes)
+	}
+	if text == "" {
+		return nil, errors.New("config has no text (empty or binary)")
+	}
+	norm, err := json5ToJSON(text)
+	if err != nil {
+		return nil, err
 	}
 	var cfg struct {
 		Extends json.RawMessage `json:"extends"`
 	}
-	if err := json.Unmarshal([]byte(text), &cfg); err != nil || len(cfg.Extends) == 0 {
-		return nil
+	if err := json.Unmarshal([]byte(norm), &cfg); err != nil {
+		return nil, fmt.Errorf("decode config: %w", err)
+	}
+	if len(cfg.Extends) == 0 || string(cfg.Extends) == "null" {
+		return nil, nil
 	}
 	var list []string
 	if err := json.Unmarshal(cfg.Extends, &list); err == nil {
-		return list
+		return list, nil
 	}
 	var one string
 	if err := json.Unmarshal(cfg.Extends, &one); err == nil && one != "" {
-		return []string{one}
+		return []string{one}, nil
 	}
-	return nil
+	return nil, errExtendsShape
 }
 
 // graphqlURL is the GraphQL endpoint for the client's base URL:

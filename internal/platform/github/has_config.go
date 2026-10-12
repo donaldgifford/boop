@@ -19,35 +19,19 @@ package github
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
-
-	gogithub "github.com/google/go-github/v62/github"
 
 	"github.com/donaldgifford/boop/internal/platform"
 )
 
-// HasRenovateConfig reports whether the repository carries the configured
-// config file (WithConfigPath, default platform.DefaultConfigPath) on its
-// default branch. A 404 is false; any other error is classified.
+// HasRenovateConfig reports whether the repository carries any of the
+// configured config files (WithConfigPaths, default
+// platform.DefaultConfigPaths) on its default branch. It lists the
+// directories the paths live in (locateConfig); any error other than a
+// 404 is classified.
 func (c *Client) HasRenovateConfig(ctx context.Context, repo *platform.Repository) (bool, error) {
-	owner, name, ok := splitSlug(repo.Slug)
-	if !ok {
-		return false, fmt.Errorf("github: invalid slug %q", repo.Slug)
-	}
-	if err := c.wait(ctx); err != nil {
-		return false, err
-	}
-	opt := &gogithub.RepositoryContentGetOptions{Ref: repo.DefaultBranch}
-	_, _, resp, err := c.gh.Repositories.GetContents(ctx, owner, name, c.path(), opt)
-	if err == nil {
-		return true, nil
-	}
-	classified := classifyErr(resp, err)
-	if errors.Is(classified, platform.ErrNotFound) {
-		return false, nil
-	}
-	return false, classified
+	found, _, err := c.locateConfig(ctx, repo, c.paths())
+	return found != "", err
 }
 
 func splitSlug(slug string) (string, string, bool) {

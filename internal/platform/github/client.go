@@ -25,7 +25,7 @@ limitations under the License.
 //   - Client authenticates as one installation (NewWithApp) or with a
 //     token (NewWithToken). It discovers repositories page by page
 //     (DiscoverPages, GET /installation/repositories), probes for the
-//     config file over GraphQL (ProbeConfig, 100 node ids per query) or
+//     config files over GraphQL (ProbeConfig, 100 node ids per query) or
 //     REST (ProbeConfigREST), reads /rate_limit (ReadRateLimit) and
 //     re-checks one repository (CheckRepo).
 //
@@ -40,6 +40,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -119,11 +120,11 @@ func WithHTTPClient(httpClient *http.Client) ClientOption {
 	}
 }
 
-// WithConfigPath sets the single Renovate config path the client probes;
-// empty keeps platform.DefaultConfigPath.
-func WithConfigPath(path string) ClientOption {
+// WithConfigPaths sets the Renovate config paths the client probes, in
+// precedence order; empty keeps platform.DefaultConfigPaths.
+func WithConfigPaths(paths []string) ClientOption {
 	return func(c *Client) {
-		c.configPath = path
+		c.configPaths = slices.Clone(paths)
 	}
 }
 
@@ -136,11 +137,11 @@ func WithBaseURL(base string) ClientOption {
 
 // Client implements platform.Client against GitHub.
 type Client struct {
-	gh         *gogithub.Client
-	httpClient *http.Client
-	baseURL    string
-	limiter    *rate.Limiter
-	configPath string
+	gh          *gogithub.Client
+	httpClient  *http.Client
+	baseURL     string
+	limiter     *rate.Limiter
+	configPaths []string
 
 	// appTransport is set when the Client was constructed via NewWithApp.
 	// MintAccessToken pulls a fresh installation token from it.
@@ -287,12 +288,12 @@ func (t *tokenTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return t.base.RoundTrip(req2)
 }
 
-// path is the config path the client probes.
-func (c *Client) path() string {
-	if c.configPath == "" {
-		return platform.DefaultConfigPath
+// paths are the config paths the client probes, in precedence order.
+func (c *Client) paths() []string {
+	if len(c.configPaths) == 0 {
+		return platform.DefaultConfigPaths
 	}
-	return c.configPath
+	return c.configPaths
 }
 
 // wait blocks until the rate limiter admits one request or ctx is cancelled.

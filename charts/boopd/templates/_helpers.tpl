@@ -143,6 +143,9 @@ entry once operators have had a release or two to notice:
 Renders empty on success; failure aborts the entire template render.
 */}}
 {{- define "boopd.validateRemovedValues" -}}
+{{- if hasKey .Values.boopd.renovate "configPath" -}}
+{{- fail "boopd.renovate.configPath was removed after v0.1.0: discovery now probes every Renovate config file name (DESIGN-0001 OQ3). Delete the value, or list paths in boopd.renovate.configPaths." -}}
+{{- end -}}
 {{- end }}
 
 {{/*
