@@ -95,7 +95,7 @@ func NewMetrics(mp metric.MeterProvider) (*Metrics, error) {
 	out.active = active
 	out.duration = hist(RunDurationSeconds, "Pod Running to container exit, by profile.")
 	out.podStart = hist(RunPodStartSeconds, "Job creation to pod Running.")
-	out.overhead = hist(RunOverheadSeconds, "Pod Running to the first Renovate log line.")
+	out.overhead = hist(RunOverheadSeconds, "Container start to the first Renovate log line, both by the kubelet's clock.")
 	out.pending = counter(RunPendingTimeouts, "Runs whose pod was not Running within the pending timeout.")
 	out.mints = counter(TokenMintsTotal, "Run token mints by outcome.")
 	out.revocations = counter(TokenRevocationsTotal, "Run token revocations by outcome.")

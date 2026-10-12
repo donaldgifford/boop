@@ -219,6 +219,12 @@ func TestWorker_DiscoveryRunRecheck(t *testing.T) {
 	if rc["outcome"] != "Succeeded" || rc["workflow_id"] != workflows.RepoWorkflowID(h.repoID) {
 		t.Errorf("run_complete = %v", rc)
 	}
+	// Container start (whole seconds) to the stub's first line, both by
+	// the kubelet's clock, so above zero however late the worker saw
+	// Running.
+	if o, _ := rc["overhead"].(float64); o <= 0 {
+		t.Errorf("run_complete overhead = %v, want above zero", rc["overhead"])
+	}
 	fwd := h.run.lines("renovate")
 	if len(fwd) == 0 {
 		t.Fatal("no Renovate lines forwarded")

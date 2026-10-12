@@ -226,3 +226,35 @@ func TestRunner_Order(t *testing.T) {
 		t.Errorf("actions = %q, want %q", got, want)
 	}
 }
+
+func TestContainerStarted(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 10, 12, 9, 0, 0, 0, time.UTC)
+	status := func(st corev1.ContainerState) *corev1.Pod {
+		return &corev1.Pod{Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{{Name: "renovate", State: st}}}}
+	}
+	tests := []struct {
+		name string
+		pod  *corev1.Pod
+		want time.Time
+	}{
+		{name: "running", pod: status(corev1.ContainerState{Running: &corev1.ContainerStateRunning{StartedAt: metav1.NewTime(at)}}), want: at},
+		{
+			name: "already terminated",
+			pod: status(corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+				StartedAt: metav1.NewTime(at), FinishedAt: metav1.NewTime(at.Add(time.Minute)),
+			}}),
+			want: at,
+		},
+		{name: "waiting", pod: status(corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ContainerCreating"}})},
+		{name: "no statuses", pod: &corev1.Pod{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := kube.ContainerStarted(tt.pod); !got.Equal(tt.want) {
+				t.Errorf("ContainerStarted() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

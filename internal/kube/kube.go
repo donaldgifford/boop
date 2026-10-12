@@ -238,6 +238,23 @@ func started(p *corev1.Pod) bool {
 	}
 }
 
+// ContainerStarted is when the pod's container started, as the kubelet
+// reports it, or zero when none has. It is the clock that stamps the
+// pod's log lines (Line.Time), so the gap to the first line does not
+// depend on how soon a watcher saw the pod Running. metav1.Time keeps
+// whole seconds, so the gap reads up to a second long.
+func ContainerStarted(p *corev1.Pod) time.Time {
+	for i := range p.Status.ContainerStatuses {
+		switch st := p.Status.ContainerStatuses[i].State; {
+		case st.Running != nil:
+			return st.Running.StartedAt.Time
+		case st.Terminated != nil:
+			return st.Terminated.StartedAt.Time
+		}
+	}
+	return time.Time{}
+}
+
 // Pod returns the Job's pod.
 func (r *Runner) Pod(ctx context.Context, name string) (*corev1.Pod, error) {
 	list, err := r.cs.CoreV1().Pods(r.namespace).List(ctx, metav1.ListOptions{LabelSelector: JobNameLabel + "=" + name})
