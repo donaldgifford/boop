@@ -17,6 +17,7 @@ import (
 
 	"go.temporal.io/sdk/client"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/donaldgifford/boop/internal/activities"
 	"github.com/donaldgifford/boop/internal/config"
@@ -60,7 +61,13 @@ func (b *syncBuffer) lines(msg string) []map[string]any {
 // run comes soon.
 func quickRepoID(t *testing.T, cadence, limit time.Duration) int64 {
 	t.Helper()
-	for id := int64(5000); id < 100000; id++ {
+	return quickRepoIDFrom(t, cadence, limit, 5000)
+}
+
+// quickRepoIDFrom is quickRepoID searching from id from.
+func quickRepoIDFrom(t *testing.T, cadence, limit time.Duration, from int64) int64 {
+	t.Helper()
+	for id := from; id < from+100000; id++ {
 		h := fnv.New64a()
 		_, _ = h.Write([]byte(strconv.FormatInt(id, 10)))
 		if time.Duration(h.Sum64()%uint64(cadence)) < limit {
@@ -81,9 +88,15 @@ type workerHarness struct {
 	done     chan error
 }
 
+// workerOption adjusts the worker's config and the fake GitHub before
+// the worker starts.
+type workerOption func(cfg *config.Config, gh *fakegithub.Server)
+
 // startWorker runs the worker role against k3d, the dev server, the
 // stub image and the fake GitHub, with profile as the default profile.
-func startWorker(t *testing.T, profile string, cadence time.Duration, timings activities.RunTimings) *workerHarness {
+func startWorker(
+	t *testing.T, profile string, cadence time.Duration, timings activities.RunTimings, opts ...workerOption,
+) *workerHarness {
 	t.Helper()
 	env := Setup(t)
 	srv := temporaltest.Start(t)
@@ -106,7 +119,7 @@ func startWorker(t *testing.T, profile string, cadence time.Duration, timings ac
 		Renovate:       config.Renovate{Image: env.StubImage, ConfigPaths: platform.DefaultConfigPaths},
 		Runs:           config.Runs{Namespace: env.Namespace, PendingTimeout: time.Minute},
 		Profiles:       profiles(),
-		Order:          []string{"default", "hang", "no-report", "unschedulable"},
+		Order:          []string{"default", "hang", "no-report", "slow", "unschedulable"},
 		DefaultProfile: profile,
 		UnknownProfile: profile,
 		Apps: []*config.App{{
@@ -115,6 +128,9 @@ func startWorker(t *testing.T, profile string, cadence time.Duration, timings ac
 			Discovery: config.Discovery{Every: time.Hour, Probe: config.ProbeGraphQL},
 			Budget:    config.Budget{ReserveFraction: 0.1, MaxConcurrentRuns: 2},
 		}},
+	}
+	for _, opt := range opts {
+		opt(cfg, gh)
 	}
 	h := &workerHarness{env: env, srv: srv, gh: gh, log: &syncBuffer{}, run: &syncBuffer{}, repoID: repoID, done: make(chan error, 1)}
 	ctx, stop := context.WithCancel(context.Background())
@@ -296,4 +312,84 @@ func TestWorker_GracefulStop(t *testing.T) {
 	if jobs, err := h.env.Clientset.BatchV1().Jobs(h.env.Namespace).List(ctx, metav1.ListOptions{}); err != nil || len(jobs.Items) != 0 {
 		t.Errorf("jobs after the graceful stop: %d (err %v), want none", len(jobs.Items), err)
 	}
+}
+
+// TestWorker_MaxConcurrent (IMPL-0002 task 4.8): with runs.max_concurrent
+// 1 and two repositories due at once, the CapacityWorkflow admits one
+// run at a time. The second run mints no token and creates no Job until
+// the first ends, then it runs.
+func TestWorker_MaxConcurrent(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	cadence := 30 * time.Minute
+	var second int64
+	h := startWorker(t, "slow", cadence, activities.RunTimings{Heartbeat: time.Second},
+		func(cfg *config.Config, gh *fakegithub.Server) {
+			cfg.Runs.MaxConcurrent = 1
+			first := quickRepoID(t, cadence, 10*time.Second)
+			second = quickRepoIDFrom(t, cadence, 10*time.Second, first+2)
+			gh.SetRepos(
+				fakegithub.Repo{ID: first, NodeID: "R_first", Slug: runSlug, DefaultBranch: "main", HasConfig: true, Config: "{}"},
+				fakegithub.Repo{ID: second, NodeID: "R_second", Slug: "boop-e2e/second", DefaultBranch: "main", HasConfig: true, Config: "{}"},
+			)
+		})
+
+	// Count the run Jobs alive at once from the watch's adds and deletes.
+	w, err := h.env.Clientset.BatchV1().Jobs(h.env.Namespace).Watch(ctx, metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("watch jobs: %v", err)
+	}
+	defer w.Stop()
+	var (
+		mu               sync.Mutex
+		alive, most, all int
+		mintsAtSecondJob = -1
+	)
+	go func() {
+		for ev := range w.ResultChan() {
+			mu.Lock()
+			switch ev.Type {
+			case watch.Added:
+				alive++
+				all++
+				most = max(most, alive)
+				if all == 2 {
+					mintsAtSecondJob = runMints(h.gh)
+				}
+			case watch.Deleted:
+				alive--
+			}
+			mu.Unlock()
+		}
+	}()
+
+	h.triggerDiscovery(ctx, t)
+	eventually(t, 8*time.Minute, "two run_complete", func() bool { return len(h.log.lines("run_complete")) == 2 })
+
+	mu.Lock()
+	defer mu.Unlock()
+	if most != 1 || all != 2 {
+		t.Errorf("run Jobs: %d created, at most %d at once; want 2 created, 1 at a time", all, most)
+	}
+	if mintsAtSecondJob != 2 {
+		t.Errorf("mints when the second Job appeared = %d, want 2: one per admitted run, none for the waiting one", mintsAtSecondJob)
+	}
+	if got := runMints(h.gh); got != 2 {
+		t.Errorf("run mints = %d, want 2", got)
+	}
+	if s, ok := h.repoState(ctx, t, second); !ok || s.LastRun == nil {
+		t.Errorf("the second repository's state = %+v (found %v), want a run", s, ok)
+	}
+}
+
+// runMints counts the repository-scoped mints: one per admitted run.
+func runMints(gh *fakegithub.Server) int {
+	n := 0
+	for _, m := range gh.Mints() {
+		if len(m.RepoIDs) > 0 {
+			n++
+		}
+	}
+	return n
 }

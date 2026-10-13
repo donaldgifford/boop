@@ -399,9 +399,10 @@ flowchart TD
     a dedicated runs namespace (`boopd.runs.namespace` with `namespace.create`)
     is the clean setup.
   - `.Values.resourceQuota.hard` extras stay.
-- [ ] 4.8 E2E: `TestWorker_MaxConcurrent` in `test/e2e/worker_test.go`,
+- [x] 4.8 E2E: `TestWorker_MaxConcurrent` in `test/e2e/worker_test.go`,
   with `max_concurrent = 1`, two onboarded repositories and stub Renovate
-  held running (`STUB_DELAY`). It asserts:
+  held running (a `slow` profile, `STUB_DELAY` 2s). Passed on k3d on
+  2026-10-13. It asserts:
   - at most one run Job exists at any time;
   - the fake GitHub's mint count equals the admitted runs;
   - the second run starts after the first finishes.
