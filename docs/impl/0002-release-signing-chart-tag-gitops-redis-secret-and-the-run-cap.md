@@ -1,7 +1,7 @@
 ---
 id: IMPL-0002
 title: "Release signing, chart tag, GitOps Redis secret and the run cap (issues 8-11)"
-status: In Progress
+status: Completed
 author: Donald Gifford
 created: 2026-10-12
 ---
@@ -433,11 +433,16 @@ flowchart TD
   the worker cap are features.
 - [x] 5.3 Iterate CI to green, including the chart e2e. PR #12: all
   checks passed on the first push (2026-10-13).
-- [ ] 5.4 **Deferred - human required** (merge, then the release runs).
-  After merge and release: run
-  Phase 1's and Phase 2's post-release checks, and record the
-  `cosign tree` output in the PR or issue #8.
-- [ ] 5.5 **Deferred - human required** (follows 5.4). Set this document's status to Completed and check its tasks
+- [x] 5.4 After merge and release (v0.3.0, 2026-10-13):
+  - every release job passed, including both SLSA provenance jobs;
+  - `cosign tree` shows a signature and an SLSA attestation on
+    `boopd:0.3.0` and `charts/boopd:0.3.0`, and `cosign verify` with
+    the README's identity passes for both;
+  - `slsa-verifier verify-image` passes for both with `--source-branch
+    main`. The README had `--source-tag`, which fails because the release
+    is built from the merge to `main`; it is corrected;
+  - `helm show chart` gives `version: 0.3.0` and `appVersion: 0.3.0`.
+- [x] 5.5 Set this document's status to Completed and check its tasks
   off.
 
 #### Success Criteria
