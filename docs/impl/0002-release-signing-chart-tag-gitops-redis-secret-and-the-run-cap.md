@@ -431,11 +431,13 @@ flowchart TD
 - [x] 5.2 One PR from `fix/issues-8-11` with `Closes #8`, `Closes #9`,
   `Closes #10` and `Closes #11`, and the `minor` label: the new values and
   the worker cap are features.
-- [ ] 5.3 Iterate CI to green, including the chart e2e.
-- [ ] 5.4 After merge and release (deferred – human merges): run
+- [x] 5.3 Iterate CI to green, including the chart e2e. PR #12: all
+  checks passed on the first push (2026-10-13).
+- [ ] 5.4 **Deferred - human required** (merge, then the release runs).
+  After merge and release: run
   Phase 1's and Phase 2's post-release checks, and record the
   `cosign tree` output in the PR or issue #8.
-- [ ] 5.5 Set this document's status to Completed and check its tasks
+- [ ] 5.5 **Deferred - human required** (follows 5.4). Set this document's status to Completed and check its tasks
   off.
 
 #### Success Criteria
