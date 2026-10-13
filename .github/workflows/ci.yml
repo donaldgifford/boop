@@ -284,6 +284,15 @@ jobs:
         run: helm plugin install --verify=false https://github.com/helm-unittest/helm-unittest
       - name: Run helm-unittest
         run: helm unittest charts/*/
+      # With an existing redis Secret nothing is generated per render, so
+      # GitOps syncs do not roll pods (issue #10; just helm-template-stable).
+      - name: Check helm template is stable
+        run: |
+          for i in 1 2; do
+            helm template boopd charts/boopd -f charts/boopd/ci/ci-values.yaml \
+              -f charts/boopd/tests/values/existing-secret.yaml > "${RUNNER_TEMP}/stable-$i.yaml"
+          done
+          diff -u "${RUNNER_TEMP}/stable-1.yaml" "${RUNNER_TEMP}/stable-2.yaml"
 
   helm-test:
     name: Helm Chart Test

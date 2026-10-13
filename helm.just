@@ -56,9 +56,28 @@ helm-config-validate:
         go run ./cmd/boopd config validate "$out"
     done
 
-# Full chart gate: lint + unit tests + rendered config validation
+# Render twice with an existing redis Secret and fail on any difference:
+# a GitOps tool renders with `helm template`, where lookup is empty, so
+# anything generated per render would roll pods on every sync (issue #10)
 [group('helm')]
-helm-test: helm-lint helm-unittest helm-config-validate
+helm-template-stable:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p {{ build_dir }}
+    for i in 1 2; do
+        helm template {{ chart_name }} {{ chart_dir }} \
+            -f {{ chart_dir }}/ci/ci-values.yaml \
+            -f {{ chart_dir }}/tests/values/existing-secret.yaml > "{{ build_dir }}/stable-$i.yaml"
+    done
+    diff -u "{{ build_dir }}/stable-1.yaml" "{{ build_dir }}/stable-2.yaml"
+    echo "helm template is stable"
+    yq 'select(.kind == "ConfigMap" and .metadata.name == "{{ chart_name }}-config") | .data["boopd.hcl"]' \
+        "{{ build_dir }}/stable-1.yaml" > "{{ build_dir }}/existing-secret.hcl"
+    go run ./cmd/boopd config validate "{{ build_dir }}/existing-secret.hcl"
+
+# Full chart gate: lint + unit tests + rendered config validation + stable render
+[group('helm')]
+helm-test: helm-lint helm-unittest helm-config-validate helm-template-stable
 
 # Regenerate the chart README from README.md.gotmpl
 [group('helm')]

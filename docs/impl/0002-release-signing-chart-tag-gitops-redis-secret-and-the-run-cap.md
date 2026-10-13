@@ -278,10 +278,13 @@ the password only, and nothing derived from it is rendered.
   - an explicit `boopd.renovate.redisSecretRef` still wins.
 - [x] 3.7 Fail early: `existingSecret` without `redis.enabled`, or with an
   empty `existingSecretKey`, is a render error.
-- [ ] 3.8 Determinism check: a `helm-template-stable` recipe in
-  `helm.just` renders the chart twice with `ci/existing-secret-values.yaml`
-  and diffs the output; it fails on any difference. `helm-test` depends
-  on it and `ci.yml` runs it next to `helm unittest`.
+- [x] 3.8 Determinism check: a `helm-template-stable` recipe in
+  `helm.just` renders the chart twice with `ci/ci-values.yaml` and
+  `tests/values/existing-secret.yaml`, diffs the output (failing on any
+  difference) and runs `boopd config validate` on the rendered file.
+  `helm-test` depends on it and `ci.yml` runs the diff after
+  `helm unittest`. The values file is not under `ci/`, because `ct
+  install` installs every file there and the Secret would not exist.
 - [ ] 3.9 Tests:
   - Go unit tests: config decode and validation for the three redis
     shapes; a password with `@`, `:` and `/` is escaped in the built URL.
@@ -438,7 +441,7 @@ flowchart TD
 | `charts/boopd/templates/_config.tpl` | 3 | `redisSecretRef` from `existingSecret` |
 | `charts/boopd/charts/redis/templates/*` | 3 | ACL helper, conditional Secret, init container, emptyDir |
 | `charts/boopd/values.yaml`, `values.schema.json`, `charts/redis/values.yaml` | 3 | `redis.auth.*` |
-| `charts/boopd/ci/existing-secret-values.yaml` | 3 | determinism and ct values |
+| `charts/boopd/tests/values/existing-secret.yaml` | 3 | determinism values |
 | `charts/boopd/tests/*_test.yaml` | 2, 3 | new cases |
 | `charts/boopd/README.md.gotmpl` (+ generated README) | 2, 3, 4 | default tag, GitOps installs, metrics |
 | `helm.just` | 3 | `helm-template-stable` |
