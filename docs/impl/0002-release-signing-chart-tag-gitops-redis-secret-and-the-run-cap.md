@@ -363,7 +363,7 @@ flowchart TD
   with no lease when the cap is 0. At boot the worker sends the cap by
   Signal-with-Start when the cap is set. With no cap it only signals a
   running workflow to lift it.
-- [ ] 4.4 RepoWorkflow (6 a, as decided): after the installation lease is
+- [x] 4.4 RepoWorkflow (6 a, as decided): after the installation lease is
   granted and when the cap is set, acquire a capacity lease. On denial:
   - report the installation lease closed, so a run waiting on the cluster
     holds none of the installation's budget;
@@ -371,7 +371,11 @@ flowchart TD
     capacity denials, then start again from the installation lease;
   - reset `n` on a grant.
 
-  On finish, report both leases. The new branch sits behind
+  On finish, report both leases. The capacity lease is taken
+  unconditionally through `AcquireCapacity`, which grants with no lease
+  id when the cap is 0, so the workflow needs no config. The jitter is
+  up to a tenth of the wait, hashed from the repository id and `n`. The
+  new branch sits behind
   `workflow.GetVersion` (change ID `capacity-lease`), the first version
   gate in the codebase, because RepoWorkflows are long-lived. Phase
   `waiting-capacity` is added to the search attribute values.

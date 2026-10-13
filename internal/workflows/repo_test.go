@@ -71,6 +71,10 @@ type rwProbe struct {
 	checked  []time.Time
 	grantAt  []time.Time // acquire answers retryAt from this queue before granting
 	managers [][]string
+
+	capDenials  int // AcquireCapacity denies this many times before granting
+	capAcquires []time.Time
+	capReports  []Report
 }
 
 func newRW(t *testing.T, script ...runReply) *rwProbe {
@@ -100,6 +104,17 @@ func newRW(t *testing.T, script ...runReply) *rwProbe {
 		}
 		return &AcquireResult{Granted: true, LeaseID: "lease-" + in.UpdateID}, nil
 	}, activity.RegisterOptions{Name: AcquireBudgetActivity})
+
+	env.RegisterActivityWithOptions(func(_ context.Context, in *AcquireInput) (*AcquireResult, error) {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		p.capAcquires = append(p.capAcquires, env.Now())
+		if p.capDenials > 0 {
+			p.capDenials--
+			return &AcquireResult{RetryAt: env.Now().Add(capWait)}, nil
+		}
+		return &AcquireResult{Granted: true, LeaseID: "cap-" + in.UpdateID}, nil
+	}, activity.RegisterOptions{Name: AcquireCapacityActivity})
 
 	env.RegisterActivityWithOptions(func(_ context.Context, in *RunInput) (*RunResult, error) {
 		p.mu.Lock()
@@ -135,6 +150,13 @@ func newRW(t *testing.T, script ...runReply) *rwProbe {
 			p.mu.Lock()
 			defer p.mu.Unlock()
 			p.reports = append(p.reports, arg.(Report))
+			return nil
+		})
+	env.OnSignalExternalWorkflow(mock.Anything, CapacityWorkflowID, "", ReportSignal, mock.Anything).Return(
+		func(_, _, _, _ string, arg any) error {
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			p.capReports = append(p.capReports, arg.(Report))
 			return nil
 		})
 	return p
