@@ -187,7 +187,7 @@ does.
 | - | - | - | - |
 | `namespace` | string | required | Where Jobs and their token Secrets are created (a DNS label). The worker's Role must cover it; the chart's does for the namespace it renders. |
 | `pending_timeout` | duration | `10m` | How long a run's pod may take to reach `Running`. Past it the Job is deleted and the attempt counts as pending (`boopd_run_pending_timeouts_total`); the repository tries again later. |
-| `max_concurrent` | number | `0` (no cap) | The cluster-wide cap on concurrent runs (DESIGN-0001 OQ12). The worker does not enforce it. The chart sizes a ResourceQuota's `pods` from it when `resourceQuota.enabled`, so Jobs past the cap are refused at admission. Today a refused Job fails that attempt as an infrastructure error. |
+| `max_concurrent` | number | `0` (no cap) | The cluster-wide cap on concurrent runs across installations (DESIGN-0001 OQ12). A run takes a lease from the `CapacityWorkflow` after its installation's budget lease and before a token is minted or a Job created. When the cap is full it gives the installation lease back and waits, 1m doubling to 30m. The chart also renders a ResourceQuota on `pods` from it as a backstop. A pod past the quota is refused, and its Job waits `pending_timeout`. |
 
 ## profile
 

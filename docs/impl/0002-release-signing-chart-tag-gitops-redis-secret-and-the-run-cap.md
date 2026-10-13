@@ -344,7 +344,7 @@ flowchart TD
 
 #### Tasks
 
-- [ ] 4.1 Correct the record: `docs/config.md` § runs `max_concurrent` row
+- [x] 4.1 Correct the record: `docs/config.md` § runs `max_concurrent` row
   says the cap is a lease taken before minting, and the ResourceQuota is
   the backstop that starves pods. Fix the comment in
   `templates/resourcequota.yaml`: pods past the cap are refused, and the
