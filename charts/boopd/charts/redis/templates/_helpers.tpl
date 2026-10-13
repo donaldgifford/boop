@@ -21,6 +21,11 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{/*
 The renovate user's password: kept across upgrades through lookup,
 generated on first install.
+
+lookup returns nothing under `helm template` (Argo CD, kustomize,
+--dry-run), so in a GitOps pipeline this password rotates on every
+render. Set auth.existingSecret to a Secret you manage instead; the
+chart then renders no Secret and never sees the password.
 */}}
 {{- define "redis.password" -}}
 {{- $existing := lookup "v1" "Secret" .Release.Namespace (printf "%s-auth" (include "redis.fullname" .)) -}}
@@ -29,4 +34,14 @@ generated on first install.
 {{- else -}}
 {{- randAlphaNum 40 -}}
 {{- end -}}
+{{- end }}
+
+{{/*
+The renovate user's ACL rules after its password hash. The default user
+is off; the renovate user reaches only keys under the prefix and no
+dangerous commands (FLUSHALL, CONFIG, KEYS, DEBUG, ...). Shared by the
+chart's Secret and the existingSecret init container.
+*/}}
+{{- define "redis.aclRules" -}}
+resetkeys ~{{ .Values.keyPrefix }}* resetchannels -@all +@read +@write +@connection -@dangerous +client|setinfo
 {{- end }}

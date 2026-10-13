@@ -231,16 +231,17 @@ the password only, and nothing derived from it is rendered.
 
 #### Tasks
 
-- [ ] 3.1 Values: `redis.auth.existingSecret` (default `""`) and
+- [x] 3.1 Values: `redis.auth.existingSecret` (default `""`) and
   `redis.auth.existingSecretKey` (default `password`), in
   `charts/redis/values.yaml`, the parent's `values.yaml` passthrough and
-  both `values.schema.json`. The names match repo-guardian's.
-- [ ] 3.2 Subchart Secret: with `existingSecret` set, `secret.yaml`
+  the parent's `values.schema.json` (the subchart has none). The names
+  match repo-guardian's.
+- [x] 3.2 Subchart Secret: with `existingSecret` set, `secret.yaml`
   renders nothing. Without it, behaviour is unchanged (lookup, else
   random), and the `redis.password` helper comment names the GitOps
   caveat and the value that fixes it, as repo-guardian's
   `store-postgres-secret.yaml` does.
-- [ ] 3.3 ACL at pod start (OQ3 a): with `existingSecret` set, the redis
+- [x] 3.3 ACL at pod start (OQ3 a): with `existingSecret` set, the redis
   Deployment gains an init container on the same pinned redis image, with
   the same securityContext (uid/gid 999, read-only root, no
   capabilities). It is fed the password from the existing Secret
@@ -252,7 +253,7 @@ the password only, and nothing derived from it is rendered.
   helper shared with `secret.yaml`, so the two paths cannot drift. Only
   the hash reaches the file; the password stays in the init container's
   environment.
-- [ ] 3.4 Rolling: the redis pod template carries a `checksum/auth`
+- [x] 3.4 Rolling: the redis pod template carries a `checksum/auth`
   annotation only when the chart owns the Secret. With `existingSecret`,
   rotation is the owner's job; the README says to restart redis and the
   worker after rotating.

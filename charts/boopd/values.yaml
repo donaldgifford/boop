@@ -135,6 +135,16 @@ redis:
   # -- Key prefix the ACL user is limited to; also Renovate's
   # `redisPrefix` unless boopd.renovate.global sets one.
   keyPrefix: "renovate:"
+  auth:
+    # -- A Secret you manage holding the renovate user's password. When
+    # set, the chart renders no password Secret: an init container hashes
+    # the password into redis's ACL file, and boopd builds the Redis URL
+    # from it. Use this for GitOps (Argo CD, Flux, kustomize): without it
+    # the password comes from `lookup`, which is empty under `helm
+    # template`, so it rotates on every render.
+    existingSecret: ""
+    # -- Key inside existingSecret holding the password.
+    existingSecretKey: password
   # -- Resources; keep the memory limit above maxmemory.
   resources:
     requests: {cpu: 50m, memory: 300Mi}

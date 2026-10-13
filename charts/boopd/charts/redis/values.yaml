@@ -6,6 +6,9 @@ image:
   pullPolicy: IfNotPresent
 maxmemory: 256mb
 keyPrefix: "renovate:"
+auth:
+  existingSecret: ""
+  existingSecretKey: password
 resources:
   requests: {cpu: 50m, memory: 300Mi}
   limits: {cpu: 500m, memory: 300Mi}
