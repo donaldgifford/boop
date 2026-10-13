@@ -220,11 +220,16 @@ jobs:
         #     image publishes unsigned.
         # Keep the value in env: rather than inlining it — the shell must
         # never parse registry-derived text — but extract it first.
+        # Bake keys its metadata by target, not group: the release group
+        # builds boopd-release. An empty value under the wrong key failed
+        # every release to 0.2.1 after the push (issue #8).
         env:
-          DIGEST: ${{ fromJSON(steps.bake.outputs.metadata).release['containerimage.digest'] }}
+          DIGEST: ${{ fromJSON(steps.bake.outputs.metadata)['boopd-release']['containerimage.digest'] }}
         run: |
           if [ -z "${DIGEST}" ] || [ "${DIGEST}" = "null" ]; then
             echo "ERROR: failed to capture image digest from bake metadata"
+            echo "expected metadata['boopd-release']['containerimage.digest'];"
+            echo "check the release group's targets in docker-bake.hcl"
             exit 1
           fi
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
@@ -263,9 +268,10 @@ jobs:
       actions: read
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
     with:
-      # env context is not available in reusable-workflow inputs — derive
-      # the image ref from the github context directly.
-      image: ghcr.io/${{ github.repository }}
+      # env context is not available in reusable-workflow inputs, so the
+      # name is spelled out: it must match IMAGE_REPO (the image is
+      # boopd, not the repository's name; issue #8).
+      image: ghcr.io/${{ github.repository_owner }}/boopd
       digest: ${{ needs.image.outputs.digest }}
       registry-username: ${{ github.actor }}
     secrets:
@@ -420,7 +426,9 @@ jobs:
       actions: read
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
     with:
-      image: ghcr.io/${{ github.repository_owner }}/charts/${{ github.event.repository.name }}
+      # Spelled out for the same reason as image-slsa: it must match
+      # CHART_NAMESPACE and the chart's name (issue #8).
+      image: ghcr.io/${{ github.repository_owner }}/charts/boopd
       digest: ${{ needs.chart.outputs.digest }}
       registry-username: ${{ github.actor }}
     secrets:

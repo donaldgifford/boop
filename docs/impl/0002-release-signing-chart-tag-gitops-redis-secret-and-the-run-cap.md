@@ -151,16 +151,18 @@ at the right repository.
 
 #### Tasks
 
-- [ ] 1.1 Digest key: read
+- [x] 1.1 Digest key: read
   `fromJSON(steps.bake.outputs.metadata)['boopd-release']['containerimage.digest']`.
   Keep the value in `env:`, as the existing comment requires.
-- [ ] 1.2 Diagnosable failure: when the digest is empty, print the
-  metadata's top-level keys (`jq -r 'keys[]'` on the output, passed via
-  `env:`) before `exit 1`, so the next key drift says what it found.
-- [ ] 1.3 `image-slsa`: `image: ghcr.io/${{ github.repository_owner }}/boopd`.
+- [x] 1.2 Diagnosable failure: when the digest is empty, say which key
+  was expected and where the target name comes from. Printing the
+  metadata's keys would need the blob in `env:`, which the step's comment
+  rules out (execve limit), and `.*[...]` on bake metadata fails
+  actionlint's type check.
+- [x] 1.3 `image-slsa`: `image: ghcr.io/${{ github.repository_owner }}/boopd`.
   Reusable-workflow inputs cannot read `env`, so the name is a literal,
   with a comment that it must match `IMAGE_REPO`.
-- [ ] 1.4 `chart-slsa`: `image: ghcr.io/${{ github.repository_owner }}/charts/boopd`,
+- [x] 1.4 `chart-slsa`: `image: ghcr.io/${{ github.repository_owner }}/charts/boopd`,
   with the same comment against `CHART_NAMESPACE`.
 - [ ] 1.5 Guard: an `actionlint`-clean step in `ci.yml` (or a `just`
   recipe it runs) that greps `release.yml` for `IMAGE_REPO`'s and
