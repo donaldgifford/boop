@@ -5,6 +5,13 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Features
+
+- *(chart)* Redis.auth.existingSecret for GitOps installs
+- *(config)* Redis_url with a password-only Secret
+- *(chart)* Point boopd at the existing redis password Secret
+- *(chart)* Reject redis.auth.existingSecret without the subchart
+
 ### Bug Fixes
 
 - *(release)* Sign the image and attest both artefacts
@@ -18,10 +25,17 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(impl)* Add IMPL-0002 for issues 8-11
 - How to verify a release's signatures and provenance
 - *(chart)* Say the default image tag has no v
+- *(chart)* GitOps installs and redis.auth.existingSecret
+
+### Testing
+
+- *(chart)* Cover redis.auth.existingSecret
+- *(e2e)* Redis with an existing password Secret
 
 ### Miscellaneous Tasks
 
 - Check release.yml's SLSA image references
+- *(chart)* Fail when two renders with an existing Secret differ
 
 ## [0.2.1] - 2026-10-12
 

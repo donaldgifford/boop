@@ -360,6 +360,9 @@ What the chart adds:
 - **The `redis` subchart (on by default):**
   - `redisSecretRef` defaults to the subchart's `<release>-redis-auth`
     Secret;
+  - with `redis.auth.existingSecret`, the file gets `redis_url` for the
+    subchart's Service and `redis_password_secret_ref` for that Secret
+    instead (the chart README's "GitOps installs");
   - `global.redisPrefix` defaults to the prefix its ACL user is limited to.
 - **Chart defaults that differ from the file's:** `runs.maxConcurrent` is
   20, and the chart ships the four example profiles (`baseline`, `node`,
