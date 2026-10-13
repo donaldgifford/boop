@@ -350,10 +350,11 @@ flowchart TD
   `templates/resourcequota.yaml`: pods past the cap are refused, and the
   Job waits `pending_timeout`; nothing is refused at admission. Update
   #11's description with the finding.
-- [ ] 4.2 Extract the lease core: the count, `grant`, `report`, `sweep`
-  and `nextExpiry` parts of `budget` in `installation.go` move into a
-  `leases` type both entities use. InstallationWorkflow's behaviour and
-  tests are unchanged.
+- [x] 4.2 Extract the lease core: `LeaseBook` in `leases.go` (open
+  leases, next id, `grant`, `close`, `sweep`, `nextExpiry`, `capRetry`,
+  `jitter`), embedded in `BudgetState` so its fields encode where they
+  always did and in-flight ContinueAsNew state still decodes.
+  InstallationWorkflow's behaviour and tests are unchanged.
 - [ ] 4.3 `CapacityWorkflow` (ID `capacity/runs`): a lease entity with
   `MaxConcurrentRuns = runs.max_concurrent` and no rate resources. It
   ContinuesAsNew like the InstallationWorkflow, carrying its leases and
