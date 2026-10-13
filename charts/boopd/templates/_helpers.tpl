@@ -32,13 +32,22 @@ Create chart name and version as used by the chart label.
 {{- end }}
 
 {{/*
-Common labels.
+The chart's appVersion as the published image tag: the image is pushed
+without a leading v, so a chart packaged with one still pulls an image
+that exists (issue #9).
+*/}}
+{{- define "boopd.appVersion" -}}
+{{- .Chart.AppVersion | trimPrefix "v" -}}
+{{- end }}
+
+{{/*
+Common labels. The version label is the published image tag.
 */}}
 {{- define "boopd.labels" -}}
 helm.sh/chart: {{ include "boopd.chart" . }}
 {{ include "boopd.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+app.kubernetes.io/version: {{ include "boopd.appVersion" . | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
@@ -160,7 +169,7 @@ Copied from repo-guardian's chart with /etc/boopd paths.
 - name: TEMPORAL_TASK_QUEUE
   value: {{ .Values.temporal.taskQueue | quote }}
 - name: TEMPORAL_BUILD_ID
-  value: {{ .Values.worker.buildId | default .Values.image.tag | default .Chart.AppVersion | quote }}
+  value: {{ .Values.worker.buildId | default .Values.image.tag | default (include "boopd.appVersion" .) | quote }}
 {{- $tls := .Values.temporal.tls }}
 {{- $oidc := .Values.temporal.auth.oidc }}
 {{- if $tls.existingSecret }}

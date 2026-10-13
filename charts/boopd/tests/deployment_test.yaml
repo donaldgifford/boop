@@ -40,6 +40,20 @@ tests:
           path: spec.template.spec.containers[0].image
           value: ghcr.io/donaldgifford/boopd:0.0.0-dev
 
+  - it: strips a leading v from appVersion for the image, label and build ID
+    chart:
+      appVersion: v9.9.9
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/donaldgifford/boopd:9.9.9
+      - equal:
+          path: metadata.labels["app.kubernetes.io/version"]
+          value: "9.9.9"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: TEMPORAL_BUILD_ID, value: "9.9.9"}
+
   - it: honors image.tag override
     set:
       image.tag: v1.2.3

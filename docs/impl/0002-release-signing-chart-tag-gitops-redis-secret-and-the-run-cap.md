@@ -197,17 +197,17 @@ The chart's default tag is the published image tag: no `v`.
 - [x] 2.1 `release.yml` package step: `--app-version "${TAG#v}"`
   (`--version` already uses the stripped `steps.version.outputs.chart_version`).
   Fix the comment that says "appVersion = the tag".
-- [ ] 2.2 Belt and braces in the chart: the image tag is
+- [x] 2.2 Belt and braces in the chart: the image tag is
   `.Values.image.tag | default (.Chart.AppVersion | trimPrefix "v")`, so a
   chart packaged by hand with a `v` still pulls the right image.
   `image.tag` set by the user is used verbatim.
-- [ ] 2.3 `app.kubernetes.io/version` label: the same `trimPrefix`, so it
+- [x] 2.3 `app.kubernetes.io/version` label: the same `trimPrefix`, so it
   matches the image tag.
-- [ ] 2.4 `TEMPORAL_BUILD_ID`: stays `worker.buildId | default image.tag |
+- [x] 2.4 `TEMPORAL_BUILD_ID`: stays `worker.buildId | default image.tag |
   default AppVersion`, with the `v` stripped from the `AppVersion`
   fallback only (OQ2 a).
 - [ ] 2.5 `.goreleaser.yml:87`: `ghcr.io/donaldgifford/boopd:{{ .Version }}`.
-- [ ] 2.6 helm-unittest: with `chart.appVersion: v9.9.9` and no
+- [x] 2.6 helm-unittest: with `chart.appVersion: v9.9.9` and no
   `image.tag`, the image is `…:9.9.9`, the version label is `9.9.9` and
   the build ID is `9.9.9`; with `image.tag: v1.2.3` the image is
   `…:v1.2.3` (the existing override test stays).
