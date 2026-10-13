@@ -26,6 +26,9 @@ limitations under the License.
 // internal/workflows at d1f20a0 (feat/impl-0028-controls-foundations)
 // and changed so the budget is discovered from /rate_limit and tracks
 // more than one resource (ADR-0008, DESIGN-0001 § InstallationWorkflow).
+// CapacityWorkflow (capacity.go) is a second lease entity on the same
+// lease book (leases.go): the cluster-wide runs.max_concurrent cap a
+// RepoWorkflow takes after its installation lease (IMPL-0002).
 // The package moves to donaldgifford/x in Phase 0 (ADR-0007).
 package workflows
 

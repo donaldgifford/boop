@@ -52,7 +52,9 @@ Do not re-open these without a new document that says why:
 - Scaling (ADR-0008):
   - workflows scale with the repository count;
   - concurrent runs are capped by each installation's budget, discovered
-    from `/rate_limit` for REST and GraphQL and never configured;
+    from `/rate_limit` for REST and GraphQL and never configured, and
+    across installations by `runs.max_concurrent` through a
+    `CapacityWorkflow` lease (DESIGN-0001 OQ12 as amended by IMPL-0002);
   - admitted runs are Jobs; nothing else scales. The `boopd` worker runs a
     fixed, small replica count (ADR-0008 as amended by ADR-0009).
 - Shared code goes to `donaldgifford/x` (one Go module, versioned
@@ -130,8 +132,8 @@ cmd/boopd/                # main package: `boopd worker`, `boopd config validate
 internal/                 # library code; not importable outside this module
 internal/platform/        # GitHub discovery, config probe, token minting
 internal/temporal/        # Temporal client config, worker, versioning, schedules
-internal/workflows/       # deterministic workflow code; InstallationWorkflow budget entity
-internal/activities/      # side effects, registered by name: discovery, CheckRepo, ReadRateLimit, AcquireBudget, RunRenovate
+internal/workflows/       # deterministic workflow code; InstallationWorkflow budget and CapacityWorkflow run-cap entities
+internal/activities/      # side effects, registered by name: discovery, CheckRepo, ReadRateLimit, AcquireBudget, AcquireCapacity, RunRenovate
 internal/observability/   # slog logger, OTel meter provider + Prometheus exporter, boopd metric set, /healthz and /readyz
 internal/worker/          # worker role: search attributes, register, start, promote, schedules, readiness, graceful stop
 internal/jobspec/         # Job + env builder for one Renovate run (ported from renovate-operator)
