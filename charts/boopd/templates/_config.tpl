@@ -59,15 +59,30 @@ A secret_ref block: (list <block name> <map> <indent>).
 
 {{/*
 The Redis URL Secret the config names: the explicit
-boopd.renovate.redisSecretRef, else the redis subchart's when enabled.
-JSON; "{}" when there is none.
+boopd.renovate.redisSecretRef, else the redis subchart's when enabled and
+it owns the password. JSON; "{}" when there is none.
 */}}
 {{- define "boopd.redisSecretRef" -}}
 {{- $ref := .Values.boopd.renovate.redisSecretRef | default dict -}}
 {{- if $ref.name -}}
 {{- toJson $ref -}}
-{{- else if .Values.redis.enabled -}}
+{{- else if and .Values.redis.enabled (not .Values.redis.auth.existingSecret) -}}
 {{- toJson (dict "name" (printf "%s-redis-auth" .Release.Name) "key" "url") -}}
+{{- else -}}
+{}
+{{- end -}}
+{{- end }}
+
+{{/*
+The password-only Secret for the redis subchart's URL: with
+redis.auth.existingSecret, boopd builds the URL from redis_url and this
+ref. An explicit boopd.renovate.redisSecretRef wins. JSON; "{}" when
+there is none.
+*/}}
+{{- define "boopd.redisPasswordRef" -}}
+{{- $explicit := (.Values.boopd.renovate.redisSecretRef | default dict).name -}}
+{{- if and .Values.redis.enabled .Values.redis.auth.existingSecret (not $explicit) -}}
+{{- toJson (dict "name" .Values.redis.auth.existingSecret "key" .Values.redis.auth.existingSecretKey) -}}
 {{- else -}}
 {}
 {{- end -}}
@@ -100,6 +115,10 @@ renovate {
 {{- end }}
 {{- with include "boopd.redisSecretRef" . | fromJson }}
 {{ include "boopd.hclSecretRef" (list "redis_secret_ref" . 2) }}
+{{- end }}
+{{- with include "boopd.redisPasswordRef" . | fromJson }}
+  redis_url = {{ include "boopd.hclValue" (printf "redis://renovate@%s-redis.%s.svc:6379" $.Release.Name $.Release.Namespace) }}
+{{ include "boopd.hclSecretRef" (list "redis_password_secret_ref" . 2) }}
 {{- end }}
 }
 

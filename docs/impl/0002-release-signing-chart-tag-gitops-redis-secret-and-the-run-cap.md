@@ -269,7 +269,7 @@ the password only, and nothing derived from it is rendered.
     `redis_password_secret_ref` needs `redis_url`.
   - Update `docs/config.md` (`TestReferenceCoversSchema` enforces it) and
     `examples/boopd.hcl`.
-- [ ] 3.6 Parent wiring:
+- [x] 3.6 Parent wiring:
   - with `existingSecret`, `_config.tpl` renders
     `redis_url = "redis://renovate@<release>-redis:6379"` and
     `redis_password_secret_ref` pointing at the existing Secret's key;

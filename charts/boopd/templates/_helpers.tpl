@@ -234,7 +234,8 @@ would refuse at startup (or silently misapply) fails here instead.
 {{- end }}
 
 {{/*
-The Secrets boopd.hcl names (each App's private key, the Redis URL),
+The Secrets boopd.hcl names (each App's private key, the Redis URL or
+password),
 as a dict of Secret name -> list of keys. Each is mounted at
 <secretsDir>/<name>/<key>, the path internal/config reads.
 */}}
@@ -246,6 +247,9 @@ as a dict of Secret name -> list of keys. Each is mounted at
 {{- end -}}
 {{- end -}}
 {{- with include "boopd.redisSecretRef" . | fromJson -}}
+{{- $_ := set $out .name (append (get $out .name | default list) .key | uniq) -}}
+{{- end -}}
+{{- with include "boopd.redisPasswordRef" . | fromJson -}}
 {{- $_ := set $out .name (append (get $out .name | default list) .key | uniq) -}}
 {{- end -}}
 {{- toJson $out -}}
