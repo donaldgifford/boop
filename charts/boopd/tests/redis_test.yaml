@@ -67,3 +67,110 @@ tests:
       - notMatchRegex:
           path: data["boopd.hcl"]
           pattern: redis_secret_ref
+
+  - it: renders no password Secret with redis.auth.existingSecret
+    template: charts/redis/templates/secret.yaml
+    set:
+      redis.auth.existingSecret: boopd-redis-password
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: rolls redis on a new chart-owned password
+    template: charts/redis/templates/deployment.yaml
+    asserts:
+      - exists:
+          path: spec.template.metadata.annotations["checksum/auth"]
+
+  - it: hashes the existing Secret's password into an in-memory ACL file
+    template: charts/redis/templates/deployment.yaml
+    set:
+      redis.auth.existingSecret: boopd-redis-password
+      redis.auth.existingSecretKey: pw
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["checksum/auth"]
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: acl
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: boopd-redis-password
+                key: pw
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: ACL_RULES
+            value: "resetkeys ~renovate:* resetchannels -@all +@read +@write +@connection -@dangerous +client|setinfo"
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: acl
+            emptyDir:
+              medium: Memory
+              sizeLimit: 1Mi
+
+  - it: builds the URL from redis_url and the existing Secret
+    template: templates/config.yaml
+    set:
+      redis.auth.existingSecret: boopd-redis-password
+    asserts:
+      - notMatchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'redis_secret_ref'
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'redis_url = "redis://renovate@RELEASE-NAME-redis\.NAMESPACE\.svc:6379"'
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'redis_password_secret_ref \{\s+name = "boopd-redis-password"\s+key  = "password"'
+
+  - it: mounts the existing password Secret in the worker
+    template: templates/deployment.yaml
+    set:
+      redis.auth.existingSecret: boopd-redis-password
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: secret-947f86fdea
+            mountPath: /etc/boopd/secrets/boopd-redis-password
+            readOnly: true
+
+  - it: lets an explicit redisSecretRef win over existingSecret
+    template: templates/config.yaml
+    set:
+      redis.auth.existingSecret: boopd-redis-password
+      boopd.renovate.redisSecretRef: {name: my-redis, key: url}
+    asserts:
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'redis_secret_ref \{\s+name = "my-redis"'
+      - notMatchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'redis_url'
+
+  - it: rejects existingSecret without the subchart
+    template: templates/deployment.yaml
+    set:
+      redis.enabled: false
+      redis.auth.existingSecret: boopd-redis-password
+    asserts:
+      - failedTemplate:
+          errorPattern: "redis.auth.existingSecret needs redis.enabled"
+
+  - it: rejects existingSecret without a key
+    template: templates/deployment.yaml
+    set:
+      redis.auth.existingSecret: boopd-redis-password
+      redis.auth.existingSecretKey: null
+    asserts:
+      - failedTemplate:
+          errorPattern: "redis.auth.existingSecretKey must name the key"

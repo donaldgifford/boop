@@ -285,7 +285,7 @@ the password only, and nothing derived from it is rendered.
   `helm-test` depends on it and `ci.yml` runs the diff after
   `helm unittest`. The values file is not under `ci/`, because `ct
   install` installs every file there and the Secret would not exist.
-- [ ] 3.9 Tests:
+- [x] 3.9 Tests:
   - Go unit tests: config decode and validation for the three redis
     shapes; a password with `@`, `:` and `/` is escaped in the built URL.
   - helm-unittest, with `existingSecret`:
