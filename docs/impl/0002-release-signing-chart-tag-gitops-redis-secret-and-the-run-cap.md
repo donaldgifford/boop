@@ -169,11 +169,11 @@ at the right repository.
   fails when either SLSA `image:` input differs from `REGISTRY` plus
   `IMAGE_REPO`, or `CHART_NAMESPACE` plus `CHART_NAME`, or when
   `CHART_NAME` differs from `Chart.yaml`'s name.
-- [ ] 1.6 Dry run: `workflow_dispatch` with `dry_run: true` on the branch
-  if the workflow allows it from a non-tag ref; otherwise run
-  `docker buildx bake release --print` locally and check that
-  `boopd-release` is the target key. Record which.
-- [ ] 1.7 README "Verifying a release" section: the `cosign verify` and
+- [x] 1.6 Dry run: `docker buildx bake release --print` lists one target,
+  `boopd-release`, the key 1.1 reads (2026-10-13). A `dry_run` dispatch
+  would not help, because it skips the bake step and so the digest step
+  too.
+- [x] 1.7 README "Verifying a release" section: the `cosign verify` and
   `slsa-verifier verify-image` commands for image and chart, with the
   certificate identity regexp for `release.yml`.
 
