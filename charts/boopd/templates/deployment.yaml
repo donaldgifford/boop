@@ -1,5 +1,6 @@
 {{- include "boopd.validateEnvCollisions" . -}}
 {{- include "boopd.validateRemovedValues" . -}}
+{{- include "boopd.validateRedisAuth" . -}}
 {{- include "boopd.validateTemporalAuth" . -}}
 apiVersion: apps/v1
 kind: Deployment

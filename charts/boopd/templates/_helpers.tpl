@@ -158,6 +158,21 @@ Renders empty on success; failure aborts the entire template render.
 {{- end }}
 
 {{/*
+redis.auth.existingSecret only means something with the subchart on, and
+needs the key that holds the password.
+*/}}
+{{- define "boopd.validateRedisAuth" -}}
+{{- with .Values.redis.auth.existingSecret -}}
+{{- if not $.Values.redis.enabled -}}
+{{- fail "redis.auth.existingSecret needs redis.enabled: it is the subchart's password. For an external Redis set boopd.renovate.redisSecretRef." -}}
+{{- end -}}
+{{- if not $.Values.redis.auth.existingSecretKey -}}
+{{- fail "redis.auth.existingSecretKey must name the key in redis.auth.existingSecret that holds the password." -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 Temporal connection env (TEMPORAL_*) and the mounted credential paths.
 Copied from repo-guardian's chart with /etc/boopd paths.
 */}}

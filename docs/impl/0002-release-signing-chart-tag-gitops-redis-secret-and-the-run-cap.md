@@ -276,7 +276,7 @@ the password only, and nothing derived from it is rendered.
   - the worker mounts the Secret through the existing `<secretsDir>/<name>/<key>`
     path;
   - an explicit `boopd.renovate.redisSecretRef` still wins.
-- [ ] 3.7 Fail early: `existingSecret` without `redis.enabled`, or with an
+- [x] 3.7 Fail early: `existingSecret` without `redis.enabled`, or with an
   empty `existingSecretKey`, is a render error.
 - [ ] 3.8 Determinism check: a `helm-template-stable` recipe in
   `helm.just` renders the chart twice with `ci/existing-secret-values.yaml`
