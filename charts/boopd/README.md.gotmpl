@@ -15,6 +15,10 @@ container image:
 helm install boopd oci://ghcr.io/donaldgifford/charts/boopd
 ```
 
+The image tag defaults to the chart's version, which is the release
+without a leading `v` (`0.3.0` for `v0.3.0`), the tag the image is
+published under. Set `image.tag` to pin another; it is used verbatim.
+
 Render locally against the checked-out chart:
 
 ```sh

@@ -13,6 +13,10 @@ container image:
 helm install boopd oci://ghcr.io/donaldgifford/charts/boopd
 ```
 
+The image tag defaults to the chart's version, which is the release
+without a leading `v` (`0.3.0` for `v0.3.0`), the tag the image is
+published under. Set `image.tag` to pin another; it is used verbatim.
+
 Render locally against the checked-out chart:
 
 ```sh
@@ -60,7 +64,7 @@ Prometheus Operator CRDs in the cluster.
 | fullnameOverride | string | `""` | Override the full release name |
 | image.pullPolicy | string | `"IfNotPresent"` | Image pull policy |
 | image.repository | string | `"ghcr.io/donaldgifford/boopd"` | Container image repository |
-| image.tag | string | `""` | Overrides the image tag (default: appVersion) |
+| image.tag | string | `""` | Overrides the image tag, used verbatim (default: appVersion without a leading v) |
 | imagePullSecrets | list | `[]` | Image pull secrets |
 | livenessProbe.httpGet.path | string | `"/healthz"` |  |
 | livenessProbe.httpGet.port | string | `"http"` |  |
@@ -119,7 +123,7 @@ Prometheus Operator CRDs in the cluster.
 | temporal.tls.serverName | string | `""` | Server name to verify the frontend certificate against. |
 | terminationGracePeriodSeconds | int | `3600` | Seconds Kubernetes waits after SIGTERM. Must exceed the RunRenovate StartToClose (58m) so a draining worker lets in-flight runs reach their soft deadlines (DESIGN-0001 § Worker shutdown). |
 | tolerations | list | `[]` | Tolerations |
-| worker.buildId | string | `""` | Worker deployment build ID (TEMPORAL_BUILD_ID); empty uses image.tag, then appVersion. |
+| worker.buildId | string | `""` | Worker deployment build ID (TEMPORAL_BUILD_ID); empty uses image.tag, then appVersion without a leading v. |
 
 ## Development
 

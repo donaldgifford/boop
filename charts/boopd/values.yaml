@@ -18,7 +18,8 @@ image:
   repository: ghcr.io/donaldgifford/boopd
   # -- Image pull policy
   pullPolicy: IfNotPresent
-  # -- Overrides the image tag (default: appVersion)
+  # -- Overrides the image tag, used verbatim (default: appVersion
+  # without a leading v)
   tag: ""
 
 # -- Image pull secrets
@@ -182,7 +183,7 @@ temporal:
 
 worker:
   # -- Worker deployment build ID (TEMPORAL_BUILD_ID); empty uses
-  # image.tag, then appVersion.
+  # image.tag, then appVersion without a leading v.
   buildId: ""
 
 configMap:

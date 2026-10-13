@@ -211,7 +211,7 @@ The chart's default tag is the published image tag: no `v`.
   `image.tag`, the image is `…:9.9.9`, the version label is `9.9.9` and
   the build ID is `9.9.9`; with `image.tag: v1.2.3` the image is
   `…:v1.2.3` (the existing override test stays).
-- [ ] 2.7 Chart README: the default-tag sentence says the tag is the
+- [x] 2.7 Chart README: the default-tag sentence says the tag is the
   chart's version without a `v`.
 
 #### Success Criteria
