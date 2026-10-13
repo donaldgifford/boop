@@ -77,6 +77,9 @@ func TestMetricNames(t *testing.T) {
 		MetricDiscoveryMissed:    "boopd_discovery_missed",
 		MetricReposStalled:       "boopd_repos_stalled",
 		MetricReposIncomplete:    "boopd_repos_incomplete",
+		MetricCapacityLeases:     "boopd_capacity_leases",
+		MetricCapacityLimit:      "boopd_capacity_limit",
+		MetricCapacityDenied:     "boopd_capacity_denied_total",
 	} {
 		if got != want {
 			t.Errorf("metric %q, want %q", got, want)

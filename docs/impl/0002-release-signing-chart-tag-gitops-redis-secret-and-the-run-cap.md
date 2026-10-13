@@ -379,9 +379,12 @@ flowchart TD
   `workflow.GetVersion` (change ID `capacity-lease`), the first version
   gate in the codebase, because RepoWorkflows are long-lived. Phase
   `waiting-capacity` is added to the search attribute values.
-- [ ] 4.5 Metrics: `boopd_capacity_leases` (gauge) and
-  `boopd_capacity_denied_total` (counter), emitted the way the budget's
-  gauges are; add them to the README's metric table.
+- [x] 4.5 Metrics: `boopd_capacity_leases` and `boopd_capacity_limit`
+  (gauges) and `boopd_capacity_denied_total` (counter), emitted by
+  `CapacityWorkflow` through the SDK metrics handler the way the budget's
+  gauges are. They are pinned in `TestMetricNames` and listed in
+  DESIGN-0001 § Observability, which is the metric list; the README has
+  no metric table.
 - [ ] 4.6 Workflow tests (test environment): denial then grant; the
   backoff doubles and caps at 30m; the installation lease is reported on a
   capacity denial; an unreported lease is swept at its TTL; and both

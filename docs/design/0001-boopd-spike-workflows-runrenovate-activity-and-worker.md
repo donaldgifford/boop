@@ -999,6 +999,9 @@ same version.
     `boopd_budget_remaining{installation,resource}` (discovered);
   - `boopd_rate_spend_per_run{installation,resource}` (the EWMA input);
   - `boopd_budget_admitted_runs{installation}` (open leases);
+  - `boopd_capacity_leases`, `boopd_capacity_limit` and
+    `boopd_capacity_denied_total` (the cluster run cap's open leases, its
+    `runs.max_concurrent` and acquires turned away; IMPL-0002);
   - `boopd_token_mints_total{outcome}` and
     `boopd_token_revocations_total{outcome}`;
   - `boopd_kube_requests_total{verb,resource,code}`.
