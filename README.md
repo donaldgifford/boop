@@ -75,11 +75,15 @@ for ref in ghcr.io/donaldgifford/boopd ghcr.io/donaldgifford/charts/boopd; do
   digest="$(crane digest "${ref}:${VERSION}")"
   slsa-verifier verify-image "${ref}@${digest}" \
     --source-uri github.com/donaldgifford/boop \
-    --source-tag "v${VERSION}"
+    --source-branch main
 done
 ```
 
-`cosign tree <ref>:<version>` lists the signature and the attestation.
+Releases are built from the merge to `main`, so the provenance names the
+branch, not the tag; `--source-tag` fails. A `workflow_dispatch`
+republish is built from the tag instead: check it with
+`--source-tag "v${VERSION}"`. `cosign tree <ref>:<version>` lists the
+signature and the attestation.
 
 ## Layout
 
