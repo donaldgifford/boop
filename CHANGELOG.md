@@ -26,6 +26,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - How to verify a release's signatures and provenance
 - *(chart)* Say the default image tag has no v
 - *(chart)* GitOps installs and redis.auth.existingSecret
+- *(config)* The chart's existingSecret redis wiring
 
 ### Testing
 
