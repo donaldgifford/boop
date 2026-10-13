@@ -11,6 +11,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(config)* Redis_url with a password-only Secret
 - *(chart)* Point boopd at the existing redis password Secret
 - *(chart)* Reject redis.auth.existingSecret without the subchart
+- *(workflows)* CapacityWorkflow for runs.max_concurrent
+- *(workflows)* Take a capacity lease before each run
+- *(workflows)* Capacity metrics in the metric list
+- *(chart)* [**breaking**] Render the runs ResourceQuota from maxConcurrent
 
 ### Bug Fixes
 
@@ -18,6 +22,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(release)* Stamp appVersion without the v
 - *(chart)* Default the image tag to appVersion without a v
 - *(release)* Print the published image tag in release notes
+
+### Refactor
+
+- *(workflows)* Share the lease book between entities
 
 ### Documentation
 
@@ -27,11 +35,16 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(chart)* Say the default image tag has no v
 - *(chart)* GitOps installs and redis.auth.existingSecret
 - *(config)* The chart's existingSecret redis wiring
+- Runs.max_concurrent is a lease, the quota a backstop
+- *(design)* Amend OQ12 for the capacity lease
+- CapacityWorkflow in the package doc and CLAUDE.md
 
 ### Testing
 
 - *(chart)* Cover redis.auth.existingSecret
 - *(e2e)* Redis with an existing password Secret
+- *(workflows)* Cover the capacity lease
+- *(e2e)* Runs.max_concurrent admits one run at a time
 
 ### Miscellaneous Tasks
 
