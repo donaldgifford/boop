@@ -38,6 +38,44 @@ Optional monitoring integrations (`serviceMonitor.enabled`,
 `prometheusRule.enabled`) are off by default and require the
 Prometheus Operator CRDs in the cluster.
 
+## GitOps installs
+
+The redis subchart generates its password on first install and keeps it
+across `helm upgrade` through `lookup`. Argo CD, Flux with
+post-rendering and kustomize render with `helm template`, where `lookup`
+returns nothing, so the password would change on every sync and roll
+redis and the worker each time.
+
+Give the chart a password it does not generate:
+
+```sh
+kubectl -n boopd create secret generic boopd-redis-password \
+  --from-literal=password="$(openssl rand -hex 32)"
+```
+
+```yaml
+redis:
+  auth:
+    existingSecret: boopd-redis-password
+    existingSecretKey: password # the default
+```
+
+The Secret holds only the password, and any characters are allowed. The
+chart then renders no password Secret:
+
+- An init container on the redis image hashes the password into redis's
+  ACL file, in memory. The `renovate` user and its key prefix are the
+  same as with the generated password.
+- `boopd.hcl` gets `redis_url` for the subchart's Service and
+  `redis_password_secret_ref` for the Secret. The worker puts the
+  password into the URL, escaped, when it starts.
+
+External Secrets, Sealed Secrets or SOPS can produce the same one-key
+Secret. After rotating the password, restart redis and then the worker:
+redis reads the ACL file only when it starts, and the worker reads the
+password only when it starts. `just helm-template-stable` checks that two
+renders with an existing Secret are identical.
+
 ## Requirements
 
 | Repository | Name | Version |
@@ -86,6 +124,8 @@ Prometheus Operator CRDs in the cluster.
 | readinessProbe.httpGet.port | string | `"http"` |  |
 | readinessProbe.initialDelaySeconds | int | `5` |  |
 | readinessProbe.periodSeconds | int | `10` |  |
+| redis.auth.existingSecret | string | `""` | A Secret you manage holding the renovate user's password. When set, the chart renders no password Secret: an init container hashes the password into redis's ACL file, and boopd builds the Redis URL from it. Use this for GitOps (Argo CD, Flux, kustomize): without it the password comes from `lookup`, which is empty under `helm template`, so it rotates on every render. |
+| redis.auth.existingSecretKey | string | `"password"` | Key inside existingSecret holding the password. |
 | redis.enabled | bool | `true` | Run the redis subchart. |
 | redis.keyPrefix | string | `"renovate:"` | Key prefix the ACL user is limited to; also Renovate's `redisPrefix` unless boopd.renovate.global sets one. |
 | redis.maxmemory | string | `"256mb"` | Memory cap; keys are evicted least-recently-used beyond it. |

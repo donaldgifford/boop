@@ -303,7 +303,7 @@ the password only, and nothing derived from it is rendered.
   because Jobs are deleted when they end) and checks auth from one-off
   `redis-cli` pods on the subchart's image. It is in
   `test/e2e/redis_test.go`; it passed on k3d on 2026-10-13.
-- [ ] 3.11 Chart README "GitOps installs" section:
+- [x] 3.11 Chart README "GitOps installs" section:
   - why `lookup` fails under `helm template`;
   - the one-key Secret;
   - a `kubectl create secret` example, and a note that External Secrets
