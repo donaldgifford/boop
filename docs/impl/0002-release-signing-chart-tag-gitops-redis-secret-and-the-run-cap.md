@@ -294,11 +294,15 @@ the password only, and nothing derived from it is rendered.
     - the ACL volume is the emptyDir;
     - `boopd.hcl` carries `redis_url` and `redis_password_secret_ref`;
     - the guard errors fire.
-- [ ] 3.10 E2E: `TestChart_RedisExistingSecret` in
+- [x] 3.10 E2E: `TestChart_RedisExistingSecret` in
   `test/e2e/chart_test.go`. It creates a password-only Secret, installs
   with `existingSecret`, and asserts that redis accepts `AUTH renovate
   <password>`, refuses `default`, and that a stub-renovate run gets a
-  `RENOVATE_REDIS_URL` that authenticates.
+  `RENOVATE_REDIS_URL` that authenticates. The password has characters a
+  URL must escape. The test takes the URL from the run Job (watched,
+  because Jobs are deleted when they end) and checks auth from one-off
+  `redis-cli` pods on the subchart's image. It is in
+  `test/e2e/redis_test.go`; it passed on k3d on 2026-10-13.
 - [ ] 3.11 Chart README "GitOps installs" section:
   - why `lookup` fails under `helm template`;
   - the one-key Secret;
@@ -452,7 +456,7 @@ flowchart TD
 | `internal/worker/` | 4 | start or signal `CapacityWorkflow` at boot |
 | `charts/boopd/templates/resourcequota.yaml`, `values.yaml`, `_helpers.tpl` | 4 | quota from `maxConcurrent`, `resourceQuota.enabled` removed |
 | `internal/observability/` | 4 | two metrics |
-| `test/e2e/chart_test.go`, `test/e2e/worker_test.go` | 3, 4 | new scenarios |
+| `test/e2e/chart_test.go`, `test/e2e/redis_test.go`, `test/e2e/worker_test.go` | 3, 4 | chart options, new scenarios |
 | `docs/config.md`, `docs/design/0001-…md` | 3, 4 | new redis attributes, corrections, OQ12 note |
 
 ## Testing Plan
