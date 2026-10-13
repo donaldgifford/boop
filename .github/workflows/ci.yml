@@ -72,6 +72,11 @@ jobs:
         with:
           version: v2.14.0
 
+      # Reusable-workflow inputs cannot read env, so the SLSA jobs spell
+      # the image and chart out; a rename must fail here, not at release.
+      - name: Check release references
+        run: scripts/check-release-refs.sh
+
       - name: Set up Helm
         uses: azure/setup-helm@v5
 

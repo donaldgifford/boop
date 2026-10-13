@@ -137,6 +137,11 @@ lint-config:
 lint-actions:
     @actionlint
 
+# Check release.yml's SLSA image references against its env (issue #8)
+[group('lint')]
+lint-release-refs:
+    @scripts/check-release-refs.sh
+
 # Format code with gofmt + goimports
 [group('lint')]
 fmt:

@@ -164,10 +164,11 @@ at the right repository.
   with a comment that it must match `IMAGE_REPO`.
 - [x] 1.4 `chart-slsa`: `image: ghcr.io/${{ github.repository_owner }}/charts/boopd`,
   with the same comment against `CHART_NAMESPACE`.
-- [ ] 1.5 Guard: an `actionlint`-clean step in `ci.yml` (or a `just`
-  recipe it runs) that greps `release.yml` for `IMAGE_REPO`'s and
-  `CHART_NAMESPACE`'s values in both SLSA inputs, so a rename fails CI
-  instead of the next release.
+- [x] 1.5 Guard: `scripts/check-release-refs.sh` (`just lint-release-refs`,
+  and a step in `ci.yml`'s Lint job) reads `release.yml` with `yq` and
+  fails when either SLSA `image:` input differs from `REGISTRY` plus
+  `IMAGE_REPO`, or `CHART_NAMESPACE` plus `CHART_NAME`, or when
+  `CHART_NAME` differs from `Chart.yaml`'s name.
 - [ ] 1.6 Dry run: `workflow_dispatch` with `dry_run: true` on the branch
   if the workflow allows it from a non-tag ref; otherwise run
   `docker buildx bake release --print` locally and check that
