@@ -8,6 +8,7 @@
 - [renovate](#renovate)
   - [global](#global)
   - [redis\_secret\_ref](#redis_secret_ref)
+  - [redis\_url and redis\_password\_secret\_ref](#redis_url-and-redis_password_secret_ref)
   - [What a run's RENOVATE\_CONFIG holds](#what-a-runs-renovate_config-holds)
 - [runs](#runs)
 - [profile](#profile)
@@ -65,7 +66,7 @@ renovate {
   image = "ghcr.io/renovatebot/renovate:44-full@sha256:…"
   # config_paths, shared_preset, log_level, dry_run, git_author
   global { … }
-  redis_secret_ref { … }
+  redis_secret_ref { … } # or redis_url with redis_password_secret_ref { … }
 }
 
 runs {
@@ -110,6 +111,8 @@ app "boop-bot" { … } # one or more
 | `git_author` | string | none | `RENOVATE_GIT_AUTHOR`, e.g. `boop-bot <boop-bot[bot]@users.noreply.github.com>`. |
 | `global` | block | none | Renovate options for every run. |
 | `redis_secret_ref` | block | none | The Secret holding Renovate's Redis URL. |
+| `redis_url` | string | none | A Redis URL without a password (`redis://` or `rediss://`), the alternative to `redis_secret_ref`. |
+| `redis_password_secret_ref` | block | none | The Secret holding `redis_url`'s password. |
 
 ### global
 
@@ -146,6 +149,26 @@ and environment controls (DESIGN-0001 § Process builder):
 The URL reaches the Job as `RENOVATE_REDIS_URL`, Renovate's datasource
 lookup cache. Without it every run starts with a cold cache.
 
+### redis_url and redis_password_secret_ref
+
+For a Secret that holds only the password, as the chart's
+`redis.auth.existingSecret` does:
+
+```hcl
+redis_url = "redis://renovate@boopd-redis.boopd.svc:6379"
+
+redis_password_secret_ref {
+  name = "boopd-redis-password"
+  key  = "password"
+}
+```
+
+The worker reads the password at start and sets it in the URL, escaped,
+so any password works. A user in `redis_url` is kept. `redis_url` must not
+carry a password itself, cannot be combined with `redis_secret_ref`, and
+can be set alone for a Redis without auth. The password ref has the same
+`name` and `key` rules as `redis_secret_ref`.
+
 ### What a run's RENOVATE_CONFIG holds
 
 Merged in this order, later entries winning:
@@ -164,7 +187,7 @@ does.
 | - | - | - | - |
 | `namespace` | string | required | Where Jobs and their token Secrets are created (a DNS label). The worker's Role must cover it; the chart's does for the namespace it renders. |
 | `pending_timeout` | duration | `10m` | How long a run's pod may take to reach `Running`. Past it the Job is deleted and the attempt counts as pending (`boopd_run_pending_timeouts_total`); the repository tries again later. |
-| `max_concurrent` | number | `0` (no cap) | The cluster-wide cap on concurrent runs (DESIGN-0001 OQ12). The worker does not enforce it. The chart sizes a ResourceQuota's `pods` from it when `resourceQuota.enabled`, so Jobs past the cap are refused at admission. Today a refused Job fails that attempt as an infrastructure error. |
+| `max_concurrent` | number | `0` (no cap) | The cluster-wide cap on concurrent runs across installations (DESIGN-0001 OQ12). A run takes a lease from the `CapacityWorkflow` after its installation's budget lease and before a token is minted or a Job created. When the cap is full it gives the installation lease back and waits, 1m doubling to 30m. The chart also renders a ResourceQuota on `pods` from it as a backstop. A pod past the quota is refused, and its Job waits `pending_timeout`. |
 
 ## profile
 
@@ -337,12 +360,17 @@ What the chart adds:
 - **The `redis` subchart (on by default):**
   - `redisSecretRef` defaults to the subchart's `<release>-redis-auth`
     Secret;
+  - with `redis.auth.existingSecret`, the file gets `redis_url` for the
+    subchart's Service and `redis_password_secret_ref` for that Secret
+    instead (the chart README's "GitOps installs");
   - `global.redisPrefix` defaults to the prefix its ACL user is limited to.
 - **Chart defaults that differ from the file's:** `runs.maxConcurrent` is
   20, and the chart ships the four example profiles (`baseline`, `node`,
   `python`, `strict`).
 - **Removed values:** a removed value fails the render with what to use
   instead. `boopd.renovate.configPath` became `configPaths` after v0.1.0.
+  `resourceQuota.enabled` went after v0.2.1: the runs quota renders
+  whenever `runs.maxConcurrent > 0`.
 
 ## Validation
 
@@ -356,6 +384,9 @@ Load fails, listing every problem, when:
     not `.json`;
   - an option in `global` or a profile's `renovate` block is forbidden or
     null, or `customEnvVariables` is not a map of strings.
+  - `redis_url` is not a `redis://` or `rediss://` URL with a host,
+    carries a password, or is set with `redis_secret_ref`;
+  - `redis_password_secret_ref` is set without `redis_url`.
 - **Enum values:** `log_level`, `dry_run` or `discovery.probe` is outside
   its set.
 - **Durations:** a duration does not parse or is not positive.

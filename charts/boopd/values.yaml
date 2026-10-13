@@ -18,7 +18,8 @@ image:
   repository: ghcr.io/donaldgifford/boopd
   # -- Image pull policy
   pullPolicy: IfNotPresent
-  # -- Overrides the image tag (default: appVersion)
+  # -- Overrides the image tag, used verbatim (default: appVersion
+  # without a leading v)
   tag: ""
 
 # -- Image pull secrets
@@ -134,6 +135,16 @@ redis:
   # -- Key prefix the ACL user is limited to; also Renovate's
   # `redisPrefix` unless boopd.renovate.global sets one.
   keyPrefix: "renovate:"
+  auth:
+    # -- A Secret you manage holding the renovate user's password. When
+    # set, the chart renders no password Secret: an init container hashes
+    # the password into redis's ACL file, and boopd builds the Redis URL
+    # from it. Use this for GitOps (Argo CD, Flux, kustomize): without it
+    # the password comes from `lookup`, which is empty under `helm
+    # template`, so it rotates on every render.
+    existingSecret: ""
+    # -- Key inside existingSecret holding the password.
+    existingSecretKey: password
   # -- Resources; keep the memory limit above maxmemory.
   resources:
     requests: {cpu: 50m, memory: 300Mi}
@@ -182,7 +193,7 @@ temporal:
 
 worker:
   # -- Worker deployment build ID (TEMPORAL_BUILD_ID); empty uses
-  # image.tag, then appVersion.
+  # image.tag, then appVersion without a leading v.
   buildId: ""
 
 configMap:
@@ -200,12 +211,12 @@ namespace:
   # `pod-security.kubernetes.io/enforce=restricted`.
   create: false
 
+# A ResourceQuota on the runs namespace renders whenever
+# boopd.runs.maxConcurrent > 0, a backstop for the worker's capacity
+# lease. Its `pods` is maxConcurrent, plus the worker replicas and the
+# redis pod when they share the namespace; any other pod there takes a
+# slot.
 resourceQuota:
-  # -- Render a ResourceQuota on the runs namespace with `pods` sized
-  # from boopd.runs.maxConcurrent (plus the worker replicas when they
-  # share the namespace), so Jobs beyond the cap are refused at
-  # admission (IMPL-0001 OQ12).
-  enabled: false
   # -- Extra `spec.hard` entries, e.g. `limits.memory`.
   hard: {}
 

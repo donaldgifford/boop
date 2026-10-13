@@ -16,6 +16,12 @@ spec:
     metadata:
       labels:
         {{- include "redis.labels" . | nindent 8 }}
+      {{- if not .Values.auth.existingSecret }}
+      # Redis reads the ACL file at start only, so a new password rolls it.
+      # With existingSecret, rotation is the Secret owner's restart.
+      annotations:
+        checksum/auth: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+      {{- end }}
     spec:
       automountServiceAccountToken: false
       securityContext:
@@ -25,6 +31,40 @@ spec:
         fsGroup: 999
         seccompProfile:
           type: RuntimeDefault
+      {{- with .Values.auth.existingSecret }}
+      # The chart never sees this password: hash it at pod start and write
+      # the same ACL file the chart's Secret would carry.
+      initContainers:
+        - name: acl
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              hash="$(printf %s "${PASSWORD}" | sha256sum | cut -d' ' -f1)"
+              printf 'user default off\nuser renovate on #%s %s\n' "${hash}" "${ACL_RULES}" > /etc/redis/users.acl
+              chmod 0440 /etc/redis/users.acl
+          env:
+            - name: PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: {{ $.Values.auth.existingSecretKey }}
+            - name: ACL_RULES
+              value: {{ include "redis.aclRules" $ | quote }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 100m, memory: 32Mi}
+          volumeMounts:
+            - name: acl
+              mountPath: /etc/redis
+      {{- end }}
       containers:
         - name: redis
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -72,11 +112,17 @@ spec:
               mountPath: /data
       volumes:
         - name: acl
+          {{- if .Values.auth.existingSecret }}
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+          {{- else }}
           secret:
             secretName: {{ include "redis.fullname" . }}-auth
             defaultMode: 0440
             items:
               - key: users.acl
                 path: users.acl
+          {{- end }}
         - name: data
           emptyDir: {}

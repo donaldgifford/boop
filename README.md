@@ -60,6 +60,27 @@ provenance), and the Helm chart is packaged at the tag-derived version
 (`Chart.yaml` keeps a `0.0.0-dev` placeholder by design) and
 is pushed to `oci://ghcr.io/donaldgifford/charts/boopd`.
 
+### Verifying a release
+
+The image and the chart are signed keyless by the release workflow and
+carry SLSA provenance. Releases before 0.3.0 are unsigned (issue #8).
+With `VERSION` set to a release without the `v` (for example `0.3.0`):
+
+```sh
+for ref in ghcr.io/donaldgifford/boopd ghcr.io/donaldgifford/charts/boopd; do
+  cosign verify "${ref}:${VERSION}" \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    --certificate-identity-regexp '^https://github.com/donaldgifford/boop/\.github/workflows/release\.yml@'
+
+  digest="$(crane digest "${ref}:${VERSION}")"
+  slsa-verifier verify-image "${ref}@${digest}" \
+    --source-uri github.com/donaldgifford/boop \
+    --source-tag "v${VERSION}"
+done
+```
+
+`cosign tree <ref>:<version>` lists the signature and the attestation.
+
 ## Layout
 
 | Path | Purpose |

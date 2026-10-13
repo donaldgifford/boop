@@ -49,7 +49,11 @@ type renovateBlock struct {
 	GitAuthor         *string         `hcl:"git_author,optional"`
 	Global            *freeBlock      `hcl:"global,block"`
 	RedisSecretRef    *secretRefBlock `hcl:"redis_secret_ref,block"`
-	DefRange          hcl.Range       `hcl:",def_range"`
+	RedisURL          *string         `hcl:"redis_url,optional"`
+	RedisURLRange     hcl.Range       `hcl:"redis_url,attr_value_range"`
+	// RedisPasswordSecretRef is the password for RedisURL.
+	RedisPasswordSecretRef *secretRefBlock `hcl:"redis_password_secret_ref,block"`
+	DefRange               hcl.Range       `hcl:",def_range"`
 }
 
 // freeBlock is a block of Renovate options: any attribute names, values

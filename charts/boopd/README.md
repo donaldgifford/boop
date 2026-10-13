@@ -13,6 +13,10 @@ container image:
 helm install boopd oci://ghcr.io/donaldgifford/charts/boopd
 ```
 
+The image tag defaults to the chart's version, which is the release
+without a leading `v` (`0.3.0` for `v0.3.0`), the tag the image is
+published under. Set `image.tag` to pin another; it is used verbatim.
+
 Render locally against the checked-out chart:
 
 ```sh
@@ -30,9 +34,58 @@ App configuration flows to the container as environment variables:
 - `extraEnv` appends raw env entries. Collisions with the
   chart-managed names fail the render.
 
+`boopd.runs.maxConcurrent` (default 20) caps concurrent runs across
+installations. The worker enforces it with a lease taken before a run
+mints a token. The chart also renders a ResourceQuota on `pods` in the
+runs namespace as a backstop. That quota covers every pod in the
+namespace. When runs share the release namespace, the worker replicas
+and the redis pod are added to it, but any other pod there takes a run's
+slot. A dedicated runs namespace (`boopd.runs.namespace` with
+`namespace.create`) avoids that. Set `maxConcurrent: 0` for no cap and no
+quota. `resourceQuota.enabled` was removed after v0.2.1, and setting it
+fails the render.
+
 Optional monitoring integrations (`serviceMonitor.enabled`,
 `prometheusRule.enabled`) are off by default and require the
 Prometheus Operator CRDs in the cluster.
+
+## GitOps installs
+
+The redis subchart generates its password on first install and keeps it
+across `helm upgrade` through `lookup`. Argo CD, Flux with
+post-rendering and kustomize render with `helm template`, where `lookup`
+returns nothing, so the password would change on every sync and roll
+redis and the worker each time.
+
+Give the chart a password it does not generate:
+
+```sh
+kubectl -n boopd create secret generic boopd-redis-password \
+  --from-literal=password="$(openssl rand -hex 32)"
+```
+
+```yaml
+redis:
+  auth:
+    existingSecret: boopd-redis-password
+    existingSecretKey: password # the default
+```
+
+The Secret holds only the password, and any characters are allowed. The
+chart then renders no password Secret:
+
+- An init container on the redis image hashes the password into redis's
+  ACL file, in memory. The `renovate` user and its key prefix are the
+  same as with the generated password.
+- `boopd.hcl` gets `redis_url` for the subchart's Service and
+  `redis_password_secret_ref` for the Secret. The worker puts the
+  password into the URL, escaped, when it starts.
+
+External Secrets, Sealed Secrets or SOPS can produce the same one-key
+Secret. After rotating the password, restart redis and then the worker:
+redis reads the ACL file only when it starts, and the worker reads the
+password only when it starts. `just helm-template-stable` checks that two
+renders with an existing Secret are identical.
 
 ## Requirements
 
@@ -60,7 +113,7 @@ Prometheus Operator CRDs in the cluster.
 | fullnameOverride | string | `""` | Override the full release name |
 | image.pullPolicy | string | `"IfNotPresent"` | Image pull policy |
 | image.repository | string | `"ghcr.io/donaldgifford/boopd"` | Container image repository |
-| image.tag | string | `""` | Overrides the image tag (default: appVersion) |
+| image.tag | string | `""` | Overrides the image tag, used verbatim (default: appVersion without a leading v) |
 | imagePullSecrets | list | `[]` | Image pull secrets |
 | livenessProbe.httpGet.path | string | `"/healthz"` |  |
 | livenessProbe.httpGet.port | string | `"http"` |  |
@@ -82,12 +135,13 @@ Prometheus Operator CRDs in the cluster.
 | readinessProbe.httpGet.port | string | `"http"` |  |
 | readinessProbe.initialDelaySeconds | int | `5` |  |
 | readinessProbe.periodSeconds | int | `10` |  |
+| redis.auth.existingSecret | string | `""` | A Secret you manage holding the renovate user's password. When set, the chart renders no password Secret: an init container hashes the password into redis's ACL file, and boopd builds the Redis URL from it. Use this for GitOps (Argo CD, Flux, kustomize): without it the password comes from `lookup`, which is empty under `helm template`, so it rotates on every render. |
+| redis.auth.existingSecretKey | string | `"password"` | Key inside existingSecret holding the password. |
 | redis.enabled | bool | `true` | Run the redis subchart. |
 | redis.keyPrefix | string | `"renovate:"` | Key prefix the ACL user is limited to; also Renovate's `redisPrefix` unless boopd.renovate.global sets one. |
 | redis.maxmemory | string | `"256mb"` | Memory cap; keys are evicted least-recently-used beyond it. |
 | redis.resources | object | `{"limits":{"cpu":"500m","memory":"300Mi"},"requests":{"cpu":"50m","memory":"300Mi"}}` | Resources; keep the memory limit above maxmemory. |
 | replicaCount | int | `2` | Worker replicas. A fixed, small count (ADR-0008 as amended by ADR-0009): runs are Jobs, so the worker never scales with load. |
-| resourceQuota.enabled | bool | `false` | Render a ResourceQuota on the runs namespace with `pods` sized from boopd.runs.maxConcurrent (plus the worker replicas when they share the namespace), so Jobs beyond the cap are refused at admission (IMPL-0001 OQ12). |
 | resourceQuota.hard | object | `{}` | Extra `spec.hard` entries, e.g. `limits.memory`. |
 | resources | object | `{"limits":{"cpu":"500m","memory":"256Mi"},"requests":{"cpu":"100m","memory":"128Mi"}}` | Container resource requests and limits |
 | revisionHistoryLimit | int | `3` | Number of old ReplicaSets retained for rollback. Defaults to 3 to keep the kubectl `get rs` view tidy; bump if you need more rollback headroom. Kubernetes default is 10. |
@@ -119,7 +173,7 @@ Prometheus Operator CRDs in the cluster.
 | temporal.tls.serverName | string | `""` | Server name to verify the frontend certificate against. |
 | terminationGracePeriodSeconds | int | `3600` | Seconds Kubernetes waits after SIGTERM. Must exceed the RunRenovate StartToClose (58m) so a draining worker lets in-flight runs reach their soft deadlines (DESIGN-0001 § Worker shutdown). |
 | tolerations | list | `[]` | Tolerations |
-| worker.buildId | string | `""` | Worker deployment build ID (TEMPORAL_BUILD_ID); empty uses image.tag, then appVersion. |
+| worker.buildId | string | `""` | Worker deployment build ID (TEMPORAL_BUILD_ID); empty uses image.tag, then appVersion without a leading v. |
 
 ## Development
 

@@ -81,6 +81,8 @@ func profiles() map[string]*config.Profile {
 		"default":   {Name: "default"},
 		"hang":      stub("hang", map[string]any{"STUB_HANG_AFTER": "6"}),
 		"no-report": stub("no-report", map[string]any{"STUB_DROP_REPORT": "true"}),
+		// About 25 s a run (12 lines), so runs overlap unless capped.
+		"slow": stub("slow", map[string]any{"STUB_DELAY": "2s"}),
 		"unschedulable": {Name: "unschedulable", Pod: jobspec.PodOverlay{
 			NodeSelector: map[string]string{"boopd.dev/never": "true"},
 		}},

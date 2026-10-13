@@ -18,3 +18,10 @@ tests:
     asserts:
       - isKind:
           of: Deployment
+
+  - it: rejects resourceQuota.enabled
+    set:
+      resourceQuota.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "resourceQuota.enabled was removed"

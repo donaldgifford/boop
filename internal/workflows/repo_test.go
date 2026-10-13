@@ -71,6 +71,10 @@ type rwProbe struct {
 	checked  []time.Time
 	grantAt  []time.Time // acquire answers retryAt from this queue before granting
 	managers [][]string
+
+	capDenials  int // AcquireCapacity denies this many times before granting
+	capAcquires []time.Time
+	capReports  []Report
 }
 
 func newRW(t *testing.T, script ...runReply) *rwProbe {
@@ -100,6 +104,17 @@ func newRW(t *testing.T, script ...runReply) *rwProbe {
 		}
 		return &AcquireResult{Granted: true, LeaseID: "lease-" + in.UpdateID}, nil
 	}, activity.RegisterOptions{Name: AcquireBudgetActivity})
+
+	env.RegisterActivityWithOptions(func(_ context.Context, in *AcquireInput) (*AcquireResult, error) {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		p.capAcquires = append(p.capAcquires, env.Now())
+		if p.capDenials > 0 {
+			p.capDenials--
+			return &AcquireResult{RetryAt: env.Now().Add(capWait)}, nil
+		}
+		return &AcquireResult{Granted: true, LeaseID: "cap-" + in.UpdateID}, nil
+	}, activity.RegisterOptions{Name: AcquireCapacityActivity})
 
 	env.RegisterActivityWithOptions(func(_ context.Context, in *RunInput) (*RunResult, error) {
 		p.mu.Lock()
@@ -135,6 +150,13 @@ func newRW(t *testing.T, script ...runReply) *rwProbe {
 			p.mu.Lock()
 			defer p.mu.Unlock()
 			p.reports = append(p.reports, arg.(Report))
+			return nil
+		})
+	env.OnSignalExternalWorkflow(mock.Anything, CapacityWorkflowID, "", ReportSignal, mock.Anything).Return(
+		func(_, _, _, _ string, arg any) error {
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			p.capReports = append(p.capReports, arg.(Report))
 			return nil
 		})
 	return p
@@ -519,5 +541,66 @@ func TestMergeManagers(t *testing.T) {
 	got := mergeManagers([]string{"pip_requirements", "npm"}, []string{"npm", "gomod"})
 	if !slices.Equal(got, []string{"gomod", "npm", "pip_requirements"}) {
 		t.Errorf("merge = %v", got)
+	}
+}
+
+// A full cluster cap: each denial gives the installation lease back and
+// waits 1m doubling, then the run takes both leases and reports both.
+func TestRepoWorkflow_CapacityDenied(t *testing.T) {
+	t.Parallel()
+	p := newRW(t, succeeded())
+	p.capDenials = 3
+	p.keepSeen(2 * testCadence)
+	if err := p.run(state(t0), testCadence/2); err != nil && !isCanceled(err) {
+		t.Fatalf("workflow: %v", err)
+	}
+	if len(p.capAcquires) != 4 {
+		t.Fatalf("capacity acquires = %d, want 3 denials and a grant", len(p.capAcquires))
+	}
+	for i, d := range []time.Duration{time.Minute, 2 * time.Minute, 4 * time.Minute} {
+		if gap := p.capAcquires[i+1].Sub(p.capAcquires[i]); gap < d || gap > d+d/10 {
+			t.Errorf("wait after denial %d = %v, want %v plus at most a tenth", i, gap, d)
+		}
+	}
+	if len(p.runs) != 1 || !p.runAt[0].Equal(p.capAcquires[3]) {
+		t.Errorf("runs at %v, want one at the capacity grant %v", p.runAt, p.capAcquires[3])
+	}
+	// Three installation leases given back on denial, then the run's.
+	if len(p.reports) != 4 || p.reports[0].LeaseID == "" || p.reports[0].After != nil || p.reports[3].After == nil {
+		t.Errorf("installation reports = %+v, want three bare and one with readings", p.reports)
+	}
+	if len(p.capReports) != 1 || p.capReports[0].LeaseID == "" {
+		t.Errorf("capacity reports = %+v, want the run's lease", p.capReports)
+	}
+}
+
+// Before the capacity-lease change, the workflow runs on the
+// installation lease alone.
+func TestRepoWorkflow_CapacityVersionGate(t *testing.T) {
+	t.Parallel()
+	p := newRW(t, succeeded())
+	p.env.OnGetVersion(capacityLeaseChange, workflow.DefaultVersion, 1).Return(workflow.DefaultVersion)
+	p.keepSeen(2 * testCadence)
+	if err := p.run(state(t0), testCadence/2); err != nil && !isCanceled(err) {
+		t.Fatalf("workflow: %v", err)
+	}
+	if len(p.runs) != 1 {
+		t.Fatalf("runs = %d, want 1", len(p.runs))
+	}
+	if len(p.capAcquires) != 0 || len(p.capReports) != 0 {
+		t.Errorf("capacity acquires %d reports %d on the old version, want none", len(p.capAcquires), len(p.capReports))
+	}
+}
+
+func TestCapacityBackoff(t *testing.T) {
+	t.Parallel()
+	for n, want := range []time.Duration{time.Minute, 2 * time.Minute, 4 * time.Minute, 8 * time.Minute, 16 * time.Minute, 30 * time.Minute, 30 * time.Minute} {
+		got := capacityBackoff(n, testRepoID)
+		if got < want || got > want+want/10 {
+			t.Errorf("capacityBackoff(%d) = %v, want %v plus at most a tenth", n, got, want)
+		}
+		if again := capacityBackoff(n, testRepoID); again != got {
+			t.Errorf("capacityBackoff(%d) = %v then %v, want it deterministic", n, got, again)
+		}
 	}
 }

@@ -129,9 +129,13 @@ func TestChart_WorkerRunsUnderChartRBAC(t *testing.T) {
 	})
 }
 
+// chartOption adjusts an install before helm runs: extra objects in the
+// namespace, extra values.
+type chartOption func(ctx context.Context, t *testing.T, h *chartHarness, values map[string]any)
+
 // installChart deploys the stub GitHub and the chart and waits for the
 // worker to be ready.
-func installChart(ctx context.Context, t *testing.T) *chartHarness {
+func installChart(ctx context.Context, t *testing.T, opts ...chartOption) *chartHarness {
 	t.Helper()
 	env := Setup(t) //nolint:contextcheck // the namespace cleanup outlives ctx
 	srv := temporaltest.Start(t, temporaltest.ListenOnAllInterfaces())
@@ -179,6 +183,9 @@ func installChart(ctx context.Context, t *testing.T) *chartHarness {
 				"budget":              map[string]any{"maxConcurrentRuns": 2},
 			}},
 		},
+	}
+	for _, opt := range opts {
+		opt(ctx, t, h, values)
 	}
 	b, err := yaml.Marshal(values)
 	if err != nil {

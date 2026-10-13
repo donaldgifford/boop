@@ -555,9 +555,6 @@
     "resourceQuota": {
       "type": "object",
       "properties": {
-        "enabled": {
-          "type": "boolean"
-        },
         "hard": {
           "type": "object"
         }
@@ -593,6 +590,19 @@
         "keyPrefix": {
           "type": "string",
           "minLength": 1
+        },
+        "auth": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "existingSecret": {
+              "type": "string"
+            },
+            "existingSecretKey": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
         },
         "resources": {
           "type": "object"

@@ -44,6 +44,16 @@ const (
 
 	backoffBase    = 5 * time.Minute
 	pendingBackoff = 30 * time.Minute
+
+	// capacityBackoffBase doubles on each consecutive capacity denial up
+	// to capacityBackoffMax (IMPL-0002 OQ6): a full cluster cap clears as
+	// runs finish, unlike a pod that never starts.
+	capacityBackoffBase = time.Minute
+	capacityBackoffMax  = 30 * time.Minute
+
+	// capacityLeaseChange gates the capacity lease, so RepoWorkflows
+	// started before it replay without the AcquireCapacity activity.
+	capacityLeaseChange = "capacity-lease"
 )
 
 // repo is RepoWorkflow's state within one execution.
@@ -254,7 +264,7 @@ func (r *repo) runOnce(ctx workflow.Context, prio Priority) (end bool, err error
 	}
 	backoffs := 0
 	for {
-		lease, err := r.acquire(ctx, prio)
+		l, err := r.acquire(ctx, prio)
 		if err != nil {
 			return false, err
 		}
@@ -264,11 +274,11 @@ func (r *repo) runOnce(ctx workflow.Context, prio Priority) (end bool, err error
 		var res RunResult
 		runErr := workflow.ExecuteActivity(runOptions(ctx, prio, r.s.InstallationID), RunRenovateActivity, &RunInput{
 			RepoID: r.s.RepoID, Slug: r.s.Slug, DefaultBranch: r.s.DefaultBranch, InstallationID: r.s.InstallationID,
-			Profile: r.s.Profile, LeaseID: lease, Attempt: r.s.Iterations,
+			Profile: r.s.Profile, LeaseID: l.installation, Attempt: r.s.Iterations,
 		}).Get(ctx, &res)
 
 		a := attemptOf(runErr, &res)
-		r.report(ctx, lease, a)
+		r.report(ctx, l, a)
 		if a.result != nil {
 			r.s.Managers = mergeManagers(r.s.Managers, a.result.Managers)
 		}
@@ -375,18 +385,50 @@ func attemptOf(err error, res *RunResult) attempt {
 	return a
 }
 
-// acquire takes a lease, sleeping to each retryAt the budget returns.
-func (r *repo) acquire(ctx workflow.Context, prio Priority) (string, error) {
-	r.upsert(ctx, PhaseAcquiring)
-	holder := RepoWorkflowID(r.s.RepoID)
+// leases are the grants one run holds: the installation's budget lease
+// and, with a cluster cap, the CapacityWorkflow's.
+type leases struct {
+	installation string
+	capacity     string
+}
+
+// acquire takes the installation lease, sleeping to each retryAt the
+// budget returns, then a capacity lease. A run denied capacity gives the
+// installation lease back before it waits, so a full cluster cap holds
+// none of an installation's budget.
+func (r *repo) acquire(ctx workflow.Context, prio Priority) (leases, error) {
+	denials := 0
 	for {
-		r.acquires++
-		var res AcquireResult
-		err := workflow.ExecuteActivity(shortOptions(ctx, prio, r.s.InstallationID), AcquireBudgetActivity, &AcquireInput{
-			InstallationID: r.s.InstallationID,
-			UpdateID:       fmt.Sprintf("%s/%s/acquire-%d", holder, workflow.GetInfo(ctx).WorkflowExecution.RunID, r.acquires),
-			Request:        AcquireRequest{Holder: holder, Priority: prio},
-		}).Get(ctx, &res)
+		inst, err := r.acquireFrom(ctx, prio, AcquireBudgetActivity)
+		if err != nil {
+			return leases{}, err
+		}
+		if workflow.GetVersion(ctx, capacityLeaseChange, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+			return leases{installation: inst}, nil
+		}
+		res, err := r.tryAcquire(ctx, prio, AcquireCapacityActivity)
+		if err == nil && res.Granted {
+			return leases{installation: inst, capacity: res.LeaseID}, nil
+		}
+		if err != nil {
+			workflow.GetLogger(ctx).Warn("acquire capacity failed", "error", err)
+		}
+		r.report(ctx, leases{installation: inst}, attempt{})
+		r.upsert(ctx, PhaseWaitingCapacity)
+		if err := workflow.Sleep(ctx, capacityBackoff(denials, r.s.RepoID)); err != nil {
+			return leases{}, err
+		}
+		denials++
+		r.upsert(ctx, PhaseAcquiring)
+	}
+}
+
+// acquireFrom takes a lease through the named acquire activity, sleeping
+// to each retryAt it returns.
+func (r *repo) acquireFrom(ctx workflow.Context, prio Priority, activity string) (string, error) {
+	r.upsert(ctx, PhaseAcquiring)
+	for {
+		res, err := r.tryAcquire(ctx, prio, activity)
 		var wait time.Duration
 		switch {
 		case err != nil:
@@ -403,11 +445,43 @@ func (r *repo) acquire(ctx workflow.Context, prio Priority) (string, error) {
 	}
 }
 
-// report closes the lease on the installation's budget, with the run's
-// readings when it has both, and a retryAt for a rate-limited run. The
-// report is the budget's rate reading; it costs no /rate_limit call.
-func (r *repo) report(ctx workflow.Context, lease string, a attempt) {
-	rep := Report{LeaseID: lease}
+// tryAcquire sends one acquire through the named activity. Each call has
+// its own UpdateID, so a retried activity returns the first answer and a
+// new call asks again.
+func (r *repo) tryAcquire(ctx workflow.Context, prio Priority, activity string) (AcquireResult, error) {
+	holder := RepoWorkflowID(r.s.RepoID)
+	r.acquires++
+	var res AcquireResult
+	err := workflow.ExecuteActivity(shortOptions(ctx, prio, r.s.InstallationID), activity, &AcquireInput{
+		InstallationID: r.s.InstallationID,
+		UpdateID:       fmt.Sprintf("%s/%s/acquire-%d", holder, workflow.GetInfo(ctx).WorkflowExecution.RunID, r.acquires),
+		Request:        AcquireRequest{Holder: holder, Priority: prio},
+	}).Get(ctx, &res)
+	return res, err
+}
+
+// capacityBackoff is min(1 min × 2^n, 30 min) plus up to a tenth more,
+// spread by the repository id so denied runs do not return together.
+func capacityBackoff(n int, repoID int64) time.Duration {
+	d := capacityBackoffBase
+	for range n {
+		d *= 2
+		if d >= capacityBackoffMax {
+			d = capacityBackoffMax
+			break
+		}
+	}
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(strconv.FormatInt(repoID, 10) + "/" + strconv.Itoa(n)))
+	return d + time.Duration(h.Sum64()%uint64(d/10)) //nolint:gosec // G115: d/10 is a positive int64
+}
+
+// report closes the leases: the installation's with the run's readings
+// when it has both, and a retryAt for a rate-limited run, and the
+// capacity lease when there is one. The report is the budget's rate
+// reading; it costs no /rate_limit call.
+func (r *repo) report(ctx workflow.Context, l leases, a attempt) {
+	rep := Report{LeaseID: l.installation}
 	if res := a.result; res != nil && res.RateBefore != nil && res.RateAfter != nil {
 		rep.Before, rep.After = res.RateBefore, res.RateAfter
 	}
@@ -416,7 +490,14 @@ func (r *repo) report(ctx workflow.Context, lease string, a attempt) {
 	}
 	err := workflow.SignalExternalWorkflow(ctx, InstallationWorkflowID(r.s.InstallationID), "", ReportSignal, rep).Get(ctx, nil)
 	if err != nil {
-		workflow.GetLogger(ctx).Warn("report not delivered; the lease TTL will reclaim it", "lease", lease, "error", err)
+		workflow.GetLogger(ctx).Warn("report not delivered; the lease TTL will reclaim it", "lease", l.installation, "error", err)
+	}
+	if l.capacity == "" {
+		return
+	}
+	err = workflow.SignalExternalWorkflow(ctx, CapacityWorkflowID, "", ReportSignal, Report{LeaseID: l.capacity}).Get(ctx, nil)
+	if err != nil {
+		workflow.GetLogger(ctx).Warn("capacity report not delivered; the lease TTL will reclaim it", "lease", l.capacity, "error", err)
 	}
 }
 

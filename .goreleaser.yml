@@ -84,7 +84,7 @@ release:
     version:
 
     ```text
-    ghcr.io/donaldgifford/boopd:{{ .Tag }}
+    ghcr.io/donaldgifford/boopd:{{ .Version }}
     oci://ghcr.io/donaldgifford/charts/boopd --version {{ .Version }}
     ```
 

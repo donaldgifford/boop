@@ -21,6 +21,7 @@ func TestValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	const digest = "@sha256:0f5b1a9e4c3d2b1a0f9e8d7c6b5a4938271605f4e3d2c1b0a9f8e7d6c5b4a392"
+	const redisRef = "redis_secret_ref {\n    name = \"boopd-redis\"\n    key  = \"url\"\n  }"
 
 	tests := []struct {
 		name    string
@@ -59,6 +60,29 @@ func TestValidation(t *testing.T) {
 			new:     "  config_paths = [\"renovate.json5\", \"renovate.json5\"]\n  shared_preset =",
 			summary: "Invalid config_paths",
 			at:      `["renovate.json5", "renovate.json5"]`,
+		},
+		{
+			name:    "redis_url with redis_secret_ref",
+			old:     "  redis_secret_ref {",
+			new:     "  redis_url = \"redis://both:6379\"\n  redis_secret_ref {",
+			summary: "Conflicting Redis settings",
+			at:      `"redis://both:6379"`,
+		},
+		{
+			name:    "redis_url password",
+			old:     redisRef,
+			new:     `redis_url = "redis://u:pw@h:6379"`,
+			summary: "Password in redis_url",
+			at:      `"redis://u:pw@h:6379"`,
+		},
+		{name: "redis_url scheme", old: redisRef, new: `redis_url = "http://h:6379"`, summary: "Invalid redis_url", at: `"http://h:6379"`},
+		{name: "redis_url host", old: redisRef, new: `redis_url = "redis:///0"`, summary: "Invalid redis_url", at: `"redis:///0"`},
+		{
+			name:    "redis password without redis_url",
+			old:     redisRef,
+			new:     "redis_password_secret_ref { # alone\n    name = \"p\"\n    key  = \"k\"\n  }",
+			summary: "Missing redis_url",
+			at:      "{ # alone",
 		},
 		{name: "shared_preset json5", old: "default.json\"", new: "default.json5\"", summary: "Invalid shared_preset", at: "default.json5"},
 		{name: "dry_run enum", old: `dry_run       = "full"`, new: `dry_run = "everything"`, summary: "Invalid value", at: `"everything"`},

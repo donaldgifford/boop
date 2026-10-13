@@ -40,6 +40,9 @@ const (
 	PhaseWaiting   = "waiting"
 	PhaseChecking  = "checking"
 	PhaseAcquiring = "acquiring"
-	PhaseRunning   = "running"
-	PhaseBackoff   = "backoff"
+	// PhaseWaitingCapacity is a run denied a cluster capacity lease,
+	// waiting to ask again with no lease held.
+	PhaseWaitingCapacity = "waiting-capacity"
+	PhaseRunning         = "running"
+	PhaseBackoff         = "backoff"
 )

@@ -26,6 +26,12 @@ renovate {
     name = "boopd-redis"
     key  = "url"
   }
+  # Or, for a Secret holding only the password:
+  #   redis_url = "redis://renovate@boopd-redis:6379"
+  #   redis_password_secret_ref {
+  #     name = "boopd-redis-password"
+  #     key  = "password"
+  #   }
 }
 
 runs {

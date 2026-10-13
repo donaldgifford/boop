@@ -32,13 +32,22 @@ Create chart name and version as used by the chart label.
 {{- end }}
 
 {{/*
-Common labels.
+The chart's appVersion as the published image tag: the image is pushed
+without a leading v, so a chart packaged with one still pulls an image
+that exists (issue #9).
+*/}}
+{{- define "boopd.appVersion" -}}
+{{- .Chart.AppVersion | trimPrefix "v" -}}
+{{- end }}
+
+{{/*
+Common labels. The version label is the published image tag.
 */}}
 {{- define "boopd.labels" -}}
 helm.sh/chart: {{ include "boopd.chart" . }}
 {{ include "boopd.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+app.kubernetes.io/version: {{ include "boopd.appVersion" . | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
@@ -146,6 +155,24 @@ Renders empty on success; failure aborts the entire template render.
 {{- if hasKey .Values.boopd.renovate "configPath" -}}
 {{- fail "boopd.renovate.configPath was removed after v0.1.0: discovery now probes every Renovate config file name (DESIGN-0001 OQ3). Delete the value, or list paths in boopd.renovate.configPaths." -}}
 {{- end -}}
+{{- if hasKey (.Values.resourceQuota | default dict) "enabled" -}}
+{{- fail "resourceQuota.enabled was removed after v0.2.1: the quota renders whenever boopd.runs.maxConcurrent > 0 (IMPL-0002 OQ7). Delete the value; set boopd.runs.maxConcurrent: 0 for no cap and no quota." -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+redis.auth.existingSecret only means something with the subchart on, and
+needs the key that holds the password.
+*/}}
+{{- define "boopd.validateRedisAuth" -}}
+{{- with .Values.redis.auth.existingSecret -}}
+{{- if not $.Values.redis.enabled -}}
+{{- fail "redis.auth.existingSecret needs redis.enabled: it is the subchart's password. For an external Redis set boopd.renovate.redisSecretRef." -}}
+{{- end -}}
+{{- if not $.Values.redis.auth.existingSecretKey -}}
+{{- fail "redis.auth.existingSecretKey must name the key in redis.auth.existingSecret that holds the password." -}}
+{{- end -}}
+{{- end -}}
 {{- end }}
 
 {{/*
@@ -160,7 +187,7 @@ Copied from repo-guardian's chart with /etc/boopd paths.
 - name: TEMPORAL_TASK_QUEUE
   value: {{ .Values.temporal.taskQueue | quote }}
 - name: TEMPORAL_BUILD_ID
-  value: {{ .Values.worker.buildId | default .Values.image.tag | default .Chart.AppVersion | quote }}
+  value: {{ .Values.worker.buildId | default .Values.image.tag | default (include "boopd.appVersion" .) | quote }}
 {{- $tls := .Values.temporal.tls }}
 {{- $oidc := .Values.temporal.auth.oidc }}
 {{- if $tls.existingSecret }}
@@ -225,7 +252,8 @@ would refuse at startup (or silently misapply) fails here instead.
 {{- end }}
 
 {{/*
-The Secrets boopd.hcl names (each App's private key, the Redis URL),
+The Secrets boopd.hcl names (each App's private key, the Redis URL or
+password),
 as a dict of Secret name -> list of keys. Each is mounted at
 <secretsDir>/<name>/<key>, the path internal/config reads.
 */}}
@@ -237,6 +265,9 @@ as a dict of Secret name -> list of keys. Each is mounted at
 {{- end -}}
 {{- end -}}
 {{- with include "boopd.redisSecretRef" . | fromJson -}}
+{{- $_ := set $out .name (append (get $out .name | default list) .key | uniq) -}}
+{{- end -}}
+{{- with include "boopd.redisPasswordRef" . | fromJson -}}
 {{- $_ := set $out .name (append (get $out .name | default list) .key | uniq) -}}
 {{- end -}}
 {{- toJson $out -}}

@@ -103,8 +103,7 @@ type BudgetState struct {
 	// Observed is when the newest readings were taken.
 	Observed time.Time
 
-	Leases    map[string]Lease
-	NextLease int64
+	LeaseBook
 
 	// RetryAt is an installation-wide pause from a secondary limit: no
 	// run is admitted before it (OQ5).
@@ -267,7 +266,7 @@ func InstallationWorkflow(ctx workflow.Context, in *InstallationWorkflowInput) e
 
 		now = workflow.Now(ctx)
 		b.finishRefresh(ctx, now)
-		b.sweep(now)
+		b.in.State.sweep(now)
 		b.gauges(ctx)
 
 		if done() {
@@ -296,9 +295,7 @@ func (b *budget) init() {
 		}
 	}
 
-	if s.Leases == nil {
-		s.Leases = map[string]Lease{}
-	}
+	s.init()
 
 	if b.in.LeaseTTL <= 0 {
 		b.in.LeaseTTL = DefaultLeaseTTL
@@ -417,9 +414,8 @@ func validateAcquire(_ workflow.Context, req *AcquireRequest) error {
 // InstallationWorkflow, Admission). Otherwise it returns when to ask
 // again.
 func (b *budget) acquire(now time.Time, req *AcquireRequest) *AcquireResult {
-	b.sweep(now)
-
 	s := &b.in.State
+	s.sweep(now)
 
 	// A suspended installation's API calls fail; hold every run until
 	// the suspension lifts, rechecking hourly.
@@ -431,8 +427,8 @@ func (b *budget) acquire(now time.Time, req *AcquireRequest) *AcquireResult {
 		return &AcquireResult{RetryAt: s.RetryAt}
 	}
 
-	if c := b.in.MaxConcurrentRuns; c > 0 && len(s.Leases) >= c {
-		return &AcquireResult{RetryAt: b.jitter(earliest(b.nextExpiry(now), now.Add(capWait)))}
+	if s.full(b.in.MaxConcurrentRuns) {
+		return &AcquireResult{RetryAt: s.capRetry(now)}
 	}
 
 	var (
@@ -449,7 +445,7 @@ func (b *budget) acquire(now time.Time, req *AcquireRequest) *AcquireResult {
 		}
 
 		reserve := math.Ceil(float64(r.Limit) * b.in.ReserveFraction)
-		committed := float64(len(s.Leases)+1) * r.Estimate
+		committed := float64(s.open()+1) * r.Estimate
 
 		if float64(r.Remaining)-committed < reserve && r.Reset.After(exhaustedUntil) {
 			exhaustedUntil = r.Reset
@@ -457,30 +453,12 @@ func (b *budget) acquire(now time.Time, req *AcquireRequest) *AcquireResult {
 	}
 
 	if !exhaustedUntil.IsZero() {
-		return &AcquireResult{RetryAt: b.jitter(exhaustedUntil)}
+		return &AcquireResult{RetryAt: s.jitter(exhaustedUntil)}
 	}
 
-	return b.grant(now, req.Holder, unknown)
-}
+	id := s.grant(now, req.Holder, b.in.LeaseTTL)
 
-// jitter spreads the callers told to wait for t over the minute after
-// it, deterministically.
-func (b *budget) jitter(t time.Time) time.Time {
-	s := &b.in.State
-	d := time.Duration(s.NextLease%waitJitterSpan) * time.Second
-	s.NextLease++
-
-	return t.Add(d)
-}
-
-func (b *budget) grant(now time.Time, holder string, optimistic bool) *AcquireResult {
-	s := &b.in.State
-	id := holder + "#" + strconv.FormatInt(s.NextLease, 10)
-	s.NextLease++
-
-	s.Leases[id] = Lease{Holder: holder, Expires: now.Add(b.in.LeaseTTL)}
-
-	return &AcquireResult{Granted: true, LeaseID: id, Optimistic: optimistic}
+	return &AcquireResult{Granted: true, LeaseID: id, Optimistic: unknown}
 }
 
 // report closes the lease, applies a secondary-limit pause and, when
@@ -488,7 +466,7 @@ func (b *budget) grant(now time.Time, holder string, optimistic bool) *AcquireRe
 func (b *budget) report(r *Report) {
 	s := &b.in.State
 
-	delete(s.Leases, r.LeaseID)
+	s.close(r.LeaseID)
 
 	if r.RetryAt.After(s.RetryAt) {
 		s.RetryAt = r.RetryAt
@@ -557,50 +535,15 @@ func (b *budget) observe(r *Readings) bool {
 	return true
 }
 
-// sweep releases leases past their expiry.
-func (b *budget) sweep(now time.Time) {
-	for id, l := range b.in.State.Leases {
-		if !now.Before(l.Expires) {
-			delete(b.in.State.Leases, id)
-		}
-	}
-}
-
-// nextExpiry is the earliest lease expiry, or now plus idleSweep with
-// no lease open.
-func (b *budget) nextExpiry(now time.Time) time.Time {
-	var next time.Time
-
-	for _, l := range b.in.State.Leases {
-		if next.IsZero() || l.Expires.Before(next) {
-			next = l.Expires
-		}
-	}
-
-	if next.IsZero() {
-		return now.Add(idleSweep)
-	}
-
-	return next
-}
-
 // untilWake is the time to the next lease expiry or the next refresh,
 // whichever is first, and at least a second.
 func (b *budget) untilWake(now time.Time) time.Duration {
-	wake := b.nextExpiry(now)
+	wake := b.in.State.nextExpiry(now)
 	if b.refresh == nil && b.nextRefresh.Before(wake) {
 		wake = b.nextRefresh
 	}
 
 	return max(wake.Sub(now), time.Second)
-}
-
-func earliest(a, b time.Time) time.Time {
-	if b.Before(a) {
-		return b
-	}
-
-	return a
 }
 
 // gauges publishes the budget through the SDK's metrics handler, which
@@ -609,7 +552,7 @@ func (b *budget) gauges(ctx workflow.Context) {
 	m := workflow.GetMetricsHandler(ctx).WithTags(map[string]string{
 		"installation": strconv.FormatInt(b.in.InstallationID, 10),
 	})
-	m.Gauge(MetricBudgetAdmittedRuns).Update(float64(len(b.in.State.Leases)))
+	m.Gauge(MetricBudgetAdmittedRuns).Update(float64(b.in.State.open()))
 	for _, name := range TrackedResources {
 		r, ok := b.in.State.Resources[name]
 		if !ok {

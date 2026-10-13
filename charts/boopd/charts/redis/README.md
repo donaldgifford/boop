@@ -8,6 +8,8 @@ Renovate's datasource cache for boopd (IMPL-0001 OQ7)
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| auth.existingSecret | string | `""` |  |
+| auth.existingSecretKey | string | `"password"` |  |
 | image.pullPolicy | string | `"IfNotPresent"` |  |
 | image.repository | string | `"docker.io/library/redis"` |  |
 | image.tag | string | `"8.2-alpine@sha256:b51665e66f00759be7c3152ad5ac3c66fb2f619c13ef62dea7cc1f9914524635"` |  |

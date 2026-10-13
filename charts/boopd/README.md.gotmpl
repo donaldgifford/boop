@@ -15,6 +15,10 @@ container image:
 helm install boopd oci://ghcr.io/donaldgifford/charts/boopd
 ```
 
+The image tag defaults to the chart's version, which is the release
+without a leading `v` (`0.3.0` for `v0.3.0`), the tag the image is
+published under. Set `image.tag` to pin another; it is used verbatim.
+
 Render locally against the checked-out chart:
 
 ```sh
@@ -32,9 +36,58 @@ App configuration flows to the container as environment variables:
 - `extraEnv` appends raw env entries. Collisions with the
   chart-managed names fail the render.
 
+`boopd.runs.maxConcurrent` (default 20) caps concurrent runs across
+installations. The worker enforces it with a lease taken before a run
+mints a token. The chart also renders a ResourceQuota on `pods` in the
+runs namespace as a backstop. That quota covers every pod in the
+namespace. When runs share the release namespace, the worker replicas
+and the redis pod are added to it, but any other pod there takes a run's
+slot. A dedicated runs namespace (`boopd.runs.namespace` with
+`namespace.create`) avoids that. Set `maxConcurrent: 0` for no cap and no
+quota. `resourceQuota.enabled` was removed after v0.2.1, and setting it
+fails the render.
+
 Optional monitoring integrations (`serviceMonitor.enabled`,
 `prometheusRule.enabled`) are off by default and require the
 Prometheus Operator CRDs in the cluster.
+
+## GitOps installs
+
+The redis subchart generates its password on first install and keeps it
+across `helm upgrade` through `lookup`. Argo CD, Flux with
+post-rendering and kustomize render with `helm template`, where `lookup`
+returns nothing, so the password would change on every sync and roll
+redis and the worker each time.
+
+Give the chart a password it does not generate:
+
+```sh
+kubectl -n boopd create secret generic boopd-redis-password \
+  --from-literal=password="$(openssl rand -hex 32)"
+```
+
+```yaml
+redis:
+  auth:
+    existingSecret: boopd-redis-password
+    existingSecretKey: password # the default
+```
+
+The Secret holds only the password, and any characters are allowed. The
+chart then renders no password Secret:
+
+- An init container on the redis image hashes the password into redis's
+  ACL file, in memory. The `renovate` user and its key prefix are the
+  same as with the generated password.
+- `boopd.hcl` gets `redis_url` for the subchart's Service and
+  `redis_password_secret_ref` for the Secret. The worker puts the
+  password into the URL, escaped, when it starts.
+
+External Secrets, Sealed Secrets or SOPS can produce the same one-key
+Secret. After rotating the password, restart redis and then the worker:
+redis reads the ACL file only when it starts, and the worker reads the
+password only when it starts. `just helm-template-stable` checks that two
+renders with an existing Secret are identical.
 
 {{ template "chart.requirementsSection" . }}
 

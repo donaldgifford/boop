@@ -90,6 +90,42 @@ func (b *builder) validateRenovate(r *Renovate, raw *renovateBlock) {
 	if ref := raw.RedisSecretRef; ref != nil {
 		b.validateSecretRef(ref, "redis_secret_ref")
 	}
+	b.validateRedisURL(raw)
+}
+
+// validateRedisURL checks redis_url and its password ref. The password
+// lives in a Secret, never in the file, so a URL carrying one is
+// rejected.
+func (b *builder) validateRedisURL(raw *renovateBlock) {
+	if ref := raw.RedisPasswordSecretRef; ref != nil {
+		b.validateSecretRef(ref, "redis_password_secret_ref")
+		if raw.RedisURL == nil {
+			b.errorf(ref.DefRange, "Missing redis_url", "redis_password_secret_ref is the password for redis_url; set redis_url too.")
+		}
+	}
+	if raw.RedisURL == nil {
+		return
+	}
+	if raw.RedisSecretRef != nil {
+		b.errorf(raw.RedisURLRange, "Conflicting Redis settings", "Set redis_secret_ref (a full URL) or redis_url, not both.")
+	}
+	u, err := url.Parse(*raw.RedisURL)
+	switch {
+	case err != nil:
+		b.errorf(raw.RedisURLRange, "Invalid redis_url", "%v.", err)
+	case u.Scheme != "redis" && u.Scheme != "rediss":
+		b.errorf(raw.RedisURLRange, "Invalid redis_url", "redis_url %q must use redis:// or rediss://.", *raw.RedisURL)
+	case u.Host == "":
+		b.errorf(raw.RedisURLRange, "Invalid redis_url", "redis_url %q has no host.", *raw.RedisURL)
+	default:
+		if _, ok := u.User.Password(); ok {
+			b.errorf(
+				raw.RedisURLRange,
+				"Password in redis_url",
+				"Put the Redis password in a Secret named by redis_password_secret_ref, not in redis_url.",
+			)
+		}
+	}
 }
 
 func (b *builder) validateRuns(raw *runsBlock) {
