@@ -325,8 +325,10 @@ jobs:
         env:
           OUTPUT: ${{ env.CHART_DIR }}/CHANGELOG.md
 
-      # Lockstep version: chart version = the tag without its leading v,
-      # appVersion = the tag. Chart.yaml keeps its 0.0.0-dev placeholder
+      # Lockstep version: chart version and appVersion are both the tag
+      # without its leading v, because appVersion is the chart's default
+      # image tag and the image is published as {{version}} (issue #9).
+      # Chart.yaml keeps its 0.0.0-dev placeholder
       # — helm package stamps the real versions below.
       - name: Derive chart version
         id: version
@@ -361,7 +363,7 @@ jobs:
         run: |
           helm package "${CHART_DIR}" \
             --version "${{ steps.version.outputs.chart_version }}" \
-            --app-version "${TAG}"
+            --app-version "${TAG#v}"
 
       - name: Upload chart artifact (dispatch only)
         if: |

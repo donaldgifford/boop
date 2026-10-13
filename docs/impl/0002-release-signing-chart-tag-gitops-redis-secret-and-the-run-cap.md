@@ -194,7 +194,7 @@ The chart's default tag is the published image tag: no `v`.
 
 #### Tasks
 
-- [ ] 2.1 `release.yml` package step: `--app-version "${TAG#v}"`
+- [x] 2.1 `release.yml` package step: `--app-version "${TAG#v}"`
   (`--version` already uses the stripped `steps.version.outputs.chart_version`).
   Fix the comment that says "appVersion = the tag".
 - [ ] 2.2 Belt and braces in the chart: the image tag is
