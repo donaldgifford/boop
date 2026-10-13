@@ -257,12 +257,13 @@ the password only, and nothing derived from it is rendered.
   annotation only when the chart owns the Secret. With `existingSecret`,
   rotation is the owner's job; the README says to restart redis and the
   worker after rotating.
-- [ ] 3.5 boopd config (OQ4 a): the `renovate` block gains
+- [x] 3.5 boopd config (OQ4 a): the `renovate` block gains
   `redis_url` (a URL without a password, such as
   `redis://renovate@boopd-redis:6379`) and `redis_password_secret_ref`
   (`name`, `key`).
-  - `ReadSecrets` reads the password, and `BuildInput` sets it with
-    `url.UserPassword`, so any password works, not only URL-safe ones.
+  - `ReadSecrets` reads the password and sets it with `url.UserPassword`
+    into `Renovate.RedisURL`, the field `BuildInput` already passes on, so
+    any password works, not only URL-safe ones.
   - `redis_secret_ref` (a full URL) stays.
   - Validation: `redis_secret_ref` and `redis_url` exclude each other, and
     `redis_password_secret_ref` needs `redis_url`.

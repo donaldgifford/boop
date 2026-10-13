@@ -8,6 +8,7 @@
 - [renovate](#renovate)
   - [global](#global)
   - [redis\_secret\_ref](#redis_secret_ref)
+  - [redis\_url and redis\_password\_secret\_ref](#redis_url-and-redis_password_secret_ref)
   - [What a run's RENOVATE\_CONFIG holds](#what-a-runs-renovate_config-holds)
 - [runs](#runs)
 - [profile](#profile)
@@ -65,7 +66,7 @@ renovate {
   image = "ghcr.io/renovatebot/renovate:44-full@sha256:…"
   # config_paths, shared_preset, log_level, dry_run, git_author
   global { … }
-  redis_secret_ref { … }
+  redis_secret_ref { … } # or redis_url with redis_password_secret_ref { … }
 }
 
 runs {
@@ -110,6 +111,8 @@ app "boop-bot" { … } # one or more
 | `git_author` | string | none | `RENOVATE_GIT_AUTHOR`, e.g. `boop-bot <boop-bot[bot]@users.noreply.github.com>`. |
 | `global` | block | none | Renovate options for every run. |
 | `redis_secret_ref` | block | none | The Secret holding Renovate's Redis URL. |
+| `redis_url` | string | none | A Redis URL without a password (`redis://` or `rediss://`), the alternative to `redis_secret_ref`. |
+| `redis_password_secret_ref` | block | none | The Secret holding `redis_url`'s password. |
 
 ### global
 
@@ -145,6 +148,26 @@ and environment controls (DESIGN-0001 § Process builder):
 
 The URL reaches the Job as `RENOVATE_REDIS_URL`, Renovate's datasource
 lookup cache. Without it every run starts with a cold cache.
+
+### redis_url and redis_password_secret_ref
+
+For a Secret that holds only the password, as the chart's
+`redis.auth.existingSecret` does:
+
+```hcl
+redis_url = "redis://renovate@boopd-redis.boopd.svc:6379"
+
+redis_password_secret_ref {
+  name = "boopd-redis-password"
+  key  = "password"
+}
+```
+
+The worker reads the password at start and sets it in the URL, escaped,
+so any password works. A user in `redis_url` is kept. `redis_url` must not
+carry a password itself, cannot be combined with `redis_secret_ref`, and
+can be set alone for a Redis without auth. The password ref has the same
+`name` and `key` rules as `redis_secret_ref`.
 
 ### What a run's RENOVATE_CONFIG holds
 
@@ -356,6 +379,9 @@ Load fails, listing every problem, when:
     not `.json`;
   - an option in `global` or a profile's `renovate` block is forbidden or
     null, or `customEnvVariables` is not a map of strings.
+  - `redis_url` is not a `redis://` or `rediss://` URL with a host,
+    carries a password, or is set with `redis_secret_ref`;
+  - `redis_password_secret_ref` is set without `redis_url`.
 - **Enum values:** `log_level`, `dry_run` or `discovery.probe` is outside
   its set.
 - **Durations:** a duration does not parse or is not positive.

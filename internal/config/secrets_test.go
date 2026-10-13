@@ -116,3 +116,66 @@ func TestSecret_Redacts(t *testing.T) {
 		}
 	}
 }
+
+func TestReadSecrets_RedisURLWithPassword(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		endpoint string
+		password string // "" means no password ref
+		want     string
+	}{
+		{
+			name:     "escapes the password",
+			endpoint: "redis://renovate@boopd-redis:6379",
+			password: "p@ss/w:rd?#\n",
+			want:     "redis://renovate:p%40ss%2Fw%3Ard%3F%23@boopd-redis:6379",
+		},
+		{
+			name:     "without a user",
+			endpoint: "rediss://boopd-redis:6380/0",
+			password: "pw",
+			want:     "rediss://:pw@boopd-redis:6380/0",
+		},
+		{
+			name:     "without a password ref",
+			endpoint: "redis://boopd-redis:6379",
+			want:     "redis://boopd-redis:6379",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := loadExample(t)
+			cfg.SecretsDir = t.TempDir()
+			writeSecret(t, cfg.SecretsDir, "boop-bot-app", "private-key.pem", "pem")
+			cfg.Renovate.RedisSecretRef = nil
+			cfg.Renovate.RedisEndpoint = tt.endpoint
+			if tt.password != "" {
+				cfg.Renovate.RedisPasswordSecretRef = &config.SecretRef{Name: "boopd-redis-password", Key: "password"}
+				writeSecret(t, cfg.SecretsDir, "boopd-redis-password", "password", tt.password)
+			}
+			if err := cfg.ReadSecrets(); err != nil {
+				t.Fatalf("ReadSecrets() = %v", err)
+			}
+			if got := cfg.Renovate.RedisURL.Reveal(); got != tt.want {
+				t.Errorf("RedisURL = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReadSecrets_RedisPasswordMissing(t *testing.T) {
+	t.Parallel()
+	cfg := loadExample(t)
+	cfg.SecretsDir = t.TempDir()
+	writeSecret(t, cfg.SecretsDir, "boop-bot-app", "private-key.pem", "pem")
+	cfg.Renovate.RedisSecretRef = nil
+	cfg.Renovate.RedisEndpoint = "redis://renovate@boopd-redis:6379"
+	cfg.Renovate.RedisPasswordSecretRef = &config.SecretRef{Name: "boopd-redis-password", Key: "password"}
+
+	err := cfg.ReadSecrets()
+	if err == nil || !strings.Contains(err.Error(), "redis password") {
+		t.Fatalf("ReadSecrets() = %v, want a redis password error", err)
+	}
+}

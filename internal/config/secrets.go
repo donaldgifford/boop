@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 )
@@ -90,7 +91,31 @@ func (c *Config) ReadSecrets() error {
 			c.Renovate.RedisURL = Secret{value: bytes.TrimSpace(v.value)}
 		}
 	}
+	if c.Renovate.RedisEndpoint != "" {
+		if err := c.Renovate.composeRedisURL(c.SecretsDir); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	return errors.Join(errs...)
+}
+
+// composeRedisURL builds RedisURL from RedisEndpoint and, when named, the
+// password Secret. url.UserPassword escapes the password, so it need not
+// be URL-safe. The endpoint's user, if any, is kept.
+func (r *Renovate) composeRedisURL(dir string) error {
+	u, err := url.Parse(r.RedisEndpoint)
+	if err != nil {
+		return fmt.Errorf("redis url: %w", err)
+	}
+	if ref := r.RedisPasswordSecretRef; ref != nil {
+		v, err := readSecret(ref.Path(dir))
+		if err != nil {
+			return fmt.Errorf("redis password: %w", err)
+		}
+		u.User = url.UserPassword(u.User.Username(), string(bytes.TrimSpace(v.value)))
+	}
+	r.RedisURL = Secret{value: []byte(u.String())}
+	return nil
 }
 
 func readSecret(path string) (Secret, error) {

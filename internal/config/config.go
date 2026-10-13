@@ -106,7 +106,15 @@ type Renovate struct {
 	Global map[string]any
 	// RedisSecretRef names the Redis URL Secret, if any.
 	RedisSecretRef *SecretRef
-	// RedisURL is read from RedisSecretRef by ReadSecrets.
+	// RedisEndpoint is redis_url: a Redis URL without a password, the
+	// alternative to RedisSecretRef.
+	RedisEndpoint string
+	// RedisPasswordSecretRef names the Secret holding RedisEndpoint's
+	// password, if any.
+	RedisPasswordSecretRef *SecretRef
+	// RedisURL is the URL the Job gets: read from RedisSecretRef, or
+	// RedisEndpoint with the password from RedisPasswordSecretRef, by
+	// ReadSecrets.
 	RedisURL Secret
 }
 
@@ -304,6 +312,10 @@ func (b *builder) renovate(r *renovateBlock) Renovate {
 	}
 	if r.RedisSecretRef != nil {
 		out.RedisSecretRef = &SecretRef{Name: r.RedisSecretRef.Name, Key: r.RedisSecretRef.Key}
+	}
+	out.RedisEndpoint = deref(r.RedisURL)
+	if r.RedisPasswordSecretRef != nil {
+		out.RedisPasswordSecretRef = &SecretRef{Name: r.RedisPasswordSecretRef.Name, Key: r.RedisPasswordSecretRef.Key}
 	}
 	return out
 }
