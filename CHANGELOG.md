@@ -5,9 +5,23 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Bug Fixes
+
+- *(release)* Sign the image and attest both artefacts
+- *(release)* Stamp appVersion without the v
+- *(chart)* Default the image tag to appVersion without a v
+- *(release)* Print the published image tag in release notes
+
 ### Documentation
 
 - *(config)* Add the boopd.hcl reference
+- *(impl)* Add IMPL-0002 for issues 8-11
+- How to verify a release's signatures and provenance
+- *(chart)* Say the default image tag has no v
+
+### Miscellaneous Tasks
+
+- Check release.yml's SLSA image references
 
 ## [0.2.1] - 2026-10-12
 
