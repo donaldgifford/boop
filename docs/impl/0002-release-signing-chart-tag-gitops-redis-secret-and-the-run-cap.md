@@ -385,7 +385,7 @@ flowchart TD
   gauges are. They are pinned in `TestMetricNames` and listed in
   DESIGN-0001 § Observability, which is the metric list; the README has
   no metric table.
-- [ ] 4.6 Workflow tests (test environment): denial then grant; the
+- [x] 4.6 Workflow tests (test environment): denial then grant; the
   backoff doubles and caps at 30m; the installation lease is reported on a
   capacity denial; an unreported lease is swept at its TTL; and both
   sides of the version gate.
