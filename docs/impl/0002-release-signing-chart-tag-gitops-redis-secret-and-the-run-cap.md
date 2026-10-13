@@ -206,7 +206,7 @@ The chart's default tag is the published image tag: no `v`.
 - [x] 2.4 `TEMPORAL_BUILD_ID`: stays `worker.buildId | default image.tag |
   default AppVersion`, with the `v` stripped from the `AppVersion`
   fallback only (OQ2 a).
-- [ ] 2.5 `.goreleaser.yml:87`: `ghcr.io/donaldgifford/boopd:{{ .Version }}`.
+- [x] 2.5 `.goreleaser.yml:87`: `ghcr.io/donaldgifford/boopd:{{ .Version }}`.
 - [x] 2.6 helm-unittest: with `chart.appVersion: v9.9.9` and no
   `image.tag`, the image is `…:9.9.9`, the version label is `9.9.9` and
   the build ID is `9.9.9`; with `image.tag: v1.2.3` the image is
