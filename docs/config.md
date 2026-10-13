@@ -369,6 +369,8 @@ What the chart adds:
   `python`, `strict`).
 - **Removed values:** a removed value fails the render with what to use
   instead. `boopd.renovate.configPath` became `configPaths` after v0.1.0.
+  `resourceQuota.enabled` went after v0.2.1: the runs quota renders
+  whenever `runs.maxConcurrent > 0`.
 
 ## Validation
 

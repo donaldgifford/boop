@@ -211,12 +211,12 @@ namespace:
   # `pod-security.kubernetes.io/enforce=restricted`.
   create: false
 
+# A ResourceQuota on the runs namespace renders whenever
+# boopd.runs.maxConcurrent > 0, a backstop for the worker's capacity
+# lease. Its `pods` is maxConcurrent, plus the worker replicas and the
+# redis pod when they share the namespace; any other pod there takes a
+# slot.
 resourceQuota:
-  # -- Render a ResourceQuota on the runs namespace with `pods` sized
-  # from boopd.runs.maxConcurrent (plus the worker replicas when they
-  # share the namespace), so Jobs beyond the cap are refused at
-  # admission (IMPL-0001 OQ12).
-  enabled: false
   # -- Extra `spec.hard` entries, e.g. `limits.memory`.
   hard: {}
 

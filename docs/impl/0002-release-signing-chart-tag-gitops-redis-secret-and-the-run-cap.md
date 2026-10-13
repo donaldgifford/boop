@@ -389,7 +389,7 @@ flowchart TD
   backoff doubles and caps at 30m; the installation lease is reported on a
   capacity denial; an unreported lease is swept at its TTL; and both
   sides of the version gate.
-- [ ] 4.7 ResourceQuota (OQ7 b): rendered whenever
+- [x] 4.7 ResourceQuota (OQ7 b): rendered whenever
   `boopd.runs.maxConcurrent > 0`, so `resourceQuota.enabled` goes. Add it
   to `validateRemovedValues` with a pointer to the new rule.
   - Its `pods` count adds the worker replicas when the run namespace is

@@ -5,10 +5,19 @@ templates:
   - templates/resourcequota.yaml
   - templates/networkpolicy.yaml
 tests:
-  - it: renders nothing by default
+  - it: renders no namespace or policies by default
+    templates:
+      - templates/namespace.yaml
+      - templates/networkpolicy.yaml
     asserts:
       - hasDocuments:
           count: 0
+
+  - it: renders the quota by default, from maxConcurrent 20
+    template: templates/resourcequota.yaml
+    asserts:
+      - isKind:
+          of: ResourceQuota
 
   - it: labels the runs namespace restricted
     template: templates/namespace.yaml
@@ -28,10 +37,18 @@ tests:
           path: metadata.labels["pod-security.kubernetes.io/warn"]
           value: restricted
 
-  - it: sizes the quota from maxConcurrent plus the worker replicas
+  - it: sizes the quota from maxConcurrent plus the worker and redis pods
+    template: templates/resourcequota.yaml
+    asserts:
+      - equal:
+          path: spec.hard.pods
+          value: "23"
+
+  - it: leaves redis out of the quota when the subchart is off
     template: templates/resourcequota.yaml
     set:
-      resourceQuota.enabled: true
+      redis.enabled: false
+      boopd.renovate.redisSecretRef: {name: my-redis, key: url}
     asserts:
       - equal:
           path: spec.hard.pods
@@ -40,21 +57,22 @@ tests:
   - it: counts only Job pods when runs live in their own namespace
     template: templates/resourcequota.yaml
     set:
-      resourceQuota.enabled: true
       boopd.runs.namespace: boopd-runs
     asserts:
       - equal:
           path: spec.hard.pods
           value: "20"
+      - equal:
+          path: metadata.namespace
+          value: boopd-runs
 
-  - it: refuses a quota with no cap to size it from
+  - it: renders no quota without a cap
     template: templates/resourcequota.yaml
     set:
-      resourceQuota.enabled: true
       boopd.runs.maxConcurrent: 0
     asserts:
-      - failedTemplate:
-          errorPattern: maxConcurrent > 0
+      - hasDocuments:
+          count: 0
 
   - it: selects Job pods by their egress class
     template: templates/networkpolicy.yaml

@@ -34,6 +34,17 @@ App configuration flows to the container as environment variables:
 - `extraEnv` appends raw env entries. Collisions with the
   chart-managed names fail the render.
 
+`boopd.runs.maxConcurrent` (default 20) caps concurrent runs across
+installations. The worker enforces it with a lease taken before a run
+mints a token. The chart also renders a ResourceQuota on `pods` in the
+runs namespace as a backstop. That quota covers every pod in the
+namespace. When runs share the release namespace, the worker replicas
+and the redis pod are added to it, but any other pod there takes a run's
+slot. A dedicated runs namespace (`boopd.runs.namespace` with
+`namespace.create`) avoids that. Set `maxConcurrent: 0` for no cap and no
+quota. `resourceQuota.enabled` was removed after v0.2.1, and setting it
+fails the render.
+
 Optional monitoring integrations (`serviceMonitor.enabled`,
 `prometheusRule.enabled`) are off by default and require the
 Prometheus Operator CRDs in the cluster.
@@ -131,7 +142,6 @@ renders with an existing Secret are identical.
 | redis.maxmemory | string | `"256mb"` | Memory cap; keys are evicted least-recently-used beyond it. |
 | redis.resources | object | `{"limits":{"cpu":"500m","memory":"300Mi"},"requests":{"cpu":"50m","memory":"300Mi"}}` | Resources; keep the memory limit above maxmemory. |
 | replicaCount | int | `2` | Worker replicas. A fixed, small count (ADR-0008 as amended by ADR-0009): runs are Jobs, so the worker never scales with load. |
-| resourceQuota.enabled | bool | `false` | Render a ResourceQuota on the runs namespace with `pods` sized from boopd.runs.maxConcurrent (plus the worker replicas when they share the namespace), so Jobs beyond the cap are refused at admission (IMPL-0001 OQ12). |
 | resourceQuota.hard | object | `{}` | Extra `spec.hard` entries, e.g. `limits.memory`. |
 | resources | object | `{"limits":{"cpu":"500m","memory":"256Mi"},"requests":{"cpu":"100m","memory":"128Mi"}}` | Container resource requests and limits |
 | revisionHistoryLimit | int | `3` | Number of old ReplicaSets retained for rollback. Defaults to 3 to keep the kubectl `get rs` view tidy; bump if you need more rollback headroom. Kubernetes default is 10. |

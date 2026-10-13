@@ -155,6 +155,9 @@ Renders empty on success; failure aborts the entire template render.
 {{- if hasKey .Values.boopd.renovate "configPath" -}}
 {{- fail "boopd.renovate.configPath was removed after v0.1.0: discovery now probes every Renovate config file name (DESIGN-0001 OQ3). Delete the value, or list paths in boopd.renovate.configPaths." -}}
 {{- end -}}
+{{- if hasKey (.Values.resourceQuota | default dict) "enabled" -}}
+{{- fail "resourceQuota.enabled was removed after v0.2.1: the quota renders whenever boopd.runs.maxConcurrent > 0 (IMPL-0002 OQ7). Delete the value; set boopd.runs.maxConcurrent: 0 for no cap and no quota." -}}
+{{- end -}}
 {{- end }}
 
 {{/*
