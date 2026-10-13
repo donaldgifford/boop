@@ -39,6 +39,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(design)* Amend OQ12 for the capacity lease
 - CapacityWorkflow in the package doc and CLAUDE.md
 - *(impl)* IMPL-0002 Phase 5 tasks 5.1 and 5.2
+- *(impl)* IMPL-0002 CI green; release checks deferred
 
 ### Testing
 
