@@ -425,10 +425,10 @@ flowchart TD
 
 #### Tasks
 
-- [ ] 5.1 Conventional commits per task group (`fix(release): …`,
+- [x] 5.1 Conventional commits per task group (`fix(release): …`,
   `fix(chart): …`, `feat(chart): …`, `feat(worker): …`), each followed by
   `git cliff -o CHANGELOG.md` and a `chore: update changelog` commit.
-- [ ] 5.2 One PR from `fix/issues-8-11` with `Closes #8`, `Closes #9`,
+- [x] 5.2 One PR from `fix/issues-8-11` with `Closes #8`, `Closes #9`,
   `Closes #10` and `Closes #11`, and the `minor` label: the new values and
   the worker cap are features.
 - [ ] 5.3 Iterate CI to green, including the chart e2e.
