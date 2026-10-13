@@ -355,12 +355,14 @@ flowchart TD
   `jitter`), embedded in `BudgetState` so its fields encode where they
   always did and in-flight ContinueAsNew state still decodes.
   InstallationWorkflow's behaviour and tests are unchanged.
-- [ ] 4.3 `CapacityWorkflow` (ID `capacity/runs`): a lease entity with
-  `MaxConcurrentRuns = runs.max_concurrent` and no rate resources. It
-  ContinuesAsNew like the InstallationWorkflow, carrying its leases and
-  taking the cap from its input. The worker starts it at boot with
-  `WorkflowIDConflictPolicy: UseExisting` when the cap is above 0, and
-  signals a changed cap.
+- [x] 4.3 `CapacityWorkflow` (ID `capacity/runs`, `capacity.go`): a lease
+  entity with `MaxConcurrentRuns = runs.max_concurrent` and no rate
+  resources. It serves the same acquire Update and report Signal plus a
+  `cap` Signal, and ContinuesAsNew carrying its leases. The
+  `AcquireCapacity` activity reaches it by Update-with-Start, and grants
+  with no lease when the cap is 0. At boot the worker sends the cap by
+  Signal-with-Start when the cap is set. With no cap it only signals a
+  running workflow to lift it.
 - [ ] 4.4 RepoWorkflow (6 a, as decided): after the installation lease is
   granted and when the cap is set, acquire a capacity lease. On denial:
   - report the installation lease closed, so a run waiting on the cluster

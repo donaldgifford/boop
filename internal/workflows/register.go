@@ -32,6 +32,7 @@ var all = []registration{
 	{InstallationWorkflow, InstallationWorkflowName},
 	{RepoWorkflow, RepoWorkflowName},
 	{DiscoveryWorkflow, DiscoveryWorkflowName},
+	{CapacityWorkflow, CapacityWorkflowName},
 }
 
 // Register registers the worker's workflows.

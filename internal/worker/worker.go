@@ -68,7 +68,8 @@ type Options struct {
 
 // Run is the worker role (IMPL-0001 task 6.4): register the search
 // attributes, start the versioned worker with every workflow and
-// activity, promote its build, ensure the discovery schedules and serve
+// activity, promote its build, ensure the discovery schedules, hand
+// runs.max_concurrent to the CapacityWorkflow and serve
 // health and metrics. When ctx ends it stops polling and waits up to
 // the worker's stop timeout, so runs in flight reach their soft
 // deadlines.
@@ -92,11 +93,16 @@ func Run(ctx context.Context, o *Options) error {
 		Metrics: metrics, Logger: log, RunLog: o.RunLog, Timings: o.Timings,
 	})
 	budget := activities.NewBudget(o.Temporal, tq, budgetConfig(o.Config))
+	capacity := activities.NewCapacity(o.Temporal, tq, activities.CapacityConfig{
+		MaxConcurrentRuns: o.Config.Runs.MaxConcurrent,
+		LeaseTTL:          workflows.DefaultLeaseTTL,
+	})
 
 	w := temporal.NewWorker(o.Temporal, &o.Worker)
 	workflows.Register(w)
 	acts.Register(w)
 	budget.Register(w)
+	capacity.Register(w)
 
 	var started atomic.Bool
 	health := readiness(o, &started)
@@ -124,11 +130,7 @@ func Run(ctx context.Context, o *Options) error {
 	if err := w.Start(); err != nil {
 		return fmt.Errorf("start worker: %w", err)
 	}
-	if err := temporal.PromoteBuild(ctx, o.Temporal, o.Worker.DeploymentName(), o.Worker.BuildID, log); err != nil {
-		w.Stop()
-		return fmt.Errorf("promote build %s: %w", o.Worker.BuildID, err)
-	}
-	if err := EnsureSchedules(ctx, o.Temporal, o.Config, tq); err != nil {
+	if err := boot(ctx, o, capacity, log); err != nil {
 		w.Stop()
 		return err
 	}
@@ -143,6 +145,18 @@ func Run(ctx context.Context, o *Options) error {
 	wg.Wait()
 	log.Info("worker stopped")
 	return nil
+}
+
+// boot runs once the worker polls: promote its build, ensure the
+// discovery schedules and hand the run cap to the CapacityWorkflow.
+func boot(ctx context.Context, o *Options, capacity *activities.Capacity, log *slog.Logger) error {
+	if err := temporal.PromoteBuild(ctx, o.Temporal, o.Worker.DeploymentName(), o.Worker.BuildID, log); err != nil {
+		return fmt.Errorf("promote build %s: %w", o.Worker.BuildID, err)
+	}
+	if err := EnsureSchedules(ctx, o.Temporal, o.Config, o.Worker.TaskQueue); err != nil {
+		return err
+	}
+	return capacity.SetCap(ctx)
 }
 
 // readiness is IMPL-0001 OQ9's ready: connected to Temporal, the worker

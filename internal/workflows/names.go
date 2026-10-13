@@ -38,6 +38,7 @@ const (
 	RepoWorkflowName         = "RepoWorkflow"
 	InstallationWorkflowName = "InstallationWorkflow"
 	DiscoveryWorkflowName    = "DiscoveryWorkflow"
+	CapacityWorkflowName     = "CapacityWorkflow"
 )
 
 // Activity names (DESIGN-0001 § Topology and packages). The activities
@@ -49,6 +50,7 @@ const (
 	CheckRepoActivity            = "CheckRepo"
 	ReadRateLimitActivity        = "ReadRateLimit"
 	AcquireBudgetActivity        = "AcquireBudget"
+	AcquireCapacityActivity      = "AcquireCapacity"
 	PlanRunActivity              = "PlanRun"
 	RunRenovateActivity          = "RunRenovate"
 )
@@ -66,6 +68,10 @@ const (
 	ReportSignal  = "report"
 	SuspendSignal = "suspend"
 )
+
+// CapacitySignal sets CapacityWorkflow's cap; acquire and report are
+// shared with InstallationWorkflow.
+const CapacitySignal = "cap"
 
 // StateQuery is the query every entity workflow answers for debugging
 // in the Temporal UI: InstallationWorkflow with its BudgetState,
@@ -88,6 +94,9 @@ func RepoWorkflowID(repoID int64) string {
 func InstallationWorkflowID(installationID int64) string {
 	return "installation/" + Platform + "/" + strconv.FormatInt(installationID, 10)
 }
+
+// CapacityWorkflowID is capacity/runs: the one cluster-wide run cap.
+const CapacityWorkflowID = "capacity/runs"
 
 // DiscoveryScheduleID is discovery/<app name>: one Temporal Schedule per
 // configured GitHub App (DESIGN-0001 § DiscoveryWorkflow).
@@ -113,4 +122,7 @@ const (
 	MetricDiscoveryMissed    = "boopd_discovery_missed"
 	MetricReposStalled       = "boopd_repos_stalled"
 	MetricReposIncomplete    = "boopd_repos_incomplete"
+	MetricCapacityLeases     = "boopd_capacity_leases"
+	MetricCapacityLimit      = "boopd_capacity_limit"
+	MetricCapacityDenied     = "boopd_capacity_denied_total"
 )
