@@ -1429,7 +1429,20 @@ and the worker does it itself.
 
 ### OQ12: How is cluster capacity capped?
 
-**Decision (2026-10-10): a.**
+**Decision (2026-10-10): a. Amended (2026-10-13, IMPL-0002 OQ5 and OQ7):
+b, with the quota kept as a backstop.**
+
+> **Amendment.** The quota in option a never refused the Job. It is a
+> `pods` quota, so the Job is created and its pod refused, and the run
+> waited `pending_timeout` holding a budget lease and a minted token
+> (issue #11). The worker now enforces the cap with a `CapacityWorkflow`
+> (`capacity/runs`), option b's lease layer, built on the
+> InstallationWorkflow's lease book. A RepoWorkflow takes its lease after
+> the installation lease and before RunRenovate. A denied run gives the
+> installation lease back and waits 1m doubling to 30m. The ResourceQuota
+> renders whenever `runs.maxConcurrent > 0` and counts the worker and
+> redis pods that share the namespace. The activity slot count is not
+> mirrored: the lease is the cap.
 
 Per-installation admission caps GitHub spend, not cluster load. With a Job
 per run, every admitted lease is a pod.

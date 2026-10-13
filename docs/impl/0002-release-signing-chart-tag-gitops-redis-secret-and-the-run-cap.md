@@ -406,7 +406,7 @@ flowchart TD
   - at most one run Job exists at any time;
   - the fake GitHub's mint count equals the admitted runs;
   - the second run starts after the first finishes.
-- [ ] 4.9 DESIGN-0001 OQ12: append a dated note. The cap is a
+- [x] 4.9 DESIGN-0001 OQ12: append a dated note. The cap is a
   CapacityWorkflow lease as of IMPL-0002, and the quota is the backstop.
 
 #### Success Criteria
