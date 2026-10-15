@@ -33,4 +33,5 @@ docz create design "Your Design Title"
 | ID | Title | Status | Date | Author | Link |
 |----|-------|--------|------|--------|------|
 | DESIGN-0001 | boopd spike: workflows, RunRenovate activity and worker | Approved | 2026-10-01 | Donald Gifford | [0001-boopd-spike-workflows-runrenovate-activity-and-worker.md](0001-boopd-spike-workflows-runrenovate-activity-and-worker.md) |
+| DESIGN-0002 | Valkey as the bundled Renovate cache | Draft | 2026-10-15 | Donald Gifford | [0002-valkey-as-the-bundled-renovate-cache.md](0002-valkey-as-the-bundled-renovate-cache.md) |
 <!-- END DOCZ AUTO-GENERATED -->
