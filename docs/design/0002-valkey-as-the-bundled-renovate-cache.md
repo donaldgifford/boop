@@ -37,9 +37,7 @@ created: 2026-10-15
 - [Testing Strategy](#testing-strategy)
 - [Migration / Rollout Plan](#migration--rollout-plan)
 - [Open Questions](#open-questions)
-  - [OQ6: What happens to existing redis.* values?](#oq6-what-happens-to-existing-redis-values)
   - [OQ10: Is the worker PDB on by default?](#oq10-is-the-worker-pdb-on-by-default)
-  - [OQ11: Do parent commonLabels reach Valkey?](#oq11-do-parent-commonlabels-reach-valkey)
 - [Resolved Questions](#resolved-questions)
 - [References](#references)
 <!--toc:end-->
@@ -213,7 +211,9 @@ dependencies:
   - name: valkey
     version: 0.12.0
     repository: https://valkey-io.github.io/valkey-helm
-    condition: valkey.enabled
+    # redis.enabled first: Helm uses the first path that is set, so a
+    # values file from v0.3.x still switches the cache (OQ6).
+    condition: redis.enabled,valkey.enabled
 ```
 
 **`Chart.lock` is committed. `charts/boopd/charts/*.tgz` is ignored by
@@ -458,7 +458,7 @@ The worker already has `podLabels`, `podAnnotations`,
 
 | Value | Default | Applies to |
 | - | - | - |
-| `commonLabels` | `{}` | every resource the parent renders (not the subchart; see OQ11) |
+| `commonLabels` | `{}` | every resource the parent renders (not the subchart: set `valkey.commonLabels` too; the README shows one YAML anchor for both) |
 | `commonAnnotations` | `{}` | every resource the parent renders |
 | `podDisruptionBudget.enabled` | `true` (OQ10) | a PDB selecting the worker pods |
 | `podDisruptionBudget.maxUnavailable` | `1` | |
@@ -512,18 +512,26 @@ recreates a Deployment.
 
 ### Removed values
 
-Every `redis.*` key goes. What happens to an install that still sets one
-is OQ6, which is still open. The mapping:
+Every `redis.*` key goes from `values.yaml` and the schema. An install that
+still sets one is translated where Helm allows it, and fails where it
+can't (OQ6). Helm can't fully translate, because a subchart reads its own
+values block (`.Values.valkey`) and no parent template can change it.
 
-| Removed | Replacement |
+| Old key | Handling |
 | - | - |
-| `redis.enabled` | `valkey.enabled` |
-| `redis.maxmemory` | `maxmemory` in `valkey.valkeyConfig` |
-| `redis.keyPrefix` | `valkey.keyPrefix` |
-| `redis.resources` | `valkey.resources` |
-| `redis.auth.existingSecret` | `valkey.auth.usersExistingSecret`; the Secret now needs keys `renovate` and `default` |
-| `redis.auth.existingSecretKey` | `valkey.auth.aclUsers.renovate.passwordKey` |
-| `redis.image` | `valkey.image` |
+| `redis.enabled` | **translated.** The dependency condition is `redis.enabled,valkey.enabled`, and the parent's `boopd.valkeyEnabled` helper reads the same two paths in the same order |
+| `redis.keyPrefix` | **translated.** The parent owns the prefix: `boopd.keyPrefix` is `redis.keyPrefix` when set, else `valkey.keyPrefix`. The ACL guard then checks `aclUsers.renovate.permissions` against it, so an old non-default prefix fails until the permissions match too |
+| `redis.maxmemory` | **fails**: use `maxmemory` in `valkey.valkeyConfig` |
+| `redis.resources` | **fails**: use `valkey.resources` |
+| `redis.image` | **fails**: use `valkey.image` |
+| `redis.auth.existingSecret` | **fails**: use `valkey.auth.usersExistingSecret`; the Secret now needs keys `renovate` and `default` |
+| `redis.auth.existingSecretKey` | **fails**: use `valkey.auth.aclUsers.renovate.passwordKey` |
+
+The failures come from `boopd.validateRemovedValues`, which already
+handles `configPath` and `resourceQuota.enabled`, and each message names
+the replacement. A translated key also prints a deprecation line in
+`NOTES.txt` naming its `valkey.*` spelling. The README's upgrade section
+carries the table and a `yq` snippet that rewrites a v0.3.x values file.
 
 ### Go and boopd.hcl
 
@@ -594,7 +602,10 @@ E2E first (IMPL-0001 OQ3), then unit tests for the render branches.
   - **Quota:** counts 1, or `replicas + 1`, Valkey pods.
   - **Passthrough:** `valkey.podLabels` is on the Valkey pod, and
     `metrics.serviceMonitor.enabled` renders a ServiceMonitor.
-  - **OQ6:** whichever way it is settled.
+  - **Old values:** `redis.enabled: false` disables Valkey and the
+    config wiring; `redis.keyPrefix` reaches `redisPrefix` and the guard;
+    each failing `redis.*` key names its replacement; the NOTES
+    deprecation lines appear.
 - **`helm-template-stable`** keeps diffing two renders, now with
   `usersExistingSecret` set.
 - **`helm-config-validate`** keeps validating the rendered `boopd.hcl` for
@@ -620,7 +631,7 @@ On `helm upgrade` from v0.3.x:
 
 | Step | What happens |
 | - | - |
-| Values | With no `usersExistingSecret`, the render fails with the create-a-Secret message. Old `redis.*` values are handled as OQ6 decides |
+| Values | With no `usersExistingSecret`, the render fails with the create-a-Secret message. `redis.enabled` and `redis.keyPrefix` are translated, with a NOTES warning; every other `redis.*` key fails, naming its replacement |
 | Resources | Helm prunes `<release>-redis`, its Service and `<release>-redis-auth`. It creates the Valkey Deployment, Service, ConfigMaps and the policies |
 | Worker | Rolls on `checksum/config` (new `redis_url`) and reads the new password at start |
 | Runs | A run in flight keeps its old URL and loses the cache when redis goes. Renovate logs the Redis error and carries on uncached; implementation checks this in e2e |
@@ -638,54 +649,29 @@ reads the same Secret, so the two agree.
 Resolved questions are listed under
 [Resolved Questions](#resolved-questions).
 
-### OQ6: What happens to existing redis.* values?
-
-You chose "rewrite `redis.*` to `valkey.*`". Helm can't fully do that. A
-subchart reads its own values block (`.Values.valkey`) before any parent
-template runs, and a parent template can't change it. What can be
-translated:
-
-| Key | Translatable? |
-| - | - |
-| `redis.enabled` | yes: `condition: redis.enabled,valkey.enabled` (Helm uses the first path that is set) |
-| `redis.keyPrefix` | yes: the parent owns it |
-| `redis.auth.existingSecret` | **no**: the subchart reads `valkey.auth.usersExistingSecret` itself, and the Secret now needs a second key anyway |
-| `redis.maxmemory`, `redis.resources`, `redis.image` | **no**: subchart values |
-
-- **a (recommended): rename everything to `valkey.*`, and fail the render
-  for any `redis.*` key, naming its replacement** (`validateRemovedValues`,
-  as for `configPath` and `resourceQuota.enabled`). No production install
-  exists yet, so nobody needs a soft landing. Since the Secret's shape
-  changes too, every install edits its values once regardless.
-- **b: translate the two keys that can be (`enabled`, `keyPrefix`) and
-  fail on the rest.** Partial, so operators still edit values, and two
-  spellings of `enabled` exist forever.
-- **c: ship a migration note with a `yq` one-liner that rewrites a values
-  file**, plus the failure guards from a. This helps GitOps repositories
-  that carry the values. It is documentation only.
-- **other:**
-
 ### OQ10: Is the worker PDB on by default?
+
+What a default-on PDB (`maxUnavailable: 1`,
+`unhealthyPodEvictionPolicy: AlwaysAllow`) does, case by case:
+
+| Situation | With the PDB | Without it |
+| - | - | - |
+| One node drained, one worker on it | Evicted at once. The Deployment starts a replacement elsewhere while the old pod finishes its grace period | Same |
+| Both workers' nodes drained together (a node-pool upgrade, Karpenter consolidation) | The second eviction waits until the first worker's replacement is Ready, usually seconds. The drain or consolidation is that much slower | Both evicted together. No worker polls the task queue until a replacement starts, so workflow tasks and new runs pause. Running Jobs carry on, but their `RunRenovate` heartbeats stop until a worker picks the activity up again |
+| `replicaCount: 1` | One eviction is allowed, so a drain never blocks | Same |
+| A worker crash-looping or not Ready | `AlwaysAllow` lets it be evicted anyway, so a broken pod never blocks a drain | Same |
+| `kubectl delete pod`, a rollout, an OOM kill | Not affected: PDBs only gate the eviction API | Same |
+
+The well-known PDB failure is a `minAvailable` equal to the replica
+count, which blocks every drain forever. `maxUnavailable: 1` cannot do
+that at any replica count. The costs are one extra object and slightly
+slower parallel drains.
 
 - **a (recommended): on, `maxUnavailable: 1`.** The default
   `replicaCount` is 2, and the PDB keeps a drain from taking both workers
-  at once. With `replicaCount: 1` it allows one eviction, so it never
-  blocks a drain outright.
-- **b: off by default, as most charts do.** Operators opt in; a drain can
-  take both replicas together.
-- **other:**
-
-### OQ11: Do parent commonLabels reach Valkey?
-
-The parent can't set subchart values, so `commonLabels` can't flow into
-`valkey.commonLabels` by template.
-
-- **a (recommended): two separate values, `commonLabels` and
-  `valkey.commonLabels`, with a README example that uses a YAML anchor to
-  set both from one map.** This is plain Helm, with nothing hidden.
-- **b: move both to `global.commonLabels`.** The Valkey chart doesn't read
-  `global.commonLabels`, so this only works for the parent. It would mean
-  a fork or an upstream change.
+  at once. The table shows no case where it blocks a drain outright.
+- **b: off by default, as many charts do.** Operators opt in, and a
+  parallel drain can take both replicas together.
 - **other:**
 
 ## Resolved Questions
@@ -701,7 +687,9 @@ Answered 2026-10-15. The body above is written to these decisions.
 | 5 | What can `default` do? | **a**: monitoring commands, no keys. The exporter's metrics work fully with it ([ACL users](#acl-users)) |
 | 7 | Worker passthrough in this design? | **b**: yes, `commonLabels`, `commonAnnotations`, PDB, spread, priority class, Service annotations. No HPA (ADR-0008) |
 | 8 | Valkey metrics follow boopd's? | **a**: independent, off by default |
+| 6 | Existing `redis.*` values? | **b, plus guards and docs**: translate `redis.enabled` and `redis.keyPrefix`; fail every other key, naming its replacement; README table and `yq` snippet ([Removed values](#removed-values)) |
 | 9 | Who restricts ingress to Valkey? | **both**: a chart default, `extraIngress` to extend, and `enabled: false` plus the subchart's `networkPolicy` to replace ([The Valkey NetworkPolicy](#the-valkey-networkpolicy)) |
+| 11 | Parent `commonLabels` into Valkey? | **a**: two values, `commonLabels` and `valkey.commonLabels`; the README shows one YAML anchor for both |
 
 ## References
 
