@@ -25,7 +25,9 @@ created: 2026-10-15
   - [ACL users](#acl-users)
   - [boopd's config](#boopds-config)
   - [Valkey configuration](#valkey-configuration)
-  - [The passthrough section](#the-passthrough-section)
+  - [The Valkey passthrough](#the-valkey-passthrough)
+  - [The Valkey NetworkPolicy](#the-valkey-networkpolicy)
+  - [The worker's passthrough](#the-workers-passthrough)
   - [What else in the parent chart changes](#what-else-in-the-parent-chart-changes)
 - [API / Interface Changes](#api--interface-changes)
   - [Values](#values)
@@ -35,15 +37,10 @@ created: 2026-10-15
 - [Testing Strategy](#testing-strategy)
 - [Migration / Rollout Plan](#migration--rollout-plan)
 - [Open Questions](#open-questions)
-  - [OQ1: Which Valkey chart?](#oq1-which-valkey-chart)
-  - [OQ2: Is the subchart vendored?](#oq2-is-the-subchart-vendored)
-  - [OQ3: What does a GitOps install get without an existing Secret?](#oq3-what-does-a-gitops-install-get-without-an-existing-secret)
-  - [OQ4: How many keys does the password Secret hold?](#oq4-how-many-keys-does-the-password-secret-hold)
-  - [OQ5: What can the default user do?](#oq5-what-can-the-default-user-do)
   - [OQ6: What happens to existing redis.* values?](#oq6-what-happens-to-existing-redis-values)
-  - [OQ7: Does the passthrough cover the boopd worker too?](#oq7-does-the-passthrough-cover-the-boopd-worker-too)
-  - [OQ8: Do Valkey's metrics follow boopd's?](#oq8-do-valkeys-metrics-follow-boopds)
-  - [OQ9: Who restricts ingress to Valkey?](#oq9-who-restricts-ingress-to-valkey)
+  - [OQ10: Is the worker PDB on by default?](#oq10-is-the-worker-pdb-on-by-default)
+  - [OQ11: Do parent commonLabels reach Valkey?](#oq11-do-parent-commonlabels-reach-valkey)
+- [Resolved Questions](#resolved-questions)
 - [References](#references)
 <!--toc:end-->
 
@@ -56,36 +53,46 @@ homelab already runs for its other apps.
 
 The design keeps three things from today:
 
-- the cache's behaviour: an LRU cache with no persistence, one ACL user
+- the cache's behaviour: an LRU cache with no persistence, and an ACL user
   for Renovate limited to its key prefix;
-- the GitOps story from IMPL-0002: a password from a Secret the operator
-  manages;
+- the GitOps story from IMPL-0002: the password comes from a Secret the
+  operator manages;
 - `boopd.hcl`'s contract: no Go change.
 
-Two things are added:
+It changes or adds four things:
 
-- **A password the chart generates once and keeps.** It is reused on every
-  upgrade whenever the operator has not supplied a Secret.
-- **A documented passthrough section in `values.yaml`.** It covers labels,
-  annotations, the PDB, replicas, ServiceMonitor, PodMonitor,
-  PrometheusRule, scheduling and the NetworkPolicy, so Valkey is
+- **The chart never creates a password.** With Valkey on, the operator
+  names a Secret. Until they do, the render fails with a message that
+  says how to create one. A chart bump can therefore never rotate a
+  password, under `helm upgrade` or Argo CD alike.
+- **A documented Valkey passthrough** in `values.yaml`. It covers labels,
+  annotations, the PDB, replica mode, ServiceMonitor, PodMonitor,
+  PrometheusRule, scheduling, resources and images, so this Valkey is
   configured like any other homelab Valkey.
+- **A NetworkPolicy for Valkey** with a chart default that the operator
+  can extend or replace.
+- **The worker gets the same passthrough:** `commonLabels`, a PDB,
+  topology spread, a priority class and Service annotations.
 
 ## Goals and Non-Goals
 
 ### Goals
 
 - Valkey from the official `valkey-io/valkey-helm` chart replaces the local
-  redis subchart, on by default, as `valkey.enabled`.
-- An operator-supplied Secret (`valkey.auth.usersExistingSecret`) is always
-  used when set, and the chart then renders no password Secret.
-- Without one, the chart creates the password once, on install, and reuses
-  it on every `helm upgrade`. A chart or app version bump never rotates it.
+  redis subchart. It is on by default, as `valkey.enabled`.
+- The password Secret is always the operator's
+  (`valkey.auth.usersExistingSecret`). Leaving it unset fails the render
+  with an actionable message.
+- `renovate` and `default` have separate keys in that Secret.
+- Valkey's metrics, with the exporter and a ServiceMonitor, work while the
+  `default` user still can't read the cache.
 - Every Valkey chart knob is reachable from boopd's values, and the
   commonly used ones are listed with defaults.
+- The worker gains `commonLabels`, `commonAnnotations`, a PDB,
+  `topologySpreadConstraints`, `priorityClassName` and
+  `service.annotations`.
 - Renovate's isolation is unchanged: the `renovate` user reaches only
-  `renovate:*` keys and no dangerous commands, and the `default` user can
-  touch no keys.
+  `renovate:*` keys and no dangerous commands.
 - No change to `internal/` or to `boopd.hcl`'s schema.
 
 ### Non-Goals
@@ -93,6 +100,11 @@ Two things are added:
 - **Valkey replication or Sentinel failover for boopd.** It is a cache, and
   losing it costs one cold run. Replica mode stays reachable through the
   passthrough, but it is not tuned or tested.
+- **An HPA**, for either workload:
+  - The Valkey chart has none, and a cache with one writer does not scale
+    out.
+  - The worker runs a fixed, small replica count (ADR-0008 as amended by
+    ADR-0009). Runs scale as Jobs.
 - **A Valkey operator.** The homelab notes `valkey-io/valkey-operator` is
   not production-ready.
 - **Changing the external-cache path.** `boopd.renovate.redisSecretRef` with
@@ -103,7 +115,7 @@ Two things are added:
 
 ### Today: the local redis subchart
 
-IMPL-0001 task 7.x and IMPL-0002 Phase 3 built `charts/boopd/charts/redis`:
+IMPL-0001 Phase 7 and IMPL-0002 Phase 3 built `charts/boopd/charts/redis`:
 
 | Piece | Today |
 | - | - |
@@ -111,7 +123,7 @@ IMPL-0001 task 7.x and IMPL-0002 Phase 3 built `charts/boopd/charts/redis`:
 | Cache | `--maxmemory 256mb --maxmemory-policy allkeys-lru --save "" --appendonly no`, `emptyDir` data |
 | Auth | `--aclfile`: `user default off`, `user renovate on #<sha256> resetkeys ~renovate:* … -@dangerous` |
 | Password | `lookup` of `<release>-redis-auth`, else `randAlphaNum 40`; or `redis.auth.existingSecret`, hashed by an init container |
-| boopd wiring | `redis_secret_ref` (chart Secret's `url` key), or `redis_url` with `redis_password_secret_ref` (existing Secret) |
+| boopd wiring | `redis_secret_ref` (the chart Secret's `url` key), or `redis_url` with `redis_password_secret_ref` (existing Secret) |
 | Extras | none: no labels, PDB, metrics or scheduling values |
 
 ### The valkey-io chart
@@ -119,45 +131,47 @@ IMPL-0001 task 7.x and IMPL-0002 Phase 3 built `charts/boopd/charts/redis`:
 The homelab deploys `valkey-io/valkey-helm` 0.9.4: standalone, ACL auth,
 `auth.usersExistingSecret`, metrics with a ServiceMonitor
 (`homelab/k8s/apps/fartlab/valkey/values.yaml`). The latest release is
-**0.12.0 (Valkey 9.1.2)**. The parts this design relies on, read from
-0.12.0:
+**0.12.0 (Valkey 9.1.2)**. The parts this design relies on, read from the
+chart source:
 
 - **Auth:**
-  - `auth.aclUsers.<name>` has `permissions` and either an inline
-    `password` or a `passwordKey` into `auth.usersExistingSecret`.
-  - The chart's init script hashes each password with `sha256sum` and
-    writes `user <name> on #<hash> <permissions>` into
-    `/etc/valkey/users.acl`, on a memory `emptyDir`. This is the IMPL-0002
-    init-container technique.
-  - **The chart never generates a password.**
-- **`auth.usersExistingSecret` goes through `tpl`.** A parent can default
-  it to `{{ .Release.Name }}-valkey-auth`.
+  - Each `auth.aclUsers.<name>` entry has `permissions` and either an
+    inline `password` or a `passwordKey` into `auth.usersExistingSecret`.
+  - **`passwordKey` defaults to the user's name.** A Secret with the keys
+    `renovate` and `default` therefore needs no `passwordKey` at all.
+  - The init script hashes each password with `sha256sum` and writes
+    `user <name> on #<hash> <permissions>` into `/etc/valkey/users.acl`,
+    on a memory `emptyDir`. If a key is missing, the script exits non-zero
+    and the pod does not start.
+  - **The chart never generates a password.** Inline passwords go into a
+    chart Secret as given.
 - **A `default` user is mandatory** when auth is on; the render fails
-  without it. The `redis_exporter` sidecar authenticates as `default`, with
-  `REDIS_PASSWORD` from `default`'s `passwordKey`.
+  without it. The `redis_exporter` sidecar logs in as `default`, with
+  `REDIS_PASSWORD` from `default`'s `passwordKey` (default key name:
+  `default`).
 - **Passthrough knobs:**
   - labels and annotations: `commonLabels`, `podLabels`, `podAnnotations`,
     `workloadAnnotations`, `service.annotations`,
     `serviceAccount.annotations`;
   - scheduling: `nodeSelector`, `tolerations`, `affinity`,
     `topologySpreadConstraints`, `priorityClassName`, `runtimeClassName`;
-  - `resources`, `podDisruptionBudget`, `networkPolicy`;
+  - `resources`, `podDisruptionBudget`;
+  - `networkPolicy`: a verbatim `ingress`/`egress` spec for one policy
+    named `<fullname>`;
   - metrics: `metrics.serviceMonitor`, `metrics.podMonitor` and
     `metrics.prometheusRule`;
   - topology: `replica.*` for a primary and replicas, `dataStorage.*` for
     a PVC.
-- **No HPA, and the PDB only in replica mode.** Standalone is a
+- **No HPA, and a PDB only in replica mode.** Standalone is a
   one-replica Deployment. Replica mode is a StatefulSet with one primary,
   where pod 0 takes writes, and read-only replicas. There is no automatic
   failover.
 - **Security defaults** fit the restricted Pod Security profile:
-  - uid/gid 1000, `runAsNonRoot`;
-  - read-only root, `drop: [ALL]`, `seccompProfile: RuntimeDefault`;
+  - uid/gid 1000 and `runAsNonRoot`;
+  - read-only root, `drop: [ALL]` and `seccompProfile: RuntimeDefault`;
   - `automountServiceAccountToken: false`.
 - **Image:** `image.tag` is printed as `<registry>/<repository>:<tag>`, so
   a `9.1.2-alpine@sha256:…` tag pins by digest.
-- **The values schema allows extra keys,** so the parent can keep its own
-  keys (`keyPrefix`) under `valkey:`.
 
 ## Detailed Design
 
@@ -166,8 +180,9 @@ The homelab deploys `valkey-io/valkey-helm` 0.9.4: standalone, ACL auth,
 ```mermaid
 flowchart LR
     subgraph rel[release namespace]
-        W[boopd worker<br/>2 replicas]
-        S[(Secret<br/>release-valkey-auth)]
+        W[boopd worker<br/>2 replicas, PDB]
+        S[(operator Secret<br/>keys renovate, default)]
+        NP[NetworkPolicy<br/>chart default + extraIngress]
         subgraph vk[valkey subchart]
             I[init: hash keys<br/>into users.acl] --> P[valkey pod<br/>Deployment, 1 replica]
             E[redis_exporter<br/>sidecar, user default]
@@ -177,17 +192,17 @@ flowchart LR
     subgraph runs[runs namespace]
         J[Renovate Job pod<br/>RENOVATE_REDIS_URL]
     end
-    S -- renovate key --> W
-    S -- renovate + default keys --> I
-    S -- default key --> E
+    S -- renovate --> W
+    S -- renovate + default --> I
+    S -- default --> E
     W -- creates Job with URL --> J
     J -- 6379, user renovate,<br/>keys renovate:* --> P
+    NP -. allows .-> P
     SM -. scrapes 9121 .-> E
 ```
 
-The worker never connects to Valkey. It reads the password at start,
-builds the URL and passes it to each Job as `RENOVATE_REDIS_URL`, as it
-does today.
+The worker never connects to Valkey. As today, it reads the password at
+start, builds the URL and passes it to each Job as `RENOVATE_REDIS_URL`.
 
 ### The dependency
 
@@ -201,75 +216,91 @@ dependencies:
     condition: valkey.enabled
 ```
 
-`Chart.lock` is committed. Every place that renders or packages the chart
-runs `helm dependency build charts/boopd` first (OQ2 a):
+**`Chart.lock` is committed. `charts/boopd/charts/*.tgz` is ignored by
+git, and every place that renders or packages the chart runs `helm
+dependency build charts/boopd` first.** This is Helm's documented layout,
+and most published charts that have dependencies use it, Bitnami's
+included. The places that run it:
 
-- `helm.just` (`helm-lint`, `helm-unittest`, `helm-config-validate`,
-  `helm-template-stable`, `helm-package`);
+- `helm.just`: `helm-lint`, `helm-unittest`, `helm-config-validate`,
+  `helm-template-stable` and `helm-package`;
 - `ci.yml`'s Lint and Helm Unit Tests jobs (`ct` builds dependencies
   itself);
 - `release.yml`'s package step;
 - `just e2e` and `just k3d-install`.
 
-`charts/boopd/charts/*.tgz` is ignored by git. Renovate (the bot) bumps
-the dependency and `Chart.lock` through its `helmv3` manager.
-`charts/boopd/charts/redis/` is deleted.
+Renovate (the bot) bumps the version and `Chart.lock` through its `helmv3`
+manager. `charts/boopd/charts/redis/` is deleted.
+
+It works with every way the homelab consumes a chart:
+
+| Consumer | How it gets the subchart |
+| - | - |
+| Argo CD, Kargo or kustomize `helmCharts` on the published OCI chart (the homelab's path) | `helm package` puts `charts/valkey-0.12.0.tgz` inside the boopd package. The consumer pulls one artefact and never contacts the valkey-io repository |
+| Argo CD on the git path (`charts/boopd`) | Argo's repo-server runs `helm dependency build` when `Chart.yaml` lists dependencies, using `Chart.lock`. The repository is public, so no credentials are needed |
+| Kargo promotion | promotes the boopd chart version; the subchart is pinned inside it |
+
+A vendored `.tgz` would only help consumers that render the git path
+with no network access, and boopd has none.
 
 ### The password Secret
 
 ```mermaid
 flowchart TD
-    A[helm upgrade / helm template] --> B{valkey.enabled?}
-    B -- no --> X[No Secret, no valkey.<br/>boopd.renovate.redisSecretRef for an external cache]
-    B -- yes --> C{valkey.auth.usersExistingSecret<br/>is the chart default?}
-    C -- no, user named a Secret --> U[Render nothing.<br/>Subchart and boopd read the user's Secret]
-    C -- yes --> L{lookup finds<br/>release-valkey-auth?}
-    L -- yes --> K[Re-render the same passwords<br/>from the live Secret]
-    L -- no --> G[Generate passwords once:<br/>randAlphaNum 40 per key]
-    K --> S[Secret release-valkey-auth<br/>helm.sh/resource-policy: keep]
-    G --> S
-    S --> V[valkey init script hashes<br/>each key into users.acl]
-    S --> W[boopd worker mounts the renovate key,<br/>builds redis_url with the password]
+    A[helm install / upgrade / template] --> B{valkey.enabled?}
+    B -- no --> X[No valkey.<br/>boopd.renovate.redisSecretRef for an external cache]
+    B -- yes --> C{valkey.auth.usersExistingSecret<br/>set?}
+    C -- no --> F[fail: the render stops.<br/>The message shows the kubectl command<br/>that creates the Secret]
+    C -- yes --> D[(Operator's Secret<br/>keys: renovate, default)]
+    D -- renovate + default --> V[valkey init script hashes<br/>both keys into users.acl]
+    D -- default --> E[redis_exporter<br/>REDIS_PASSWORD]
+    D -- renovate --> W[boopd worker mounts the key,<br/>builds RENOVATE_REDIS_URL]
 ```
 
-One value names the Secret, and the subchart reads it directly:
+The chart renders no password Secret. `valkey.auth.usersExistingSecret`
+defaults to `""`, and while Valkey is enabled the guard
+`boopd.validateValkey` fails the render when it is empty:
 
-```yaml
-valkey:
-  auth:
-    usersExistingSecret: '{{ .Release.Name }}-valkey-auth'
+```text
+valkey.auth.usersExistingSecret is required when valkey.enabled is true.
+boopd does not generate the Valkey passwords. Create a Secret with the
+keys "renovate" and "default", then set valkey.auth.usersExistingSecret
+to its name:
+
+  kubectl -n <namespace> create secret generic <release>-valkey-auth \
+    --from-literal=renovate="$(openssl rand -hex 32)" \
+    --from-literal=default="$(openssl rand -hex 32)"
+
+  --set valkey.auth.usersExistingSecret=<release>-valkey-auth
+
+In GitOps, manage the Secret with your secrets tool (1Password, External
+Secrets, SOPS) next to the release. To use an external cache instead, set
+valkey.enabled=false and boopd.renovate.redisSecretRef.
 ```
 
-The parent template `templates/valkey-auth-secret.yaml` renders the
-Secret **only** when that value, after `tpl`, equals
-`<release>-valkey-auth`, the chart's own name. An operator who sets any
-other name owns the Secret, and the chart renders nothing.
+The same requirement is stated in four more places, so it is hard to
+miss:
 
-When the chart owns it:
+- the `# --` comment on the value, so it appears in the helm-docs table;
+- the README's install section (it becomes step 1);
+- the "GitOps installs" section;
+- `docs/config.md`.
 
-- **Stable password.** `lookup` reads the live Secret and re-renders its
-  `password` byte for byte. Only when there is none (first install) is
-  `randAlphaNum 40` called. Upgrades, chart bumps and `helm upgrade
-  --reuse-values` all keep it.
-- **Kept on uninstall.** `helm.sh/resource-policy: keep` keeps the Secret
-  through an uninstall. A reinstall then finds it and keeps the password,
-  so a reinstalled worker and Valkey agree without a restart order.
-- **Restart when the password changes.** Valkey reads its ACL file only
-  at start, and the subchart has no checksum of the Secret on its pod.
-  The parent cannot add one, because subchart values are not templated.
-  The password changes only on first install (nothing to restart) or when
-  someone deletes the Secret. For that case the README says to restart
-  Valkey and the worker. On upgrades the password does not change, so
-  nothing needs to roll; the worker already rolls on `checksum/config`.
-- **GitOps renders.** Argo CD and kustomize render with `helm template`,
-  where `lookup` is empty. A chart-owned Secret would then rotate on
-  every sync, and the worker and Valkey would disagree after their next
-  restarts. GitOps installs must set `usersExistingSecret`. The chart
-  makes this hard to miss (OQ3 a):
-  - the README's "GitOps installs" section;
-  - `NOTES.txt` warns when the Secret is chart-owned;
-  - `helm-template-stable` renders with an existing Secret, as it does
-    today.
+Because no Secret is chart-generated:
+
+- **There is no `lookup`,** so `helm install`, `helm upgrade` and
+  `helm template` (Argo CD, kustomize) behave the same. A bump never
+  touches the password.
+- **Rotation is the operator's job.** Update the Secret, then restart
+  Valkey and the worker (`kubectl rollout restart`). Valkey reads its ACL
+  file only at start, and the worker reads the password only at start.
+  The README documents this order.
+- **A missing key fails loudly.** The Valkey pod stays in `Init`, and the
+  worker pod reports `CreateContainerConfigError` naming the key. The chart
+  can't check keys at render time, because `lookup` is empty under
+  `helm template`.
+- **`auth.enabled: false` is rejected** by the same guard. An open cache
+  would be reachable by anything the NetworkPolicy lets in.
 
 ### ACL users
 
@@ -279,42 +310,63 @@ Two users, set in the parent's `values.yaml` and passed through:
 valkey:
   auth:
     enabled: true
-    usersExistingSecret: '{{ .Release.Name }}-valkey-auth'
+    # -- Required. Secret with keys `renovate` and `default`.
+    usersExistingSecret: ""
     aclUsers:
       renovate:
-        passwordKey: password
-        permissions: "resetkeys ~renovate:* resetchannels -@all +@read +@write +@connection -@dangerous +client|setinfo"
+        permissions: >-
+          resetkeys ~renovate:* resetchannels -@all
+          +@read +@write +@connection -@dangerous +client|setinfo
       default:
-        passwordKey: password
-        permissions: "resetkeys resetchannels -@all +@connection +ping +info +config|get +client|list +slowlog|get +slowlog|len +latency|latest +dbsize"
+        permissions: >-
+          resetkeys resetchannels -@all
+          +ping +info +config|get +client|setname +client|setinfo
+          +client|list +slowlog|get +slowlog|len
+          +latency|latest +latency|histogram +dbsize
 ```
 
-- **`renovate`** has exactly today's rules, moved from the redis
-  subchart's `redis.aclRules` helper.
-- **`default`** is required by the chart. It gets the read-only command
-  set `redis_exporter` needs and no keys (OQ5 a). Valkey applies ACL
-  rules left to right, and the chart writes `on #<hash>` before them.
-- **Both users read one key, `password`** (OQ4 a). An existing Secret
-  needs one key, as with IMPL-0002's `redis.auth.existingSecret`. Pointing
-  `default.passwordKey` at another key splits them.
-- **Key prefix guard.** The prefix appears in two places: the `renovate`
-  user's `~<prefix>*` and Renovate's `redisPrefix`. A parent guard fails
-  the render unless `aclUsers.renovate.permissions` contains
-  `~<valkey.keyPrefix>*`. `boopd.renovateGlobal` keeps defaulting
-  `redisPrefix` from `valkey.keyPrefix`.
+**`renovate`** has today's rules exactly, moved from the redis subchart's
+`redis.aclRules` helper. Its `passwordKey` is unset, so it reads the key
+`renovate`.
+
+**`default`** is the exporter's identity, and gets a read-only command set
+with no key pattern. Its `passwordKey` is unset, so it reads the key
+`default`.
+
+- `redis_exporter` gets every metric from `INFO`, `CONFIG GET`, `SLOWLOG`,
+  `LATENCY`, `CLIENT` and `DBSIZE`. Keyspace sizes come from
+  `INFO keyspace`. So metrics are complete.
+- Valkey's `+@read` category is not used, because it grants reads of
+  key data, and monitoring needs none.
+- `default` has no `~pattern`, so `GET`, `KEYS` and `SCAN` against cache
+  data all fail with `NOPERM`.
+- The exporter's `--check-keys` options would need key reads. They stay
+  off.
+- The e2e test pins the set:
+  - the exporter reports `redis_up 1`;
+  - its log shows no `NOPERM`;
+  - `default` can't read a `renovate:` key.
+
+  If a later exporter version needs another command, the test fails and
+  the command is added.
+
+The prefix appears in two places: the `renovate` user's `~<prefix>*` and
+Renovate's `redisPrefix`. The guard fails the render unless
+`aclUsers.renovate.permissions` contains `~<valkey.keyPrefix>*`.
+`boopd.renovateGlobal` keeps defaulting `redisPrefix` from
+`valkey.keyPrefix`.
 
 ### boopd's config
 
-The parent always uses IMPL-0002's password-only form, so the rendered
-`boopd.hcl` is the same whether the Secret is chart-owned or not:
+The parent uses IMPL-0002's password-only form:
 
 ```hcl
 renovate {
-  redis_url = "redis://renovate@<release>-valkey.<namespace>.svc:6379"
+  redis_url = "redis://renovate@<valkey fullname>.<namespace>.svc:6379"
 
   redis_password_secret_ref {
-    name = "<usersExistingSecret, after tpl>"
-    key  = "<aclUsers.renovate.passwordKey>"
+    name = "<valkey.auth.usersExistingSecret>"
+    key  = "<aclUsers.renovate.passwordKey, else renovate>"
   }
 }
 ```
@@ -322,10 +374,11 @@ renovate {
 The worker mounts that key at `<secretsDir>/<name>/<key>` through
 `boopd.configSecrets`, as today. An explicit `boopd.renovate.redisSecretRef`
 still wins, and with it the chart renders neither `redis_url` nor the
-password ref. The Service name is `valkey.fullname`, which is
-`<release>-valkey` unless the operator overrides `valkey.fullnameOverride`.
-The parent computes the same name with the same rule, so overrides carry
-through.
+password ref.
+
+The Valkey fullname is `<release>-valkey` unless `valkey.fullnameOverride`
+or `valkey.nameOverride` is set. The parent computes it with the same rule,
+so overrides carry through.
 
 ### Valkey configuration
 
@@ -349,49 +402,96 @@ valkey:
 
 `deploymentStrategy` stays `RollingUpdate`. With an `emptyDir` there is no
 volume to deadlock on, and a rollout briefly runs two pods, each an empty
-cache. `maxmemory` moves from `redis.maxmemory` into this block.
+cache.
 
-### The passthrough section
+### The Valkey passthrough
 
 Everything under `valkey:` reaches the subchart unchanged. The parent's
 `values.yaml` lists the commonly used knobs with their defaults and a
-`# --` comment each, so helm-docs documents them. Anything else in the
-subchart's values works too:
+`# --` comment each, so helm-docs documents them. Any other subchart value
+works too:
 
 | Area | Keys (under `valkey:`) | boopd default |
 | - | - | - |
 | Labels and annotations | `commonLabels`, `podLabels`, `podAnnotations`, `workloadAnnotations`, `service.annotations`, `serviceAccount.annotations` | `{}` |
-| Disruption | `podDisruptionBudget.{enabled,minAvailable,maxUnavailable,unhealthyPodEvictionPolicy}` | off. Renders only with `replica.enabled`; the chart README says so |
-| Scaling | `replica.{enabled,replicas,…}` | off. Replicas are read-only; Renovate uses the primary only |
-| Metrics | `metrics.enabled`, `metrics.exporter.resources`, `metrics.serviceMonitor.*`, `metrics.podMonitor.*`, `metrics.prometheusRule.*` | off (OQ8 a) |
+| Disruption | `podDisruptionBudget.{enabled,minAvailable,maxUnavailable,unhealthyPodEvictionPolicy}` | off. Renders only with `replica.enabled`; the README says so |
+| Scaling | `replica.{enabled,replicas,…}` | off. Replicas are read-only; Renovate uses the primary only. Untested for boopd |
+| Metrics | `metrics.enabled`, `metrics.exporter.resources`, `metrics.serviceMonitor.*`, `metrics.podMonitor.*`, `metrics.prometheusRule.*` | off; independent of boopd's own `serviceMonitor` |
 | Scheduling | `nodeSelector`, `tolerations`, `affinity`, `topologySpreadConstraints`, `priorityClassName`, `runtimeClassName` | `{}` / `[]` / `""` |
-| Resources and probes | `resources`, `initResources`, `startupProbe`, `livenessProbe`, `readinessProbe` | as above; readiness on |
-| Network | `networkPolicy` | `{}` (OQ9 a: the parent renders its own) |
+| Resources and probes | `resources`, `initResources`, `startupProbe`, `livenessProbe`, `readinessProbe` | as above; the chart's probes |
+| Network | `networkPolicy` | `{}`. See [the Valkey NetworkPolicy](#the-valkey-networkpolicy) |
 | Images | `image.*`, `global.imageRegistry`, `global.imagePullSecrets`, `metrics.exporter.image.*` | pinned Valkey image; the chart's exporter image |
 | Storage | `dataStorage.*` | off |
 | Names | `nameOverride`, `fullnameOverride` | `""` |
 
-There is no HPA: Valkey has none, and a cache with one writer does not
-scale out. "Scaling" means replica mode. It is passed through and
-documented as untested for boopd.
+The parent's `values.schema.json` declares `valkey` as an open object. It
+types the keys the parent reads (`enabled`, `keyPrefix`,
+`auth.usersExistingSecret`, `auth.aclUsers`) and leaves the rest to the
+subchart's schema.
 
-The parent's `values.schema.json` declares `valkey` as an open object with
-the parent-owned keys typed (`enabled`, `keyPrefix`), and leaves the rest
-to the subchart's schema. A typo inside `valkey:` is therefore not caught
-by the parent. The subchart schema's types still apply.
+### The Valkey NetworkPolicy
+
+Like the password Secret, the NetworkPolicy has a chart default, a way to
+extend it, and a way to bring your own. NetworkPolicies are additive (a
+pod admits the union of every policy that selects it), so the three
+compose without conflict:
+
+| Layer | Values | What renders |
+| - | - | - |
+| Chart default | `networkPolicies.enabled` and `networkPolicies.valkey.enabled` (default `true`) | `<release>-boopd-valkey`, selecting the Valkey pods: deny all ingress except 6379 from Renovate Job pods (`app.kubernetes.io/managed-by: boopd` and `app.kubernetes.io/component: renovate-run`, with a `namespaceSelector` when runs use another namespace) and 9121 from anywhere for scraping |
+| Extend | `networkPolicies.valkey.extraIngress: []` | NetworkPolicyIngressRule entries appended to the default, e.g. a Prometheus namespace selector to narrow 9121, or a debug pod |
+| Bring your own | `networkPolicies.valkey.enabled: false`, plus `valkey.networkPolicy` (passthrough) or `extraObjects` | the default is not rendered; the subchart renders its own `<release>-valkey` policy from the given spec |
+
+The default's metrics rule is controlled by
+`networkPolicies.valkey.metricsFrom`, a list of NetworkPolicyPeers. It
+defaults to `[]`, meaning from anywhere, as the homelab scrapes. Setting
+it narrows 9121 to those peers. The parent's policy and the subchart's are
+named differently, so both can exist; the chart README explains the union
+rule. Job egress (`templates/networkpolicy.yaml`) switches its Valkey
+selector to `app.kubernetes.io/name: valkey`.
+
+### The worker's passthrough
+
+The worker already has `podLabels`, `podAnnotations`,
+`serviceAccount.annotations`, `nodeSelector`, `tolerations`, `affinity`,
+`serviceMonitor` and `prometheusRule`. This design adds:
+
+| Value | Default | Applies to |
+| - | - | - |
+| `commonLabels` | `{}` | every resource the parent renders (not the subchart; see OQ11) |
+| `commonAnnotations` | `{}` | every resource the parent renders |
+| `podDisruptionBudget.enabled` | `true` (OQ10) | a PDB selecting the worker pods |
+| `podDisruptionBudget.maxUnavailable` | `1` | |
+| `podDisruptionBudget.minAvailable` | unset | mutually exclusive with `maxUnavailable`; the guard fails if both are set |
+| `podDisruptionBudget.unhealthyPodEvictionPolicy` | `AlwaysAllow` | lets a drain evict a crash-looping worker |
+| `topologySpreadConstraints` | `[]` | worker pod spec; `labelSelector` defaults to the worker's selector labels when omitted |
+| `priorityClassName` | `""` | worker pod spec |
+| `service.annotations` | `{}` | the worker Service |
+
+A PDB with `maxUnavailable: 1` holds back a node drain only while the
+other replica is down. A drain waits on the evicted pod's grace period
+(above StartToClose, so up to an hour) either way. The PDB stops two
+workers being evicted at once, which would stall every run's heartbeat
+together.
+
+`boopd.labels` gains `commonLabels`, and every template's metadata gains
+`commonAnnotations`. Selector labels are unchanged, so adding labels never
+recreates a Deployment.
 
 ### What else in the parent chart changes
 
 | File | Change |
 | - | - |
-| `templates/_config.tpl` | `boopd.redisSecretRef` returns `{}` when `valkey.enabled`; `boopd.redisPasswordRef` reads `usersExistingSecret` (after `tpl`) and `aclUsers.renovate.passwordKey`; the URL host is the Valkey fullname |
-| `templates/_helpers.tpl` | `boopd.validateRedisAuth` goes; new `boopd.validateValkey` (prefix guard); `boopd.configSecrets` unchanged in shape |
-| `templates/valkey-auth-secret.yaml` | new: the chart-owned Secret (lookup, keep) |
-| `templates/networkpolicy.yaml` | Job egress selector `app.kubernetes.io/name: valkey` |
-| `templates/valkey-networkpolicy.yaml` | new: ingress to Valkey from run Job pods on 6379 (and the exporter port from anywhere) when `networkPolicies.enabled` (OQ9 a) |
-| `templates/resourcequota.yaml` | count Valkey pods when it shares the runs namespace: 1, or `replica.replicas + 1` in replica mode |
-| `templates/NOTES.txt` | the GitOps warning when the Secret is chart-owned |
-| `README.md.gotmpl` | "GitOps installs" rewritten for `valkey.auth.usersExistingSecret`; the passthrough table |
+| `templates/_config.tpl` | `boopd.redisSecretRef` is gone; `boopd.redisPasswordRef` reads `usersExistingSecret` and `renovate`'s `passwordKey`; the URL host is the Valkey fullname |
+| `templates/_helpers.tpl` | `boopd.validateRedisAuth` is replaced by `boopd.validateValkey` (Secret required, auth on, prefix guard); `boopd.labels` adds `commonLabels`; the PDB guard |
+| `templates/valkey-networkpolicy.yaml` | new: the default Valkey ingress policy |
+| `templates/pdb.yaml` | new: the worker PDB |
+| `templates/deployment.yaml` | `topologySpreadConstraints`, `priorityClassName` |
+| `templates/service.yaml` | `service.annotations` |
+| `templates/networkpolicy.yaml` | the Job egress selector becomes `app.kubernetes.io/name: valkey` |
+| `templates/resourcequota.yaml` | counts Valkey pods when Valkey shares the runs namespace: 1, or `replica.replicas + 1` in replica mode |
+| `ci/ci-values.yaml` | `ct install` gets a Secret through `extraObjects`, with fixed test passwords, and `usersExistingSecret` set to its name |
+| `README.md.gotmpl` | the install section starts with the Secret; "GitOps installs" and the passthrough tables |
 
 ## API / Interface Changes
 
@@ -400,31 +500,35 @@ by the parent. The subchart schema's types still apply.
 | New | Default | Purpose |
 | - | - | - |
 | `valkey.enabled` | `true` | run the subchart (was `redis.enabled`) |
-| `valkey.keyPrefix` | `"renovate:"` | parent-owned: `redisPrefix` and the ACL guard |
-| `valkey.auth.usersExistingSecret` | `'{{ .Release.Name }}-valkey-auth'` | the password Secret; another name means the operator owns it |
-| `valkey.auth.aclUsers.{renovate,default}` | as above | users, permissions, `passwordKey` |
+| `valkey.keyPrefix` | `"renovate:"` | owned by the parent: `redisPrefix` and the ACL guard |
+| `valkey.auth.usersExistingSecret` | `""`, required | the operator's Secret with keys `renovate` and `default` |
+| `valkey.auth.aclUsers.{renovate,default}` | as above | users and permissions; `passwordKey` renames a key |
 | `valkey.valkeyConfig` | the cache config above | maxmemory and eviction |
 | `valkey.*` | subchart defaults | the passthrough |
+| `networkPolicies.valkey.{enabled,extraIngress,metricsFrom}` | `true`, `[]`, `[]` | the default Valkey policy |
+| `commonLabels`, `commonAnnotations` | `{}` | worker resources |
+| `podDisruptionBudget.*` | on, `maxUnavailable: 1` | the worker PDB |
+| `topologySpreadConstraints`, `priorityClassName`, `service.annotations` | empty | the worker pod and Service |
 
 ### Removed values
 
-These fail the render through `boopd.validateRemovedValues` with the new
-key (OQ6 a):
+Every `redis.*` key goes. What happens to an install that still sets one
+is OQ6, which is still open. The mapping:
 
-| Removed | Use instead |
+| Removed | Replacement |
 | - | - |
 | `redis.enabled` | `valkey.enabled` |
 | `redis.maxmemory` | `maxmemory` in `valkey.valkeyConfig` |
 | `redis.keyPrefix` | `valkey.keyPrefix` |
 | `redis.resources` | `valkey.resources` |
-| `redis.auth.existingSecret` | `valkey.auth.usersExistingSecret` |
-| `redis.auth.existingSecretKey` | `valkey.auth.aclUsers.renovate.passwordKey` (and `default`'s) |
+| `redis.auth.existingSecret` | `valkey.auth.usersExistingSecret`; the Secret now needs keys `renovate` and `default` |
+| `redis.auth.existingSecretKey` | `valkey.auth.aclUsers.renovate.passwordKey` |
 | `redis.image` | `valkey.image` |
 
 ### Go and boopd.hcl
 
 None. `redis_url` and `redis_password_secret_ref` (IMPL-0002) are the
-interface. The words "Redis" stay in `boopd.hcl` because Renovate's option
+interface. The word "redis" stays in `boopd.hcl` because Renovate's option
 is `redisUrl` and Valkey speaks the protocol. `docs/config.md` notes that
 the bundled cache is Valkey.
 
@@ -433,52 +537,69 @@ the bundled cache is Valkey.
 The cache's data is disposable. It holds Renovate's datasource lookups
 under `renovate:`, has no persistence, and the switch starts it empty.
 
-The one stored artefact is the Secret `<release>-valkey-auth`:
+The one stored artefact is the operator's Secret:
 
 | Key | Value | Readers |
 | - | - | - |
-| `password` | 40 alphanumeric characters, generated once | Valkey's init script (both users' hashes), the exporter (`REDIS_PASSWORD`), the boopd worker (mounted file) |
+| `renovate` | any string; boopd escapes it into the URL | Valkey's init script (the `renovate` hash), the boopd worker (mounted file), and through the URL each Job |
+| `default` | any string | Valkey's init script (the `default` hash) and the exporter (`REDIS_PASSWORD`) |
 
-An operator's Secret needs the same key, or whatever the `passwordKey`
-values name, and any characters are allowed. boopd escapes the password
-into the URL, and Valkey only sees its hash.
+Setting `passwordKey` on a user renames that user's key. Two users can
+point at one key, but the chart's default is separate keys.
 
 ## Testing Strategy
 
 E2E first (IMPL-0001 OQ3), then unit tests for the render branches.
 
-- **E2E (k3d):**
-  - `TestChart_WorkerRunsUnderChartRBAC` keeps passing on the chart's own
-    Secret. It now also proves the generated-password path: a run gets
-    its URL and authenticates.
-  - `TestChart_RedisExistingSecret` becomes `TestChart_ValkeyExistingSecret`.
-    It covers a password-only Secret with URL-hostile characters, `AUTH
-    renovate` works, and a run's `RENOVATE_REDIS_URL` authenticates. The
-    `default` user can `INFO` but not `GET renovate:x`. Its CLI pods run
-    `valkey-cli` from the parent's pinned `valkey.image`.
-  - **New:** `TestChart_ValkeyPasswordSurvivesUpgrade`. Install, read the
-    Secret, run `helm upgrade` with a changed value (`valkey.podLabels`),
-    and assert the Secret's `password` is unchanged and a run still
-    authenticates.
-  - **New, when metrics are on:** the exporter reports `redis_up 1` (read
-    through the API server's service proxy), as the homelab checks.
+- **E2E (k3d).** The suite creates the Secret before every chart install,
+  as an operator would.
+  - `TestChart_WorkerRunsUnderChartRBAC` keeps passing, now against
+    Valkey.
+  - `TestChart_RedisExistingSecret` becomes `TestChart_ValkeyAuth`, and
+    covers both users:
+    - a `renovate` password with URL-hostile characters;
+    - `AUTH renovate` works, and a run's `RENOVATE_REDIS_URL`
+      authenticates;
+    - `default` can `INFO` but gets `NOPERM` on `GET renovate:x`.
+
+    Its CLI pods run `valkey-cli` from the parent's pinned `valkey.image`.
+  - **New:** `TestChart_ValkeyMetrics`, with `valkey.metrics.enabled`:
+    - the exporter reports `redis_up 1`, read through the API server's
+      service proxy;
+    - its log has no `NOPERM`.
+  - **New:** `TestChart_ValkeyNetworkPolicy`, when the cluster enforces
+    NetworkPolicy (k3d's default kube-router does):
+    - a Job-labelled pod in the runs namespace reaches 6379;
+    - an unlabelled pod does not;
+    - an `extraIngress` peer does.
 - **helm-unittest:**
-  - the Secret renders only for the default name;
-  - `keep` is set;
-  - `boopd.hcl` has `redis_url` and `redis_password_secret_ref` for both
-    owned and user Secrets;
-  - an explicit `redisSecretRef` wins;
-  - each removed `redis.*` key fails with its replacement;
-  - the prefix guard fails;
-  - the quota counts 1 or `replicas + 1` Valkey pods;
-  - the Valkey NetworkPolicy renders with `networkPolicies.enabled`;
-  - the passthrough reaches the subchart (`valkey.podLabels` on the
-    Valkey pod, a PDB in replica mode, a ServiceMonitor with
-    `metrics.serviceMonitor.enabled`).
-- **`helm-template-stable`** keeps rendering with an existing Secret and
-  diffing two renders.
+  - **Render guards:**
+    - an empty `usersExistingSecret` fails with the message above;
+    - `auth.enabled: false` fails;
+    - the prefix guard fails;
+    - both `minAvailable` and `maxUnavailable` fail.
+  - **boopd.hcl:**
+    - it has `redis_url` and `redis_password_secret_ref`, and the key
+      follows `passwordKey`;
+    - an explicit `redisSecretRef` wins.
+  - **The Valkey NetworkPolicy:**
+    - the default renders, `extraIngress` is appended, and `metricsFrom`
+      narrows 9121;
+    - `networkPolicies.valkey.enabled: false` drops it.
+  - **The worker:**
+    - the PDB renders, and is absent when disabled;
+    - `commonLabels` and `commonAnnotations` are on every parent resource,
+      and selector labels are unchanged;
+    - topology spread defaults to the worker's selector.
+  - **Quota:** counts 1, or `replicas + 1`, Valkey pods.
+  - **Passthrough:** `valkey.podLabels` is on the Valkey pod, and
+    `metrics.serviceMonitor.enabled` renders a ServiceMonitor.
+  - **OQ6:** whichever way it is settled.
+- **`helm-template-stable`** keeps diffing two renders, now with
+  `usersExistingSecret` set.
 - **`helm-config-validate`** keeps validating the rendered `boopd.hcl` for
   the CI, example and existing-Secret values.
+- **`ct install`** runs with `ci-values.yaml`'s `extraObjects` Secret.
 
 ## Migration / Rollout Plan
 
@@ -487,163 +608,114 @@ One PR, `minor` label (pre-1.0, breaking values):
 1. Add the dependency and `Chart.lock`, add `helm dependency build` to
    every recipe and workflow, and gitignore `charts/*.tgz`.
 2. Parent templates, values, schema and guards; delete `charts/redis/`.
-3. Tests: unit, e2e, stable render.
-4. Docs: chart README, `docs/config.md`, CLAUDE.md layout line,
-   DESIGN-0001's cache mentions as an amendment note.
+3. The worker passthrough (PDB, labels, spread, priority, Service
+   annotations).
+4. Tests: unit, e2e, stable render, `ct` values.
+5. Docs: the chart README, `docs/config.md`, CLAUDE.md's layout and chart
+   lines, and an amendment note in DESIGN-0001's cache mentions.
 
+There are no production installs yet (IMPL-0001 7.10, the homelab deploy,
+is still pending), so the upgrade path matters mostly for dev clusters.
 On `helm upgrade` from v0.3.x:
 
 | Step | What happens |
 | - | - |
-| Values | An install that set any `redis.*` value fails the render with the new key; the operator renames and retries (OQ6 a) |
-| Resources | Helm prunes `<release>-redis`, its Service and `<release>-redis-auth`; it creates the Valkey Deployment, Service and ConfigMaps, and `<release>-valkey-auth` |
-| Worker | Rolls on `checksum/config` (new `redis_url`), reads the new password at start |
-| Runs | A run in flight keeps its old URL and loses the cache when redis goes; Renovate logs the Redis error and carries on uncached (to be checked in e2e during implementation) |
+| Values | With no `usersExistingSecret`, the render fails with the create-a-Secret message. Old `redis.*` values are handled as OQ6 decides |
+| Resources | Helm prunes `<release>-redis`, its Service and `<release>-redis-auth`. It creates the Valkey Deployment, Service, ConfigMaps and the policies |
+| Worker | Rolls on `checksum/config` (new `redis_url`) and reads the new password at start |
+| Runs | A run in flight keeps its old URL and loses the cache when redis goes. Renovate logs the Redis error and carries on uncached; implementation checks this in e2e |
 | Cache | Starts empty; the next run per repository is a cold lookup |
 
-GitOps installs that used `redis.auth.existingSecret` point
-`valkey.auth.usersExistingSecret` at the same Secret. If its key is not
-`password`, they also set `passwordKey` for both users.
+An install that used `redis.auth.existingSecret` adds a `default` key to
+that Secret and renames (or `passwordKey`-maps) the old key.
 
-Rollback is `helm rollback`. The Valkey Secret stays (`keep`). The old
-`<release>-redis-auth` was pruned, so the restored redis subchart's
-`lookup` finds nothing and generates a new password. The worker rolls on
-the changed config and reads that same new Secret at start, so the two
-agree.
+Rollback is `helm rollback`. The old redis subchart regenerates its own
+password through `lookup`. The worker rolls on the changed config and
+reads the same Secret, so the two agree.
 
 ## Open Questions
 
-### OQ1: Which Valkey chart?
-
-- **a (recommended): the official `valkey-io/valkey-helm` chart, 0.12.0.**
-  The homelab runs it. It has ACL users with `usersExistingSecret` (tpl'd),
-  hashes passwords itself, has metrics, ServiceMonitor, PodMonitor and
-  PrometheusRule, and its defaults fit Pod Security restricted.
-- **b: Bitnami's `valkey` chart.** More knobs, including Sentinel. But
-  Bitnami's images and charts moved behind a paid catalogue in 2025, and
-  the homelab archived its Bitnami users.
-- **c: keep the local subchart and swap the image to Valkey.** The smallest
-  diff, but none of the passthrough knobs, and the chart differs from
-  every other homelab Valkey.
-- **other:**
-
-### OQ2: Is the subchart vendored?
-
-- **a (recommended): commit `Chart.lock`, not the `.tgz`; run `helm
-  dependency build` in every recipe and workflow.** Diffs stay readable,
-  and Renovate updates the lock. It costs a network fetch in CI and at
-  release, from GitHub Pages.
-- **b: commit `charts/valkey-0.12.0.tgz` too, with Renovate's
-  `helmUpdateSubChartArchives`.** Offline and reproducible renders, but a
-  binary blob in every bump PR.
-- **other:**
-
-### OQ3: What does a GitOps install get without an existing Secret?
-
-`lookup` is empty under `helm template`, so a chart-owned password would
-rotate on every Argo CD sync.
-
-- **a (recommended): chart-owned Secret via `lookup` and `keep` for
-  `helm install` and `upgrade`. GitOps must set `usersExistingSecret`,
-  stated in the README, in `NOTES.txt` and in the values comment.** The
-  default install still works with one command. This is IMPL-0002's
-  stance.
-- **b: no generated password without opt-in.** Fail the render unless
-  `usersExistingSecret` names a user Secret or
-  `valkey.auth.generatePassword: true`. GitOps cannot get it wrong, but
-  every install needs one more value.
-- **c: a `pre-install` hook Job that creates the Secret only if absent.**
-  This works under Argo CD too, but needs a kubectl image, RBAC for the
-  hook, and Argo maps `pre-install` to PreSync, so it runs on every sync.
-- **other:**
-
-### OQ4: How many keys does the password Secret hold?
-
-- **a (recommended): one key, `password`, read by both `renovate` and
-  `default`.** One value to manage, as IMPL-0002's existing Secret. The
-  `default` user can only run monitoring commands, so sharing its password
-  gives nothing away. Splitting is a values change (`passwordKey`).
-- **b: two keys, `renovate` and `default`.** Separate credentials for the
-  cache and the exporter, at the cost of two keys in every GitOps Secret.
-- **other:**
-
-### OQ5: What can the default user do?
-
-The chart requires a `default` user, and its exporter logs in as it.
-
-- **a (recommended): the exporter's read-only commands and no keys.** That
-  is `-@all +@connection +ping +info +config|get +client|list +slowlog|get
-  +slowlog|len +latency|latest +dbsize`. Metrics work and the user cannot
-  read the cache. The exact set is confirmed in e2e (`redis_up 1`, no
-  `NOPERM` in the exporter log).
-- **b: `default` off (`off` in its permissions), plus a `monitor` user for
-  the exporter through `metrics.exporter.extraEnvs.REDIS_USER`.** This
-  matches today's `user default off`, but adds a third user. It also
-  relies on the exporter reading the `default` user's `passwordKey` for a
-  different user.
-- **c: full access (`~* &* +@all`), as the homelab's shared instance.** No
-  isolation between the cache and anything that can reach the Service.
-- **other:**
+Resolved questions are listed under
+[Resolved Questions](#resolved-questions).
 
 ### OQ6: What happens to existing redis.* values?
 
-- **a (recommended): fail the render with the replacement key for each
-  one** (`validateRemovedValues`), as `configPath` and
-  `resourceQuota.enabled` did. This is explicit, and nothing is silently
-  ignored.
-- **b: translate them for one release.** Map `redis.*` onto `valkey.*` and
-  warn in NOTES, then fail in the release after. Smoother upgrades, more
-  template code, and two ways to say one thing for a release.
+You chose "rewrite `redis.*` to `valkey.*`". Helm can't fully do that. A
+subchart reads its own values block (`.Values.valkey`) before any parent
+template runs, and a parent template can't change it. What can be
+translated:
+
+| Key | Translatable? |
+| - | - |
+| `redis.enabled` | yes: `condition: redis.enabled,valkey.enabled` (Helm uses the first path that is set) |
+| `redis.keyPrefix` | yes: the parent owns it |
+| `redis.auth.existingSecret` | **no**: the subchart reads `valkey.auth.usersExistingSecret` itself, and the Secret now needs a second key anyway |
+| `redis.maxmemory`, `redis.resources`, `redis.image` | **no**: subchart values |
+
+- **a (recommended): rename everything to `valkey.*`, and fail the render
+  for any `redis.*` key, naming its replacement** (`validateRemovedValues`,
+  as for `configPath` and `resourceQuota.enabled`). No production install
+  exists yet, so nobody needs a soft landing. Since the Secret's shape
+  changes too, every install edits its values once regardless.
+- **b: translate the two keys that can be (`enabled`, `keyPrefix`) and
+  fail on the rest.** Partial, so operators still edit values, and two
+  spellings of `enabled` exist forever.
+- **c: ship a migration note with a `yq` one-liner that rewrites a values
+  file**, plus the failure guards from a. This helps GitOps repositories
+  that carry the values. It is documentation only.
 - **other:**
 
-### OQ7: Does the passthrough cover the boopd worker too?
+### OQ10: Is the worker PDB on by default?
 
-The worker has `podLabels` and `podAnnotations`, a ServiceMonitor and a
-PrometheusRule, but no `commonLabels` and no PDB, with two replicas.
-
-- **a (recommended): Valkey only in this design.** Add a worker PDB
-  (`maxUnavailable: 1`) and `commonLabels` in a follow-up chart change.
-  This keeps the PR about the cache.
-- **b: include them here.** One chart PR for "labels, PDB, scaling and
-  monitors everywhere". It is a bigger diff, with two unrelated reviews in
-  one PR.
+- **a (recommended): on, `maxUnavailable: 1`.** The default
+  `replicaCount` is 2, and the PDB keeps a drain from taking both workers
+  at once. With `replicaCount: 1` it allows one eviction, so it never
+  blocks a drain outright.
+- **b: off by default, as most charts do.** Operators opt in; a drain can
+  take both replicas together.
 - **other:**
 
-### OQ8: Do Valkey's metrics follow boopd's?
+### OQ11: Do parent commonLabels reach Valkey?
 
-- **a (recommended): independent, and off by default.** Turn them on with
-  `valkey.metrics.enabled` and `valkey.metrics.serviceMonitor.enabled`, as
-  boopd's own `serviceMonitor.enabled` is off by default (it needs the
-  Prometheus Operator CRDs). Each is set where it lives.
-- **b: on whenever `serviceMonitor.enabled` is.** One switch for an
-  install's monitoring. This needs a parent override of a subchart value,
-  which Helm cannot template, so it would need a second parent-rendered
-  ServiceMonitor.
+The parent can't set subchart values, so `commonLabels` can't flow into
+`valkey.commonLabels` by template.
+
+- **a (recommended): two separate values, `commonLabels` and
+  `valkey.commonLabels`, with a README example that uses a YAML anchor to
+  set both from one map.** This is plain Helm, with nothing hidden.
+- **b: move both to `global.commonLabels`.** The Valkey chart doesn't read
+  `global.commonLabels`, so this only works for the parent. It would mean
+  a fork or an upstream change.
 - **other:**
 
-### OQ9: Who restricts ingress to Valkey?
+## Resolved Questions
 
-- **a (recommended): the parent renders a NetworkPolicy for the Valkey
-  pod when `networkPolicies.enabled`.** It allows 6379 from run Job pods
-  (by their labels, and namespace when runs live elsewhere) and 9121 for
-  scraping. The parent knows the runs namespace and the Job labels; the
-  subchart's `networkPolicy` value is static.
-- **b: leave it to `valkey.networkPolicy` through the passthrough, with an
-  example.** Less template code, but the operator writes the selectors by
-  hand and keeps them in step.
-- **other:**
+Answered 2026-10-15. The body above is written to these decisions.
+
+| OQ | Question | Decision |
+| - | - | - |
+| 1 | Which Valkey chart? | **a**: official `valkey-io/valkey-helm`, 0.12.0 |
+| 2 | Vendor the subchart? | **a**: commit `Chart.lock`, gitignore the `.tgz`, `helm dependency build` everywhere. This is idiomatic Helm, and the packaged OCI chart embeds the subchart for Argo CD, Kargo and kustomize ([The dependency](#the-dependency)) |
+| 3 | GitOps without an existing Secret? | **b, made stricter**: the chart never generates; the render fails until `usersExistingSecret` is set, with a message showing how |
+| 4 | Keys in the Secret? | **b**: separate keys, `renovate` and `default` (the chart's default `passwordKey` names) |
+| 5 | What can `default` do? | **a**: monitoring commands, no keys. The exporter's metrics work fully with it ([ACL users](#acl-users)) |
+| 7 | Worker passthrough in this design? | **b**: yes, `commonLabels`, `commonAnnotations`, PDB, spread, priority class, Service annotations. No HPA (ADR-0008) |
+| 8 | Valkey metrics follow boopd's? | **a**: independent, off by default |
+| 9 | Who restricts ingress to Valkey? | **both**: a chart default, `extraIngress` to extend, and `enabled: false` plus the subchart's `networkPolicy` to replace ([The Valkey NetworkPolicy](#the-valkey-networkpolicy)) |
 
 ## References
 
-- IMPL-0001 Phase 7 (the redis subchart), IMPL-0002 Phase 3
+- IMPL-0001 Phase 7 (the redis subchart); IMPL-0002 Phase 3
   (`redis.auth.existingSecret`, `redis_url`, `redis_password_secret_ref`,
   `helm-template-stable`)
 - DESIGN-0001 § Credentials and the Job pod
+- ADR-0008 and ADR-0009 (fixed worker replicas, runs as Jobs)
 - [valkey-io/valkey-helm](https://github.com/valkey-io/valkey-helm),
   chart 0.12.0 (`values.yaml`, `templates/init_config.yaml`,
-  `templates/deploy_valkey.yaml`, `templates/_helpers.tpl`)
+  `templates/deploy_valkey.yaml`, `templates/netpolicy.yaml`,
+  `templates/_helpers.tpl`)
 - Homelab: `k8s/apps/fartlab/valkey/values.yaml` (valkey-io 0.9.4,
   standalone, ACL, ServiceMonitor), `k8s/BOOTSTRAP.md` (Phase 4 Valkey)
 - [Valkey ACL](https://valkey.io/topics/acl/)
-- [Helm `lookup`](https://helm.sh/docs/chart_template_guide/functions_and_pipelines/#using-the-lookup-function)
-  and [resource policy `keep`](https://helm.sh/docs/howto/charts_tips_and_tricks/#tell-helm-not-to-uninstall-a-resource)
+- [Helm chart dependencies](https://helm.sh/docs/helm/helm_dependency/)
+  and [Argo CD Helm dependencies](https://argo-cd.readthedocs.io/en/stable/user-guide/helm/)
