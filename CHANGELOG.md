@@ -8,6 +8,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Documentation
 
 - Verify release provenance against main; close IMPL-0002
+- *(design)* DESIGN-0002 valkey as the bundled Renovate cache
 
 ## [0.3.0] - 2026-10-13
 
