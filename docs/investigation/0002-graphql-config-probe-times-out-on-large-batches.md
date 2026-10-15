@@ -1,7 +1,7 @@
 ---
 id: INV-0002
 title: "GraphQL config probe times out on large batches"
-status: Open
+status: Concluded
 author: Donald Gifford
 created: 2026-10-15
 ---
@@ -305,19 +305,32 @@ These follow the e2e-first rule (IMPL-0001 OQ3):
   answers 502 to any probe whose ids × expressions exceeds `n`, as GitHub
   does past 10 s. It also enforces the 100-id cap with GitHub's
   `ARGUMENT_LIMIT` error.
-- **The worker e2e:**
-  - discovery of a 170-repository fake installation with a lookup limit
-    of 100 onboards every repository with a config;
-  - the split counter stays at 0 with the default budget;
-  - with the limit lowered below the budget, the pass still completes
-    through splits, and the REST fallback is hit for single repositories.
+- **Activity tests** (`internal/activities`, in-process fake GitHub and
+  the Temporal test environment):
+  - a 170-repository installation with a lookup limit of 100 onboards
+    every repository with a config, with no splits;
+  - with the limit below the budget, the pass completes through splits and
+    the REST fallback.
+
+  A fleet that size in the k3d worker e2e would start 170 Renovate Jobs,
+  so it lives here.
+- **The worker e2e (k3d):** with a lookup limit below one repository's
+  paths, discovery still onboards the config repository through the REST
+  fallback, and the run follows.
 - **Unit tests** (`probe_test.go`):
   - the batch rule at 1, 4, 10 and 16 paths;
   - the split recursion stops at one repository;
   - a 401 inside a split still fails the pass;
   - `classifyErr`'s `RetryAfter` is a duration.
+- **Heartbeat during splits.** A page's worst case is every level of
+  splits timing out at 10 s each, which outlasts the activity's 2-minute
+  heartbeat timeout. The probe therefore takes a per-query hook that the
+  activity uses to heartbeat.
 
 ## Open Questions
+
+**Decided 2026-10-15: option a for OQ1–OQ7.** IMPL-0003 implements them.
+The options are kept below as the record.
 
 ### OQ1: How is the batch sized?
 

@@ -308,7 +308,7 @@ this Secret; Job pods never see it (ADR-0009).
 | Setting | Type | Default | Description |
 | - | - | - | - |
 | `every` | duration | `6h` | The discovery Schedule's interval. A repository unseen for 3 × `every` is checked and, if it is gone or has no config file, offboarded. |
-| `probe` | string | `graphql` | How config files are found. `graphql` asks for every `config_paths` entry for 100 repositories in one query. `rest` lists the root and `.github` per repository, at most three calls each; it is the fallback. |
+| `probe` | string | `graphql` | How config files are found. `graphql` asks for every `config_paths` entry for 100 repositories in one query. `rest` lists the root and `.github` per repository, at most three calls each; it is the fallback. **Until IMPL-0003 ships, use `rest` for an installation above about 40 repositories:** with the 10 default paths, a 100-repository query exceeds GitHub's 10-second GraphQL limit and every attempt fails with 502 (issue #14, INV-0002). |
 | `skip_forks` | bool | `true` | Skip forked repositories. |
 | `skip_archived` | bool | `true` | Skip archived repositories. |
 
