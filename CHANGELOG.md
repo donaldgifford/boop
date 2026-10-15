@@ -10,6 +10,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Verify release provenance against main; close IMPL-0002
 - *(design)* DESIGN-0002 valkey as the bundled Renovate cache
 - *(design)* DESIGN-0002 apply OQ answers
+- *(design)* DESIGN-0002 resolve OQ6 and OQ11, expand OQ10
 
 ## [0.3.0] - 2026-10-13
 
