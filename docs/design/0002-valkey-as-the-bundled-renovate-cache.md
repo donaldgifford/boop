@@ -37,7 +37,6 @@ created: 2026-10-15
 - [Testing Strategy](#testing-strategy)
 - [Migration / Rollout Plan](#migration--rollout-plan)
 - [Open Questions](#open-questions)
-  - [OQ10: Is the worker PDB on by default?](#oq10-is-the-worker-pdb-on-by-default)
 - [Resolved Questions](#resolved-questions)
 - [References](#references)
 <!--toc:end-->
@@ -460,7 +459,7 @@ The worker already has `podLabels`, `podAnnotations`,
 | - | - | - |
 | `commonLabels` | `{}` | every resource the parent renders (not the subchart: set `valkey.commonLabels` too; the README shows one YAML anchor for both) |
 | `commonAnnotations` | `{}` | every resource the parent renders |
-| `podDisruptionBudget.enabled` | `true` (OQ10) | a PDB selecting the worker pods |
+| `podDisruptionBudget.enabled` | `true` | a PDB selecting the worker pods |
 | `podDisruptionBudget.maxUnavailable` | `1` | |
 | `podDisruptionBudget.minAvailable` | unset | mutually exclusive with `maxUnavailable`; the guard fails if both are set |
 | `podDisruptionBudget.unhealthyPodEvictionPolicy` | `AlwaysAllow` | lets a drain evict a crash-looping worker |
@@ -473,6 +472,22 @@ other replica is down. A drain waits on the evicted pod's grace period
 (above StartToClose, so up to an hour) either way. The PDB stops two
 workers being evicted at once, which would stall every run's heartbeat
 together.
+
+The PDB is on by default (OQ10). What it (`maxUnavailable: 1`,
+`unhealthyPodEvictionPolicy: AlwaysAllow`) does, case by case:
+
+| Situation | With the PDB | Without it |
+| - | - | - |
+| One node drained, one worker on it | Evicted at once. The Deployment starts a replacement elsewhere while the old pod finishes its grace period | Same |
+| Both workers' nodes drained together (a node-pool upgrade, Karpenter consolidation) | The second eviction waits until the first worker's replacement is Ready, usually seconds. The drain or consolidation is that much slower | Both evicted together. No worker polls the task queue until a replacement starts, so workflow tasks and new runs pause. Running Jobs carry on, but their `RunRenovate` heartbeats stop until a worker picks the activity up again |
+| `replicaCount: 1` | One eviction is allowed, so a drain never blocks | Same |
+| A worker crash-looping or not Ready | `AlwaysAllow` lets it be evicted anyway, so a broken pod never blocks a drain | Same |
+| `kubectl delete pod`, a rollout, an OOM kill | Not affected: PDBs only gate the eviction API | Same |
+
+The well-known PDB failure is a `minAvailable` equal to the replica
+count, which blocks every drain forever. `maxUnavailable: 1` cannot do
+that at any replica count. The costs are one extra object and slightly
+slower parallel drains.
 
 `boopd.labels` gains `commonLabels`, and every template's metadata gains
 `commonAnnotations`. Selector labels are unchanged, so adding labels never
@@ -646,37 +661,12 @@ reads the same Secret, so the two agree.
 
 ## Open Questions
 
-Resolved questions are listed under
+None open. The answered questions are listed under
 [Resolved Questions](#resolved-questions).
-
-### OQ10: Is the worker PDB on by default?
-
-What a default-on PDB (`maxUnavailable: 1`,
-`unhealthyPodEvictionPolicy: AlwaysAllow`) does, case by case:
-
-| Situation | With the PDB | Without it |
-| - | - | - |
-| One node drained, one worker on it | Evicted at once. The Deployment starts a replacement elsewhere while the old pod finishes its grace period | Same |
-| Both workers' nodes drained together (a node-pool upgrade, Karpenter consolidation) | The second eviction waits until the first worker's replacement is Ready, usually seconds. The drain or consolidation is that much slower | Both evicted together. No worker polls the task queue until a replacement starts, so workflow tasks and new runs pause. Running Jobs carry on, but their `RunRenovate` heartbeats stop until a worker picks the activity up again |
-| `replicaCount: 1` | One eviction is allowed, so a drain never blocks | Same |
-| A worker crash-looping or not Ready | `AlwaysAllow` lets it be evicted anyway, so a broken pod never blocks a drain | Same |
-| `kubectl delete pod`, a rollout, an OOM kill | Not affected: PDBs only gate the eviction API | Same |
-
-The well-known PDB failure is a `minAvailable` equal to the replica
-count, which blocks every drain forever. `maxUnavailable: 1` cannot do
-that at any replica count. The costs are one extra object and slightly
-slower parallel drains.
-
-- **a (recommended): on, `maxUnavailable: 1`.** The default
-  `replicaCount` is 2, and the PDB keeps a drain from taking both workers
-  at once. The table shows no case where it blocks a drain outright.
-- **b: off by default, as many charts do.** Operators opt in, and a
-  parallel drain can take both replicas together.
-- **other:**
 
 ## Resolved Questions
 
-Answered 2026-10-15. The body above is written to these decisions.
+Answered 2026-10-15. All questions are resolved; the body above is written to these decisions.
 
 | OQ | Question | Decision |
 | - | - | - |
@@ -689,6 +679,7 @@ Answered 2026-10-15. The body above is written to these decisions.
 | 8 | Valkey metrics follow boopd's? | **a**: independent, off by default |
 | 6 | Existing `redis.*` values? | **b, plus guards and docs**: translate `redis.enabled` and `redis.keyPrefix`; fail every other key, naming its replacement; README table and `yq` snippet ([Removed values](#removed-values)) |
 | 9 | Who restricts ingress to Valkey? | **both**: a chart default, `extraIngress` to extend, and `enabled: false` plus the subchart's `networkPolicy` to replace ([The Valkey NetworkPolicy](#the-valkey-networkpolicy)) |
+| 10 | Worker PDB on by default? | **a**: on, `maxUnavailable: 1`, `unhealthyPodEvictionPolicy: AlwaysAllow` ([The worker's passthrough](#the-workers-passthrough)) |
 | 11 | Parent `commonLabels` into Valkey? | **a**: two values, `commonLabels` and `valkey.commonLabels`; the README shows one YAML anchor for both |
 
 ## References
