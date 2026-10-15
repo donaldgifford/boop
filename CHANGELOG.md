@@ -12,6 +12,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(design)* DESIGN-0002 apply OQ answers
 - *(design)* DESIGN-0002 resolve OQ6 and OQ11, expand OQ10
 - *(design)* DESIGN-0002 resolve OQ10
+- *(investigation)* INV-0002 GraphQL config probe times out on large batches
 
 ## [0.3.0] - 2026-10-13
 
