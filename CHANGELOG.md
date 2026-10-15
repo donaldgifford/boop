@@ -14,6 +14,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(design)* DESIGN-0002 resolve OQ10
 - *(investigation)* INV-0002 GraphQL config probe times out on large batches
 - INV-0002 decisions, interim probe note, IMPL-0003 plan for issue 14
+- Restore IMPL-0002 toc anchors
 
 ## [0.3.0] - 2026-10-13
 
