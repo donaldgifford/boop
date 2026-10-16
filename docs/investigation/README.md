@@ -14,6 +14,7 @@ Design docs, plans, and implementation docs can reference investigations by ID
 | ID | Title | Status | Date | Author | Link |
 |----|-------|--------|------|--------|------|
 | INV-0001 | Temporal as the Renovate control plane | Open | 2026-09-30 | Donald Gifford | [0001-temporal-as-the-renovate-control-plane.md](0001-temporal-as-the-renovate-control-plane.md) |
+| INV-0002 | GraphQL config probe times out on large batches | Concluded | 2026-10-15 | Donald Gifford | [0002-graphql-config-probe-times-out-on-large-batches.md](0002-graphql-config-probe-times-out-on-large-batches.md) |
 <!-- END DOCZ AUTO-GENERATED -->
 <!-- BEGIN DOCZ AUTO-GENERATED -->
 <!-- END DOCZ AUTO-GENERATED -->
