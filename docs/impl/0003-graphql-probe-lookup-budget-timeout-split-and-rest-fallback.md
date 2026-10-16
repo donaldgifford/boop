@@ -364,7 +364,7 @@ flowchart TD
 
 #### Tasks
 
-- [ ] 7.1 `docs/config.md`:
+- [x] 7.1 `docs/config.md`:
   - **`probe` row:** replace the interim note with the budget: about
     100 lookups per query, so 100 / paths repositories. A query that
     times out is split, and single repositories fall back to REST.
@@ -373,7 +373,7 @@ flowchart TD
   - **The metrics paragraph** after the table names
     `boopd_discovery_probe_splits_total` and
     `boopd_discovery_probe_fallbacks_total`.
-- [ ] 7.2 DESIGN-0001, as an amendment note dated on landing:
+- [x] 7.2 DESIGN-0001, as an amendment note dated on landing:
   - § DiscoveryWorkflow: "one query per 100 repositories" becomes "one
     query per 100 / paths repositories, at most 100".
   - The cost estimate becomes about 1,500 points per pass for 15,000
@@ -381,10 +381,10 @@ flowchart TD
   - "100 is a design choice" becomes "100 is GitHub's `nodes(ids:)`
     cap".
   - OQ3 a: the same correction.
-- [ ] 7.3 Go doc comments: `ProbeConfig`, `ProbeResult`,
+- [x] 7.3 Go doc comments: `ProbeConfig`, `ProbeResult`,
   `probeBatchSize`, `errProbeTimeout`, `DiscoverInstallation` (the
   heartbeat per query).
-- [ ] 7.4 `examples/boopd.hcl`: a comment on `config_paths` with the
+- [x] 7.4 `examples/boopd.hcl`: a comment on `config_paths` with the
   tenfold note. `boopd config validate` still loads it.
 
 #### Success Criteria

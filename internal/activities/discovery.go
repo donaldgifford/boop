@@ -44,7 +44,9 @@ const reserveTick = 10 * time.Second
 // page for the config file, and SignalWithStart repo/github/<id> with
 // discovered for every repository that has it. No repository list
 // leaves the activity. It heartbeats {page, seen, onboarded} after each
-// page, and a retry skips the pages its last heartbeat covered.
+// page, and a retry skips the pages its last heartbeat covered. Within a
+// page it heartbeats after every probe query too, since a GraphQL probe
+// that times out splits into many (INV-0002).
 func (a *Activities) DiscoverInstallation(ctx context.Context, in *workflows.DiscoverInput) (*workflows.DiscoverSummary, error) {
 	app, err := a.app(in.App)
 	if err != nil {

@@ -13,6 +13,9 @@ renovate {
   # precedence order. Omitted, it is Renovate's own GitHub list, so boopd
   # parses the file Renovate reads: renovate.json{,c,5},
   # .github/renovate.json{,c,5}, .renovaterc, .renovaterc.json{,c,5}.
+  # Each path is one GraphQL lookup per repository during discovery:
+  # config_paths = ["renovate.json5"] (what repo-guardian writes) probes
+  # 100 repositories per query instead of 10 (INV-0002).
   shared_preset = "github>boop-bot/renovate-config:default.json"
   log_level     = "info"
   dry_run       = "full" # spike comparison runs

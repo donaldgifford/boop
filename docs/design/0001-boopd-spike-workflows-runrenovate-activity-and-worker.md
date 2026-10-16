@@ -394,7 +394,22 @@ sequenceDiagram
     Enterprise Cloud). How GitHub scores `nodes(ids:)` is not documented,
     so every query reads `rateLimit.cost` and the pass records it
     (`boopd_discovery_probe_cost`). 100 per query is a design choice, not a
-    documented limit. `text` is parsed for `extends` only, as JSON5 (which
+    documented limit.
+
+    **Amended 2026-10-15 (INV-0002, IMPL-0003, issue #14).** GitHub cuts a
+    query at 10 s, and each `object(expression:)` lookup takes about
+    20 ms, so 100 repositories × 10 paths (about 20 s) failed every time.
+    - A query now carries `100 / paths` repositories, about 100 lookups
+      or 2 s, at most 100. **100 is GitHub's `nodes(ids:)` cap**
+      (`ARGUMENT_LIMIT`), not a design choice.
+    - Every query measured 1 point, so a 15,000-repository installation
+      at the 10 default paths is about **1,500 points** per pass, not
+      150.
+    - A query that still times out is halved, down to one repository,
+      which is checked over REST (`boopd_discovery_probe_splits_total`,
+      `boopd_discovery_probe_fallbacks_total`).
+
+    `text` is parsed for `extends` only, as JSON5 (which
     covers JSON and JSONC). A file above 64 KB or that fails to parse yields
     an empty list, the profile then comes from the report alone, and the
     pass logs a warning naming the repository and file. The repository is
@@ -1226,6 +1241,8 @@ onboarded. So:
   Renovate's order. The first file present is the one parsed, so `boopd`
   reads the same file Renovate will. All paths go in one query as aliased
   fields, so the pass still costs one query per 100 repositories.
+  (Amended 2026-10-15: one query per 100 / paths repositories; see
+  § DiscoveryWorkflow and INV-0002.)
 - Text is parsed as JSON5, which covers the JSON and JSONC names too. A
   config that does not parse still onboards, with a warning and
   `boopd_discovery_repos_total{config="unparsed"}`. A repository without
@@ -1242,6 +1259,9 @@ can see, so this is the fleet's dominant cost.
   By GitHub's formula the query costs 1 point, so a 15,000-repository
   installation is ~150 points per pass against 5,000 per hour. The scoring
   of `nodes(ids:)` is not documented, so the spike measures it.
+  (Measured in INV-0002: 1 point per query, but GitHub's 10-second limit
+  allows only about 100 lookups per query, so a pass costs ~1,500
+  points at 10 paths. Amended 2026-10-15.)
 - **b: REST contents call per repository** for each path. Documented and
   simple; 15,000 calls per pass against a 12,500-per-hour REST limit, which
   only works with discovery every 6 h or slower and competes with runs.
