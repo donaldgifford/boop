@@ -8,6 +8,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Bug Fixes
 
 - *(platform)* Size GraphQL probe batches from a lookup budget
+- *(platform)* Split timed-out GraphQL probes and fall back to REST
 
 ### Documentation
 
