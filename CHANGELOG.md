@@ -27,6 +27,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Restore IMPL-0002 toc anchors
 - *(impl)* IMPL-0003 record OQ decisions
 - GraphQL probe budget, split and fallback; amend DESIGN-0001
+- *(impl)* IMPL-0003 in progress
 
 ### Testing
 
