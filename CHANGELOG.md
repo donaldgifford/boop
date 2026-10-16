@@ -17,6 +17,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Restore IMPL-0002 toc anchors
 - *(impl)* IMPL-0003 record OQ decisions
 
+### Testing
+
+- *(fakegithub)* GitHub's GraphQL limits: lookup timeout, timeout shapes, 100-id cap
+
 ## [0.3.0] - 2026-10-13
 
 ### Features
