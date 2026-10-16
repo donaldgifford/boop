@@ -13,6 +13,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 - *(platform)* Size GraphQL probe batches from a lookup budget
 - *(platform)* Split timed-out GraphQL probes and fall back to REST
+- *(platform)* RetryAfter on a primary rate limit is the time until reset
 
 ### Documentation
 
