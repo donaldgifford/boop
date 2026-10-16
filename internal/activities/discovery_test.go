@@ -189,11 +189,13 @@ func TestDiscoverInstallation_GraphQL(t *testing.T) {
 	if got := h.start.ids(); !slices.Equal(got, want) {
 		t.Fatalf("signalled %d workflows, want %d:\n got %v\nwant %v", len(got), len(want), got, want)
 	}
-	if *sum != (workflows.DiscoverSummary{InstallationID: 1, Pages: 3, Seen: 250, Onboarded: len(want), ProbeCost: 3}) {
-		t.Errorf("summary = %+v", *sum)
+	// 10 default paths: at most 10 repositories per query (INV-0002).
+	sizes := h.gh.ProbeSizes()
+	if *sum != (workflows.DiscoverSummary{InstallationID: 1, Pages: 3, Seen: 250, Onboarded: len(want), ProbeCost: len(sizes)}) {
+		t.Errorf("summary = %+v, want one point per query (%d)", *sum, len(sizes))
 	}
-	if q := h.gh.ProbeQueries(); q != 3 {
-		t.Errorf("probe queries = %d, want one per page", q)
+	if i := slices.IndexFunc(sizes, func(n int) bool { return n > 10 }); i >= 0 {
+		t.Errorf("probe sizes = %v, want at most 10 repositories per query", sizes)
 	}
 	if r := h.gh.RateReads(); r != 3 {
 		t.Errorf("rate reads = %d, want one before each page", r)

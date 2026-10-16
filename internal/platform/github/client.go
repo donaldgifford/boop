@@ -25,9 +25,9 @@ limitations under the License.
 //   - Client authenticates as one installation (NewWithApp) or with a
 //     token (NewWithToken). It discovers repositories page by page
 //     (DiscoverPages, GET /installation/repositories), probes for the
-//     config files over GraphQL (ProbeConfig, 100 node ids per query) or
-//     REST (ProbeConfigREST), reads /rate_limit (ReadRateLimit) and
-//     re-checks one repository (CheckRepo).
+//     config files over GraphQL (ProbeConfig, about 100 path lookups per
+//     query) or REST (ProbeConfigREST), reads /rate_limit (ReadRateLimit)
+//     and re-checks one repository (CheckRepo).
 //
 // Every call except ReadRateLimit passes a client-side limiter; once the
 // installation's core limit is known, WithDiscoveredLimit sets it to

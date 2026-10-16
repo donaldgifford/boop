@@ -34,9 +34,14 @@ import (
 )
 
 const (
-	// probeBatch is how many node ids one GraphQL probe carries. It is a
-	// design choice, not a documented limit (DESIGN-0001 § DiscoveryWorkflow).
-	probeBatch = 100
+	// probeLookups is how many object(expression:) lookups one GraphQL
+	// probe carries: about 2 s of GitHub's time at 15-25 ms each, five
+	// times under its 10-second query limit (INV-0002).
+	probeLookups = 100
+
+	// maxProbeIDs is GitHub's cap on nodes(ids:); more is rejected with
+	// ARGUMENT_LIMIT (INV-0002).
+	maxProbeIDs = 100
 
 	// maxConfigBytes bounds the config text parsed for extends; a larger
 	// file is reported unparsed.
@@ -123,10 +128,18 @@ func probeQuery(n int) string {
 		"}"
 }
 
+// probeBatchSize is how many repositories one probe query carries for
+// paths paths: the lookup budget split across them, at least 1 and at
+// most GitHub's 100-id cap.
+func probeBatchSize(paths int) int {
+	return min(max(probeLookups/max(paths, 1), 1), maxProbeIDs)
+}
+
 // ProbeConfig asks GitHub's GraphQL API which config file each repository
-// carries on its default branch (HEAD), one query per 100 node ids with
-// every path in the same query, and parses extends from the first one
-// present (DESIGN-0001 OQ3). paths is in precedence order; empty means
+// carries on its default branch (HEAD), with every path in the same query,
+// and parses extends from the first one present (DESIGN-0001 OQ3). Each
+// query carries probeBatchSize(len(paths)) repositories, so it stays near
+// probeLookups lookups (INV-0002). paths is in precedence order; empty means
 // the client's. Every query's rateLimit.cost is read and summed into the
 // result.
 func (c *Client) ProbeConfig(ctx context.Context, nodeIDs, paths []string) (*ProbeResult, error) {
@@ -138,8 +151,9 @@ func (c *Client) ProbeConfig(ctx context.Context, nodeIDs, paths []string) (*Pro
 		res.Configs[id] = ConfigProbe{}
 	}
 	query := probeQuery(len(paths))
-	for start := 0; start < len(nodeIDs); start += probeBatch {
-		batch := nodeIDs[start:min(start+probeBatch, len(nodeIDs))]
+	size := probeBatchSize(len(paths))
+	for start := 0; start < len(nodeIDs); start += size {
+		batch := nodeIDs[start:min(start+size, len(nodeIDs))]
 		if err := c.probeBatch(ctx, query, batch, paths, res); err != nil {
 			return nil, err
 		}

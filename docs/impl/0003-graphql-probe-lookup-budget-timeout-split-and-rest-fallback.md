@@ -206,19 +206,19 @@ tested against the real failure.
 
 #### Tasks
 
-- [ ] 3.1 `probe.go` constants:
+- [x] 3.1 `probe.go` constants:
   - `probeLookups = 100`, documented with INV-0002's measurement (about
     2 s, five times under the 10 s limit);
   - `maxProbeIDs = 100` replaces `probeBatch`, documented as GitHub's
     `nodes(ids:)` cap, not a design choice.
-- [ ] 3.2 `probeBatchSize(paths int) int` returns
+- [x] 3.2 `probeBatchSize(paths int) int` returns
   `clamp(probeLookups / paths, 1, maxProbeIDs)`.
-- [ ] 3.3 `ProbeConfig` cuts its input into `probeBatchSize(len(paths))`
+- [x] 3.3 `ProbeConfig` cuts its input into `probeBatchSize(len(paths))`
   slices.
-- [ ] 3.4 Rewrite `TestProbeConfig_Batches` as a table over paths
+- [x] 3.4 Rewrite `TestProbeConfig_Batches` as a table over paths
   (1, 4, 10, 16) and repositories (1, 10, 100, 250). It asserts the
   slice sizes, `Queries` and summed `Cost`.
-- [ ] 3.5 The package doc in `client.go` ("100 node ids per query") and
+- [x] 3.5 The package doc in `client.go` ("100 node ids per query") and
   `ProbeConfig`'s doc comment describe the budget.
 
 #### Success Criteria
