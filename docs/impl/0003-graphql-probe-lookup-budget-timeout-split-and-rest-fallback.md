@@ -245,27 +245,27 @@ flowchart TD
 
 #### Tasks
 
-- [ ] 4.1 `ProbeConfig(ctx, repos []platform.Repository, paths []string,
+- [x] 4.1 `ProbeConfig(ctx, repos []platform.Repository, paths []string,
   onQuery func()) (*ProbeResult, error)` (OQ4 a).
   - It keys answers by `NodeID`, as today.
-  - `onQuery` may be nil; it is called after every request, GraphQL or
-    REST.
+  - `onQuery` may be nil; it is called after every GraphQL query and
+    after each REST fallback (one repository's REST calls).
   - Update the `InstallationAPI` interface in `internal/activities/github.go`
     and `fakeInstall`.
-- [ ] 4.2 A sentinel `errProbeTimeout`, returned by `probeBatch` for HTTP
+- [x] 4.2 A sentinel `errProbeTimeout`, returned by `probeBatch` for HTTP
   502 and 504 from `/graphql`, and for a 200 with no `data` whose error
   message contains "timeout" (OQ3 a). Every other response keeps today's
   classification.
-- [ ] 4.3 `probeSlice(ctx, query, repos, paths, res, onQuery)`: on
+- [x] 4.3 `prober.slice(ctx, repos)` (the call's state in a `prober`): on
   `errProbeTimeout` it splits the slice in half and recurses on each half.
   At one repository it calls `probeREST` for that repository and records
   its answer. Any other error returns immediately.
-- [ ] 4.4 `ProbeResult` gains `Splits int` (timed-out slices that were
+- [x] 4.4 `ProbeResult` gains `Splits int` (timed-out slices that were
   halved) and `Fallbacks int` (repositories probed over REST). `Queries`
   counts REST calls too, as `ProbeConfigREST` does.
-- [ ] 4.5 Log nothing in the platform package. The activity logs from
+- [x] 4.5 Log nothing in the platform package. The activity logs from
   the counts (Phase 5), as the package logs nothing today.
-- [ ] 4.6 Unit tests (`probe_test.go`, with the `graphqlServer` fake
+- [x] 4.6 Unit tests (`probe_test.go`, with the `graphqlServer` fake
   extended or `test/fakegithub`):
   - **Splits:** one slice of 10 at a limit of 50 splits into 5 + 5, both
     pass, `Splits = 1`.

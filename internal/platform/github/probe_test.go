@@ -194,6 +194,18 @@ func nodeIDs(n int) []string {
 	return ids
 }
 
+// reposFor returns one repository per node id, slug o/<id>.
+func reposFor(ids ...string) []platform.Repository {
+	repos := make([]platform.Repository, len(ids))
+	for i, id := range ids {
+		repos[i] = platform.Repository{NodeID: id, Slug: "o/" + id, DefaultBranch: "main"}
+	}
+	return repos
+}
+
+// probeRepos returns n repositories with node ids R_000 onwards.
+func probeRepos(n int) []platform.Repository { return reposFor(nodeIDs(n)...) }
+
 // testPaths returns n distinct config paths.
 func testPaths(n int) []string {
 	out := make([]string, n)
@@ -222,7 +234,7 @@ func TestProbeConfig_Batches(t *testing.T) {
 				t.Parallel()
 				fake := &graphqlServer{cost: 2}
 				c := newProbeClient(t, fake, ghclient.WithConfigPaths(testPaths(paths)))
-				res, err := c.ProbeConfig(context.Background(), nodeIDs(repos), nil)
+				res, err := c.ProbeConfig(context.Background(), probeRepos(repos), nil, nil)
 				if err != nil {
 					t.Fatalf("ProbeConfig(%d ids) err = %v", repos, err)
 				}
@@ -262,7 +274,7 @@ func TestProbeConfig_DefaultPathsUnderLookupLimit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWithToken: %v", err)
 	}
-	if _, err := c.ProbeConfig(context.Background(), nodeIDs(250), nil); err != nil {
+	if _, err := c.ProbeConfig(context.Background(), probeRepos(250), nil, nil); err != nil {
 		t.Fatalf("ProbeConfig(250 ids) err = %v", err)
 	}
 	if q, rejected := gh.ProbeQueries(), gh.ProbeTimeouts(); q != 25 || rejected != 0 {
@@ -297,7 +309,7 @@ func TestProbeConfig_Answers(t *testing.T) {
 		missing: map[string]bool{"gone": true},
 	}
 	ids := []string{"json", "json5", "dotgithub", "renovaterc", "both", "noExtends", "broken", "dirOnly", "absent", "gone"}
-	res, err := newProbeClient(t, fake).ProbeConfig(context.Background(), ids, nil)
+	res, err := newProbeClient(t, fake).ProbeConfig(context.Background(), reposFor(ids...), nil, nil)
 	if err != nil {
 		t.Fatalf("ProbeConfig() err = %v", err)
 	}
@@ -334,7 +346,7 @@ func TestProbeConfig_ConfiguredPaths(t *testing.T) {
 		"a": {"renovate.json": `{}`, "ci/renovate.json5": `{extends: ["x"]}`},
 	}}
 	c := newProbeClient(t, fake, ghclient.WithConfigPaths([]string{"ci/renovate.json5"}))
-	res, err := c.ProbeConfig(context.Background(), []string{"a"}, nil)
+	res, err := c.ProbeConfig(context.Background(), reposFor("a"), nil, nil)
 	if err != nil {
 		t.Fatalf("ProbeConfig() err = %v", err)
 	}
@@ -351,7 +363,7 @@ func TestProbeConfig_ErrorsWithoutData(t *testing.T) {
 	h := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"data":null,"errors":[{"message":"something went wrong"}]}`))
 	})
-	_, err := newProbeClient(t, h).ProbeConfig(context.Background(), []string{"a"}, nil)
+	_, err := newProbeClient(t, h).ProbeConfig(context.Background(), reposFor("a"), nil, nil)
 	if !errors.Is(err, platform.ErrTransient) || !strings.Contains(err.Error(), "something went wrong") {
 		t.Errorf("ProbeConfig() err = %v, want transient carrying the GraphQL message", err)
 	}
@@ -362,7 +374,7 @@ func TestProbeConfig_Unauthorized(t *testing.T) {
 	h := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, `{"message":"Bad credentials"}`, http.StatusUnauthorized)
 	})
-	_, err := newProbeClient(t, h).ProbeConfig(context.Background(), []string{"a"}, nil)
+	_, err := newProbeClient(t, h).ProbeConfig(context.Background(), reposFor("a"), nil, nil)
 	if !errors.Is(err, platform.ErrUnauthorized) {
 		t.Errorf("ProbeConfig() err = %v, want ErrUnauthorized", err)
 	}

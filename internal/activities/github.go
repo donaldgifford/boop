@@ -37,7 +37,7 @@ type AppAPI interface {
 // client.
 type InstallationAPI interface {
 	DiscoverPages(ctx context.Context, filter platform.DiscoveryFilter, fn func(github.Page) error) error
-	ProbeConfig(ctx context.Context, nodeIDs, paths []string) (*github.ProbeResult, error)
+	ProbeConfig(ctx context.Context, repos []platform.Repository, paths []string, onQuery func()) (*github.ProbeResult, error)
 	ProbeConfigREST(ctx context.Context, repos []platform.Repository, paths []string) (*github.ProbeResult, error)
 	ReadRateLimit(ctx context.Context) (*workflows.Readings, error)
 	CheckRepo(ctx context.Context, repoID int64) (platform.RepoState, *platform.Repository, error)

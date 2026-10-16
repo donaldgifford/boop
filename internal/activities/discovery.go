@@ -152,11 +152,7 @@ func (a *Activities) discoverPage(ctx context.Context, api InstallationAPI, app 
 		resource = workflows.ResourceCore
 		res, err = api.ProbeConfigREST(ctx, repos, paths)
 	} else {
-		ids := make([]string, len(repos))
-		for i := range repos {
-			ids[i] = repos[i].NodeID
-		}
-		res, err = api.ProbeConfig(ctx, ids, paths)
+		res, err = api.ProbeConfig(ctx, repos, paths, nil)
 	}
 	if err != nil {
 		return 0, 0, fmt.Errorf("probe: %w", err)

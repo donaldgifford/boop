@@ -111,16 +111,20 @@ func (f *fakeInstall) probe(nodeIDs []string) *github.ProbeResult {
 	return res
 }
 
-func (f *fakeInstall) ProbeConfig(_ context.Context, nodeIDs, _ []string) (*github.ProbeResult, error) {
-	return f.probe(nodeIDs), nil
+func (f *fakeInstall) ProbeConfig(_ context.Context, repos []platform.Repository, _ []string, _ func()) (*github.ProbeResult, error) {
+	return f.probe(repoNodeIDs(repos)), nil
 }
 
 func (f *fakeInstall) ProbeConfigREST(_ context.Context, repos []platform.Repository, _ []string) (*github.ProbeResult, error) {
+	return f.probe(repoNodeIDs(repos)), nil
+}
+
+func repoNodeIDs(repos []platform.Repository) []string {
 	ids := make([]string, len(repos))
 	for i := range repos {
 		ids[i] = repos[i].NodeID
 	}
-	return f.probe(ids), nil
+	return ids
 }
 
 func (f *fakeInstall) ReadRateLimit(context.Context) (*workflows.Readings, error) {
