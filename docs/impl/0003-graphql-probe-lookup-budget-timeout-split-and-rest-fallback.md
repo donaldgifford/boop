@@ -179,20 +179,20 @@ tested against the real failure.
 
 #### Tasks
 
-- [ ] 2.1 `Server.SetGraphQLLookupLimit(n int)`: a probe whose
+- [x] 2.1 `Server.SetGraphQLLookupLimit(n int)`: a probe whose
   `len(ids) × len(expressions)` exceeds `n` answers **502 with an empty
   body**, as observed. Zero means no limit (the default, so existing tests
   are unchanged).
-- [ ] 2.2 `Server.SetGraphQLTimeoutShape(shape)`: choose whether an
+- [x] 2.2 `Server.SetGraphQLTimeoutShape(shape)`: choose whether an
   over-limit probe answers 502, 504, or 200 with `data: null` and
   GitHub's timeout message. Defaults to 502.
-- [ ] 2.3 Enforce the 100-id cap: more than 100 ids answers 200 with
+- [x] 2.3 Enforce the 100-id cap: more than 100 ids answers 200 with
   `errors[0].type = "ARGUMENT_LIMIT"` and GitHub's message, and no `data`.
-- [ ] 2.4 `Server.ProbeSizes() []int`: the ids per probe query, in order,
+- [x] 2.4 `Server.ProbeSizes() []int`: the ids per probe query, in order,
   for tests that assert the batch rule end to end. `ProbeQueries()` stays.
-- [ ] 2.5 `Server.ProbeTimeouts() int`: how many probes the limit
+- [x] 2.5 `Server.ProbeTimeouts() int`: how many probes the limit
   rejected.
-- [ ] 2.6 Unit tests in `test/fakegithub` for each knob.
+- [x] 2.6 Unit tests in `test/fakegithub` for each knob.
 
 #### Success Criteria
 

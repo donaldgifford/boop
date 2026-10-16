@@ -16,7 +16,8 @@ limitations under the License.
 
 // Package fakegithub is an in-process GitHub for boopd's tests: the
 // App endpoints (installations, mint, revoke), installation repository
-// paging, the GraphQL config probe, the REST contents probe, repository
+// paging, the GraphQL config probe (with GitHub's 100-id cap and an
+// optional lookup limit that times out as GitHub does), the REST contents probe, repository
 // lookups and /rate_limit. It serves the GHES path shape go-github uses
 // for a non-github.com base URL (/api/v3/..., /api/graphql) and records
 // mints and revokes for assertions.
@@ -83,6 +84,29 @@ type Rate struct {
 	Reset     time.Time
 }
 
+// TimeoutShape is how an over-limit GraphQL probe is answered: the
+// shapes GitHub uses for a query it cut at its 10-second limit
+// (INV-0002).
+type TimeoutShape int
+
+const (
+	// TimeoutBadGateway answers 502 with an empty body, as observed.
+	TimeoutBadGateway TimeoutShape = iota
+	// TimeoutGatewayTimeout answers 504 with an empty body.
+	TimeoutGatewayTimeout
+	// TimeoutGraphQLError answers 200 with no data and GitHub's
+	// timeout message.
+	TimeoutGraphQLError
+)
+
+// MaxNodeIDs is GitHub's cap on nodes(ids:); more is ARGUMENT_LIMIT.
+const MaxNodeIDs = 100
+
+// GraphQLTimeoutMessage is the error GitHub returns for a query it cut
+// short.
+const GraphQLTimeoutMessage = "Something went wrong while executing your query. " +
+	"This may be the result of a timeout, or it could be a GitHub bug."
+
 // Server is the fake GitHub. Fields are guarded by its lock; use the
 // setters and getters while it serves.
 type Server struct {
@@ -103,6 +127,10 @@ type Server struct {
 	revokes       []string
 	pageRequests  []int
 	probeQueries  int
+	probeSizes    []int
+	probeTimeouts int
+	lookupLimit   int
+	timeoutShape  TimeoutShape
 	rateReads     int
 }
 
@@ -191,6 +219,23 @@ func (s *Server) FailPage(n, times int) {
 	s.failPages[n] = times
 }
 
+// SetGraphQLLookupLimit makes a probe whose ids × expressions exceeds n
+// time out, as GitHub does past 10 s (answered per SetGraphQLTimeoutShape).
+// Zero, the default, means no limit.
+func (s *Server) SetGraphQLLookupLimit(n int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lookupLimit = n
+}
+
+// SetGraphQLTimeoutShape sets how an over-limit probe is answered; the
+// default is TimeoutBadGateway.
+func (s *Server) SetGraphQLTimeoutShape(shape TimeoutShape) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.timeoutShape = shape
+}
+
 // Mints returns the recorded mints.
 func (s *Server) Mints() []Mint {
 	s.mu.Lock()
@@ -217,6 +262,20 @@ func (s *Server) ProbeQueries() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.probeQueries
+}
+
+// ProbeSizes returns the ids each GraphQL probe query carried, in order.
+func (s *Server) ProbeSizes() []int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]int(nil), s.probeSizes...)
+}
+
+// ProbeTimeouts returns how many probes the lookup limit rejected.
+func (s *Server) ProbeTimeouts() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.probeTimeouts
 }
 
 // RateReads returns how many /rate_limit reads arrived.
@@ -414,6 +473,20 @@ func (s *Server) probe(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.probeQueries++
+	s.probeSizes = append(s.probeSizes, len(ids))
+	if len(ids) > MaxNodeIDs {
+		writeJSON(w, http.StatusOK, map[string]any{"errors": []any{map[string]any{
+			"type":    "ARGUMENT_LIMIT",
+			"path":    []string{"nodes"},
+			"message": fmt.Sprintf("You may not provide more than %d node ids; you provided %d.", MaxNodeIDs, len(ids)),
+		}}})
+		return
+	}
+	if s.lookupLimit > 0 && len(ids)*len(paths) > s.lookupLimit {
+		s.probeTimeouts++
+		s.writeTimeout(w)
+		return
+	}
 	byNode := make(map[string]*Repo, len(s.repos))
 	for i := range s.repos {
 		byNode[s.repos[i].NodeID] = &s.repos[i]
@@ -440,6 +513,18 @@ func (s *Server) probe(w http.ResponseWriter, r *http.Request) {
 		"rateLimit": map[string]any{"cost": s.probeCost, "remaining": g.Remaining, "resetAt": g.Reset.UTC().Format(time.RFC3339)},
 		"nodes":     nodes,
 	}})
+}
+
+// writeTimeout answers a probe GitHub would have cut at 10 s.
+func (s *Server) writeTimeout(w http.ResponseWriter) {
+	switch s.timeoutShape {
+	case TimeoutGatewayTimeout:
+		w.WriteHeader(http.StatusGatewayTimeout)
+	case TimeoutGraphQLError:
+		writeJSON(w, http.StatusOK, map[string]any{"data": nil, "errors": []any{message(GraphQLTimeoutMessage)}})
+	default:
+		w.WriteHeader(http.StatusBadGateway)
+	}
 }
 
 // contents answers GET contents/{path} for a repository whose only file
