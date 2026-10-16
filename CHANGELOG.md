@@ -26,6 +26,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - INV-0002 decisions, interim probe note, IMPL-0003 plan for issue 14
 - Restore IMPL-0002 toc anchors
 - *(impl)* IMPL-0003 record OQ decisions
+- GraphQL probe budget, split and fallback; amend DESIGN-0001
 
 ### Testing
 
