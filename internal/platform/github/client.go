@@ -312,12 +312,13 @@ func classifyErr(resp *gogithub.Response, err error) error {
 	var abuseErr *gogithub.AbuseRateLimitError
 	switch {
 	case errors.As(err, &rateErr):
-		retry := 0
+		// The time until the reset, never negative. Reset is a moment, not
+		// a count of seconds (INV-0002 Observation 6).
+		var retry time.Duration
 		if !rateErr.Rate.Reset.IsZero() {
-			// duration until reset, never negative
-			retry = max(0, int(rateErr.Rate.Reset.Unix()))
+			retry = max(0, time.Until(rateErr.Rate.Reset.Time).Round(time.Second))
 		}
-		return &platform.RateLimitedError{RetryAfter: durationFrom(retry), Cause: err}
+		return &platform.RateLimitedError{RetryAfter: retry, Cause: err}
 	case errors.As(err, &abuseErr):
 		retry := 0
 		if abuseErr.RetryAfter != nil {

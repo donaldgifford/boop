@@ -23,8 +23,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/time/rate"
 
@@ -448,22 +450,35 @@ func TestForbiddenClassifies(t *testing.T) {
 // generic 403 ErrUnauthorized branch.
 func TestTypedRateLimitErrorClassifies(t *testing.T) {
 	t.Parallel()
-
-	handlers := map[string]http.HandlerFunc{
-		testOrgReposRoute: func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("X-RateLimit-Remaining", "0")
-			w.Header().Set("X-RateLimit-Reset", "1700000000")
-			w.WriteHeader(http.StatusForbidden)
-			_, _ = w.Write([]byte(`{"message":"API rate limit exceeded for 1.2.3.4","documentation_url":"https://docs.github.com/v3"}`))
-		},
+	tests := []struct {
+		name     string
+		reset    time.Time
+		min, max time.Duration
+	}{
+		{name: "reset ahead", reset: time.Now().Add(90 * time.Second), min: 85 * time.Second, max: 90 * time.Second},
+		{name: "reset passed", reset: time.Unix(1700000000, 0), min: 0, max: 0},
 	}
-	c := newFakeClient(t, handlers)
-	_, err := c.Discover(context.Background(), platform.DiscoveryFilter{Owner: "o"})
-	if err == nil {
-		t.Fatal("err = nil")
-	}
-	if _, ok := errors.AsType[*platform.RateLimitedError](err); !ok {
-		t.Errorf("err = %v, want *RateLimitedError", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			handlers := map[string]http.HandlerFunc{
+				testOrgReposRoute: func(w http.ResponseWriter, _ *http.Request) {
+					w.Header().Set("X-RateLimit-Remaining", "0")
+					w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(tt.reset.Unix(), 10))
+					w.WriteHeader(http.StatusForbidden)
+					_, _ = w.Write([]byte(`{"message":"API rate limit exceeded for 1.2.3.4","documentation_url":"https://docs.github.com/v3"}`))
+				},
+			}
+			c := newFakeClient(t, handlers)
+			_, err := c.Discover(context.Background(), platform.DiscoveryFilter{Owner: "o"})
+			limited, ok := errors.AsType[*platform.RateLimitedError](err)
+			if !ok {
+				t.Fatalf("err = %v, want *RateLimitedError", err)
+			}
+			if limited.RetryAfter < tt.min || limited.RetryAfter > tt.max {
+				t.Errorf("RetryAfter = %v, want between %v and %v (the time until the reset)", limited.RetryAfter, tt.min, tt.max)
+			}
+		})
 	}
 }
 
