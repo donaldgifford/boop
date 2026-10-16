@@ -471,6 +471,9 @@ E2E first, per IMPL-0001 OQ3:
 
 ## Open Questions
 
+**Decided 2026-10-15: option a for OQ1–OQ8.** The plan above is written
+to them; the options are kept as the record.
+
 ### OQ1: Which branch carries the code?
 
 - **a (recommended): a new `fix/issue-14` branch off `main` after PR #15
