@@ -29,6 +29,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Testing
 
 - *(fakegithub)* GitHub's GraphQL limits: lookup timeout, timeout shapes, 100-id cap
+- *(e2e)* Discovery falls back to REST when every GraphQL probe times out
 
 ## [0.3.0] - 2026-10-13
 
