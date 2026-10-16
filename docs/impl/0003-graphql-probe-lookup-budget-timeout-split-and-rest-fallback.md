@@ -292,11 +292,11 @@ flowchart TD
 
 #### Tasks
 
-- [ ] 5.1 `discoverPage` passes `repos` and a hook that calls
+- [x] 5.1 `discoverPage` passes `repos` and a hook that calls
   `activity.RecordHeartbeat(ctx, prog)` with the progress so far. A retry
   then resumes at the same page, as today; the hook only keeps the
   attempt alive.
-- [ ] 5.2 `Metrics` interface gains:
+- [x] 5.2 `Metrics` interface gains:
   - `ProbeSplits(installationID int64, n int)`, for
     `boopd_discovery_probe_splits_total{installation}`;
   - `ProbeFallbacks(installationID int64, n int)`, for
@@ -304,9 +304,9 @@ flowchart TD
 
   Implement both in `internal/observability/metrics.go` and the activity
   test fake (OQ5 a).
-- [ ] 5.3 When a page had splits, log at info with the installation, page,
+- [x] 5.3 When a page had splits, log at info with the installation, page,
   splits and fallbacks.
-- [ ] 5.4 Activity tests (`internal/activities/discovery_test.go`, Temporal
+- [x] 5.4 Activity tests (`internal/activities/discovery_test.go`, Temporal
   test environment and `test/fakegithub`):
   - **Update** `TestDiscoverInstallation_GraphQL` to the batch rule:
     55 queries for 250 repositories at 10 paths, asserted with
@@ -321,8 +321,10 @@ flowchart TD
     - every configured repository is still signalled;
     - the fallback metric is 170, and the summary matches the
       no-limit run.
-  - **New** `TestDiscoverInstallation_HeartbeatsPerQuery`: the recorded
-    heartbeats outnumber the pages.
+  - **New** `TestDiscoverInstallation_HeartbeatsPerQuery`: the probe's
+    hook (which heartbeats) runs once per query and outnumbers the pages.
+    It counts hook calls through a wrapping client, because the SDK
+    throttles heartbeats before the test listener sees them.
 - [ ] 5.5 Worker e2e (`test/e2e/worker_test.go`, k3d): a `workerOption`
   sets a lookup limit of 5 on the fake. Discovery still starts
   `repo/github/<id>` for the config repository through the REST fallback,

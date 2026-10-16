@@ -38,6 +38,12 @@ type Metrics interface {
 	// ProbeCost adds one probe batch's spend to
 	// boopd_discovery_probe_cost{installation,resource}.
 	ProbeCost(installationID int64, resource string, cost int)
+	// ProbeSplits adds n timed-out GraphQL slices that were halved to
+	// boopd_discovery_probe_splits_total{installation}.
+	ProbeSplits(installationID int64, n int)
+	// ProbeFallbacks adds n repositories the GraphQL probe checked over
+	// REST to boopd_discovery_probe_fallbacks_total{installation}.
+	ProbeFallbacks(installationID int64, n int)
 	// ConfigProbed counts one probed repository in
 	// boopd_discovery_repos_total{installation,config}, config being
 	// ConfigPresent, ConfigAbsent or ConfigUnparsed.
@@ -78,6 +84,12 @@ func (NopMetrics) TokenRevocation(string) {}
 
 // ProbeCost implements Metrics.
 func (NopMetrics) ProbeCost(int64, string, int) {}
+
+// ProbeSplits implements Metrics.
+func (NopMetrics) ProbeSplits(int64, int) {}
+
+// ProbeFallbacks implements Metrics.
+func (NopMetrics) ProbeFallbacks(int64, int) {}
 
 // ConfigProbed implements Metrics.
 func (NopMetrics) ConfigProbed(int64, string) {}

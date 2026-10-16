@@ -46,6 +46,8 @@ const (
 	TokenRevocationsTotal = "boopd_token_revocations_total" //nolint:gosec // G101: a metric name
 	DiscoveryProbeCost    = "boopd_discovery_probe_cost"
 	DiscoveryReposTotal   = "boopd_discovery_repos_total"
+	DiscoveryProbeSplits  = "boopd_discovery_probe_splits_total"
+	DiscoveryProbeFalls   = "boopd_discovery_probe_fallbacks_total"
 	KubeRequestsTotal     = "boopd_kube_requests_total"
 )
 
@@ -66,6 +68,8 @@ type Metrics struct {
 	mints       metric.Int64Counter
 	revocations metric.Int64Counter
 	probeCost   metric.Int64Counter
+	splits      metric.Int64Counter
+	fallbacks   metric.Int64Counter
 	repos       metric.Int64Counter
 	kube        metric.Int64Counter
 }
@@ -100,6 +104,8 @@ func NewMetrics(mp metric.MeterProvider) (*Metrics, error) {
 	out.mints = counter(TokenMintsTotal, "Run token mints by outcome.")
 	out.revocations = counter(TokenRevocationsTotal, "Run token revocations by outcome.")
 	out.probeCost = counter(DiscoveryProbeCost, "Discovery config-probe spend by installation and resource.")
+	out.splits = counter(DiscoveryProbeSplits, "GraphQL config-probe slices halved after a timeout, by installation.")
+	out.fallbacks = counter(DiscoveryProbeFalls, "Repositories the GraphQL config probe checked over REST after a timeout, by installation.")
 	out.repos = counter(
 		DiscoveryReposTotal,
 		"Repositories discovery probed, by installation and whether a config file was present, absent or unparsed.",
@@ -155,6 +161,18 @@ func (m *Metrics) TokenRevocation(outcome string) {
 func (m *Metrics) ProbeCost(installationID int64, resource string, cost int) {
 	m.probeCost.Add(context.Background(), int64(cost), metric.WithAttributes(
 		attribute.String("installation", strconv.FormatInt(installationID, 10)), attribute.String("resource", resource)))
+}
+
+// ProbeSplits implements activities.Metrics.
+func (m *Metrics) ProbeSplits(installationID int64, n int) {
+	m.splits.Add(context.Background(), int64(n), metric.WithAttributes(
+		attribute.String("installation", strconv.FormatInt(installationID, 10))))
+}
+
+// ProbeFallbacks implements activities.Metrics.
+func (m *Metrics) ProbeFallbacks(installationID int64, n int) {
+	m.fallbacks.Add(context.Background(), int64(n), metric.WithAttributes(
+		attribute.String("installation", strconv.FormatInt(installationID, 10))))
 }
 
 // ConfigProbed implements activities.Metrics.

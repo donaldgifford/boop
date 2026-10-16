@@ -6,6 +6,7 @@ import (
 	"maps"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/donaldgifford/boop/internal/activities"
 	"github.com/donaldgifford/boop/internal/config"
 	"github.com/donaldgifford/boop/internal/platform"
+	"github.com/donaldgifford/boop/internal/platform/github"
 	"github.com/donaldgifford/boop/internal/workflows"
 	"github.com/donaldgifford/boop/test/fakegithub"
 )
@@ -107,11 +109,32 @@ type discoveryHarness struct {
 	mu      sync.Mutex
 }
 
-// probedMetrics records ConfigProbed counts by config attribute.
+// probedMetrics records ConfigProbed counts by config attribute and the
+// probe's splits and fallbacks.
 type probedMetrics struct {
 	activities.NopMetrics
-	mu     sync.Mutex
-	counts map[string]int
+	mu        sync.Mutex
+	counts    map[string]int
+	splits    int
+	fallbacks int
+}
+
+func (m *probedMetrics) ProbeSplits(_ int64, n int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.splits += n
+}
+
+func (m *probedMetrics) ProbeFallbacks(_ int64, n int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.fallbacks += n
+}
+
+func (m *probedMetrics) splitsAndFallbacks() (splits, fallbacks int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.splits, m.fallbacks
 }
 
 func (m *probedMetrics) ConfigProbed(_ int64, outcome string) {
@@ -123,7 +146,7 @@ func (m *probedMetrics) ConfigProbed(_ int64, outcome string) {
 	m.counts[outcome]++
 }
 
-func newDiscovery(t *testing.T, gh *fakegithub.Server, probe string) *discoveryHarness {
+func newDiscovery(t *testing.T, gh *fakegithub.Server, probe string, opts ...func(*activities.Deps)) *discoveryHarness {
 	t.Helper()
 	h := &discoveryHarness{gh: gh, start: &starter{}, metrics: &probedMetrics{}}
 	cfg := &config.Config{
@@ -134,7 +157,11 @@ func newDiscovery(t *testing.T, gh *fakegithub.Server, probe string) *discoveryH
 			Budget:    config.Budget{ReserveFraction: 0.1},
 		}},
 	}
-	acts := activities.New(&activities.Deps{Config: cfg, Temporal: h.start, TaskQueue: "boopd", Metrics: h.metrics})
+	deps := &activities.Deps{Config: cfg, Temporal: h.start, TaskQueue: "boopd", Metrics: h.metrics}
+	for _, opt := range opts {
+		opt(deps)
+	}
+	acts := activities.New(deps)
 	h.env = (&testsuite.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	acts.Register(h.env)
 	h.env.SetOnActivityHeartbeatListener(func(_ *activity.Info, d converter.EncodedValues) {
@@ -221,6 +248,119 @@ func TestDiscoverInstallation_GraphQL(t *testing.T) {
 func equalDiscovered(a, b workflows.Discovered) bool {
 	return a.Slug == b.Slug && a.DefaultBranch == b.DefaultBranch && a.InstallationID == b.InstallationID &&
 		a.DiscoveryInterval == b.DiscoveryInterval && slices.Equal(a.Extends, b.Extends)
+}
+
+// TestDiscoverInstallation_LargeInstallation is issue #14's shape: 170
+// repositories and the 10 default paths against a GitHub that times out
+// above 100 lookups. v0.3.0 sent 100 x 10 per query and failed every
+// attempt.
+func TestDiscoverInstallation_LargeInstallation(t *testing.T) {
+	t.Parallel()
+	repos := fleet(170)
+	gh := fastFake(t, repos)
+	gh.SetGraphQLLookupLimit(100)
+	h := newDiscovery(t, gh, config.ProbeGraphQL)
+
+	sum, err := h.run()
+	if err != nil {
+		t.Fatalf("DiscoverInstallation: %v", err)
+	}
+	want := onboardedIDs(repos, 1)
+	if got := h.start.ids(); !slices.Equal(got, want) {
+		t.Fatalf("signalled %d workflows, want %d", len(got), len(want))
+	}
+	if sum.Seen != 170 || sum.Onboarded != len(want) {
+		t.Errorf("summary = %+v", *sum)
+	}
+	if n := gh.ProbeTimeouts(); n != 0 {
+		t.Errorf("%d probes timed out, want none", n)
+	}
+	if splits, fallbacks := h.metrics.splitsAndFallbacks(); splits != 0 || fallbacks != 0 {
+		t.Errorf("splits/fallbacks = %d/%d, want 0/0", splits, fallbacks)
+	}
+}
+
+// TestDiscoverInstallation_SplitsAndFallsBack runs the same installation
+// against a limit below one repository's 10 paths: every probe times out,
+// every repository ends on REST, and the pass still onboards them all.
+func TestDiscoverInstallation_SplitsAndFallsBack(t *testing.T) {
+	t.Parallel()
+	repos := fleet(170)
+	gh := fastFake(t, repos)
+	gh.SetGraphQLLookupLimit(9)
+	h := newDiscovery(t, gh, config.ProbeGraphQL)
+
+	sum, err := h.run()
+	if err != nil {
+		t.Fatalf("DiscoverInstallation: %v", err)
+	}
+	want := onboardedIDs(repos, 1)
+	if got := h.start.ids(); !slices.Equal(got, want) {
+		t.Fatalf("signalled %d workflows, want %d", len(got), len(want))
+	}
+	if sum.Seen != 170 || sum.Onboarded != len(want) {
+		t.Errorf("summary = %+v", *sum)
+	}
+	probed := 0
+	for _, r := range repos {
+		if !r.Fork {
+			probed++
+		}
+	}
+	if splits, fallbacks := h.metrics.splitsAndFallbacks(); splits == 0 || fallbacks != probed {
+		t.Errorf("splits/fallbacks = %d/%d, want some splits and %d fallbacks (every probed repository)", splits, fallbacks, probed)
+	}
+}
+
+// hookCounting wraps the real clients and counts the probe's onQuery
+// calls, which is where DiscoverInstallation heartbeats. The SDK
+// throttles heartbeats, so the listener alone cannot count them.
+type hookCounting struct {
+	activities.GitHub
+	calls, nilHooks *atomic.Int32
+}
+
+func (g hookCounting) Installation(app *config.App, id int64, paths []string) (activities.InstallationAPI, error) {
+	api, err := g.GitHub.Installation(app, id, paths)
+	return hookCountingAPI{InstallationAPI: api, g: g}, err
+}
+
+type hookCountingAPI struct {
+	activities.InstallationAPI
+	g hookCounting
+}
+
+func (a hookCountingAPI) ProbeConfig(ctx context.Context, repos []platform.Repository, paths []string, onQuery func()) (*github.ProbeResult, error) {
+	if onQuery == nil {
+		a.g.nilHooks.Add(1)
+		onQuery = func() {}
+	}
+	return a.InstallationAPI.ProbeConfig(ctx, repos, paths, func() {
+		a.g.calls.Add(1)
+		onQuery()
+	})
+}
+
+// TestDiscoverInstallation_HeartbeatsPerQuery: a page's probe is many
+// queries, and the activity's hook runs after each, so a long split
+// never outlasts the heartbeat timeout.
+func TestDiscoverInstallation_HeartbeatsPerQuery(t *testing.T) {
+	t.Parallel()
+	var calls, nilHooks atomic.Int32
+	gh := fastFake(t, fleet(250))
+	h := newDiscovery(t, gh, config.ProbeGraphQL, func(d *activities.Deps) {
+		d.GitHub = hookCounting{GitHub: activities.NewGitHub(), calls: &calls, nilHooks: &nilHooks}
+	})
+	sum, err := h.run()
+	if err != nil {
+		t.Fatalf("DiscoverInstallation: %v", err)
+	}
+	if nilHooks.Load() != 0 {
+		t.Errorf("%d probes had no hook, want every page to pass one", nilHooks.Load())
+	}
+	if int(calls.Load()) != gh.ProbeQueries() || int(calls.Load()) <= sum.Pages {
+		t.Errorf("hook ran %d times for %d queries and %d pages, want once per query", calls.Load(), gh.ProbeQueries(), sum.Pages)
+	}
 }
 
 func TestDiscoverInstallation_REST(t *testing.T) {

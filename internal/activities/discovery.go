@@ -73,7 +73,11 @@ func (a *Activities) DiscoverInstallation(ctx context.Context, in *workflows.Dis
 		if err := a.awaitReserve(ctx, api, app, prog); err != nil {
 			return err
 		}
-		onboarded, cost, err := a.discoverPage(ctx, api, app, in.InstallationID, p.Repos)
+		// A page's probe can split into many queries; heartbeat after each
+		// so the attempt outlives them. The progress is the last page's, so
+		// a retry still resumes at this one.
+		beat := func() { activity.RecordHeartbeat(ctx, prog) }
+		onboarded, cost, err := a.discoverPage(ctx, api, app, in.InstallationID, p, beat)
 		if err != nil {
 			return err
 		}
@@ -137,11 +141,13 @@ func underReserve(r *workflows.Readings, fraction float64, now time.Time) (time.
 }
 
 // discoverPage probes one page and signals every repository with a config
-// file, counting each by its config outcome. It returns how many it
-// signalled and the probe's cost.
+// file, counting each by its config outcome. The GraphQL probe runs beat
+// after each query. It returns how many it signalled and the probe's
+// cost.
 func (a *Activities) discoverPage(ctx context.Context, api InstallationAPI, app *config.App,
-	installationID int64, repos []platform.Repository,
+	installationID int64, page github.Page, beat func(),
 ) (onboarded, cost int, err error) {
+	repos := page.Repos
 	if len(repos) == 0 {
 		return 0, 0, nil
 	}
@@ -152,12 +158,18 @@ func (a *Activities) discoverPage(ctx context.Context, api InstallationAPI, app 
 		resource = workflows.ResourceCore
 		res, err = api.ProbeConfigREST(ctx, repos, paths)
 	} else {
-		res, err = api.ProbeConfig(ctx, repos, paths, nil)
+		res, err = api.ProbeConfig(ctx, repos, paths, beat)
 	}
 	if err != nil {
 		return 0, 0, fmt.Errorf("probe: %w", err)
 	}
 	a.metrics.ProbeCost(installationID, resource, res.Cost)
+	a.metrics.ProbeSplits(installationID, res.Splits)
+	a.metrics.ProbeFallbacks(installationID, res.Fallbacks)
+	if res.Splits > 0 {
+		a.log.InfoContext(ctx, "config probe timed out and split", "app", app.Name, "installation", installationID,
+			"page", page.Number, "splits", res.Splits, "fallbacks", res.Fallbacks)
+	}
 
 	now := a.now()
 	for i := range repos {
