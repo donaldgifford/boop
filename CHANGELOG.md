@@ -28,6 +28,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(impl)* IMPL-0003 record OQ decisions
 - GraphQL probe budget, split and fallback; amend DESIGN-0001
 - *(impl)* IMPL-0003 in progress
+- *(impl)* IMPL-0003 PR open and green; post-merge steps deferred
 
 ### Testing
 
