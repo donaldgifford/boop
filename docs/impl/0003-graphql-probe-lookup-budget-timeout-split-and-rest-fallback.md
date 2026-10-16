@@ -407,9 +407,12 @@ flowchart TD
 
   Each is followed by `git cliff -o CHANGELOG.md` and a
   `chore: update changelog` commit.
-- [ ] 8.2 One PR with `Closes #14` and the `patch` label (OQ2 a).
-- [ ] 8.3 Iterate CI to green, including the E2E Tests job.
-- [ ] 8.4 After the release, check it shipped: `helm show chart` and the
+- [x] 8.2 One PR with `Closes #14` and the `patch` label (OQ2 a):
+  [#17](https://github.com/donaldgifford/boop/pull/17).
+- [x] 8.3 Iterate CI to green, including the E2E Tests job. PR #17: all
+  checks passed on the first push, and `just e2e` passed locally
+  (2026-10-15).
+- [ ] 8.4 **deferred - human required** (the merge cuts the release). After the release, check it shipped: `helm show chart` and the
   image tag match the release, and the release notes list the fix.
 - [ ] 8.5 **deferred - human required:** fartlab (OQ8 a).
   - Upgrade to the release.
@@ -419,7 +422,7 @@ flowchart TD
   - Confirm installation 170572643 completes with every configured
     repository onboarded, and `boopd_discovery_probe_splits_total` stays
     at 0.
-- [ ] 8.6 Set this document's status to Completed and check its tasks
+- [ ] 8.6 **deferred - human required** (after 8.4 and 8.5). Set this document's status to Completed and check its tasks
   off; mark DESIGN-0001's amendment as landed.
 
 #### Success Criteria
