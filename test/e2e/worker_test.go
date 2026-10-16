@@ -277,6 +277,39 @@ func TestWorker_DiscoveryRunRecheck(t *testing.T) {
 	}
 }
 
+// TestWorker_DiscoveryFallsBackToREST is issue #14 end to end: a GitHub
+// that times out every GraphQL probe above 5 lookups, below one
+// repository's 10 paths. Discovery splits each probe down to single
+// repositories, checks them over REST, and still onboards the config
+// repository, whose first run follows.
+func TestWorker_DiscoveryFallsBackToREST(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
+	defer cancel()
+	h := startWorker(t, "default", 10*time.Minute, activities.RunTimings{Heartbeat: time.Second},
+		func(_ *config.Config, gh *fakegithub.Server) { gh.SetGraphQLLookupLimit(5) })
+
+	h.triggerDiscovery(ctx, t)
+	eventually(t, 2*time.Minute, "the first run_complete", func() bool { return len(h.log.lines("run_complete")) == 1 })
+
+	if n := h.gh.ProbeTimeouts(); n == 0 {
+		t.Error("no GraphQL probe timed out, want every one over the limit")
+	}
+	if len(h.log.lines("config probe timed out and split")) == 0 {
+		t.Error("no split logged")
+	}
+	if _, ok := h.repoState(ctx, t, h.repoID+1); ok {
+		t.Error("a RepoWorkflow started for the repository without the config file")
+	}
+	s, ok := h.repoState(ctx, t, h.repoID)
+	if !ok || s.LastRun == nil || s.LastRun.Outcome != workflows.OutcomeSucceeded {
+		t.Fatalf("state = %+v (found %v), want a Succeeded run", s, ok)
+	}
+	if !slices.Equal(s.Extends, []string{"config:recommended"}) {
+		t.Errorf("state extends = %q, want config:recommended read over REST", s.Extends)
+	}
+}
+
 // TestWorker_GracefulStop: SIGTERM (context cancel) with a run in flight
 // stops polling but keeps the activity to its soft deadline, which
 // deletes the Job and logs run_complete before the worker returns.

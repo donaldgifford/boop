@@ -325,7 +325,7 @@ flowchart TD
     hook (which heartbeats) runs once per query and outnumbers the pages.
     It counts hook calls through a wrapping client, because the SDK
     throttles heartbeats before the test listener sees them.
-- [ ] 5.5 Worker e2e (`test/e2e/worker_test.go`, k3d): a `workerOption`
+- [x] 5.5 Worker e2e (`test/e2e/worker_test.go`, k3d): a `workerOption`
   sets a lookup limit of 5 on the fake. Discovery still starts
   `repo/github/<id>` for the config repository through the REST fallback,
   and its first run completes. This reuses `TestWorker_DiscoveryRunRecheck`'s
@@ -343,16 +343,16 @@ flowchart TD
 
 #### Tasks
 
-- [ ] 6.1 `classifyErr`: for `*RateLimitError`, compute
+- [x] 6.1 `classifyErr`: for `*RateLimitError`, compute
   `RetryAfter = max(0, time.Until(rateErr.Rate.Reset.Time))`, rounded to
   seconds, and drop the absolute-epoch `int`.
-- [ ] 6.2 Extend `TestTypedRateLimitErrorClassifies`:
+- [x] 6.2 Extend `TestTypedRateLimitErrorClassifies`:
   - a reset 90 s ahead gives a `RetryAfter` between 85 and 90 s;
   - a reset in the past gives 0.
-- [ ] 6.3 Open a follow-up issue: "discovery: honour secondary-limit
+- [x] 6.3 Open a follow-up issue: "discovery: honour secondary-limit
   Retry-After". Return an `ApplicationError` with `NextRetryDelay` from
   `DiscoverInstallation` on `RateLimitedError`, and link INV-0002
-  Observation 6.
+  Observation 6. Opened as [#16](https://github.com/donaldgifford/boop/issues/16).
 
 #### Success Criteria
 
