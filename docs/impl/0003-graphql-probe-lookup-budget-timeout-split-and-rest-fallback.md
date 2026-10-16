@@ -1,7 +1,7 @@
 ---
 id: IMPL-0003
 title: "GraphQL probe lookup budget, timeout split and REST fallback (issue 14)"
-status: Draft
+status: In Progress
 author: Donald Gifford
 created: 2026-10-15
 ---
@@ -399,7 +399,7 @@ flowchart TD
 
 #### Tasks
 
-- [ ] 8.1 Conventional commits per phase:
+- [x] 8.1 Conventional commits per phase:
   - `test(fakegithub): …`;
   - `fix(platform): …` for Phases 3, 4 and 6;
   - `feat(activities): …` for the metrics;
