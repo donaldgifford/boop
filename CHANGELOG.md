@@ -5,6 +5,10 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Features
+
+- *(activities)* Heartbeat per probe query; count probe splits and fallbacks
+
 ### Bug Fixes
 
 - *(platform)* Size GraphQL probe batches from a lookup budget
