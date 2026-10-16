@@ -104,7 +104,7 @@ app "boop-bot" { … } # one or more
 | Setting | Type | Default | Description |
 | - | - | - | - |
 | `image` | string | required | The Renovate image every Job runs, pinned by digest (`name:tag@sha256:<64 hex>`). Renovate keeps the tag and digest current. |
-| `config_paths` | list of strings | Renovate's GitHub names | The files a repository is onboarded by, in precedence order (ADR-0005, DESIGN-0001 OQ3). The default is `renovate.json`, `renovate.jsonc`, `renovate.json5`, `.github/renovate.json`, `.github/renovate.jsonc`, `.github/renovate.json5`, `.renovaterc`, `.renovaterc.json`, `.renovaterc.jsonc`, `.renovaterc.json5`: the order Renovate reads them in, so the first one present is the file Renovate uses and the one discovery parses for `extends`. At most 16 distinct, clean paths relative to the repository root. An empty list means the default. |
+| `config_paths` | list of strings | Renovate's GitHub names | The files a repository is onboarded by, in precedence order (ADR-0005, DESIGN-0001 OQ3). The default is `renovate.json`, `renovate.jsonc`, `renovate.json5`, `.github/renovate.json`, `.github/renovate.jsonc`, `.github/renovate.json5`, `.renovaterc`, `.renovaterc.json`, `.renovaterc.jsonc`, `.renovaterc.json5`: the order Renovate reads them in, so the first one present is the file Renovate uses and the one discovery parses for `extends`. At most 16 distinct, clean paths relative to the repository root. An empty list means the default. Each path is one GraphQL lookup per repository during discovery, so a shorter list means fewer probe queries: `["renovate.json5"]`, the file repo-guardian writes, probes 100 repositories per query instead of 10. |
 | `shared_preset` | string | none | Prepended to `extends` of every run. Its repository is added to each run token's scope (DESIGN-0001 OQ2), so it must be in every installation. A GitHub-hosted preset must name a `.json` file: Renovate only fetches `.json` from GitHub, and `.json5` is rejected here rather than failing at run time. |
 | `log_level` | string | `info` | Renovate's `LOG_LEVEL` in the Job: `trace`, `debug`, `info`, `warn`, `error` or `fatal`. The worker's own level is the chart's `config.logLevel`. |
 | `dry_run` | string | none | Renovate's `dryRun` for every run: `extract`, `lookup` or `full`. Overrides any `dryRun` in `global`. Unset, runs push branches and open PRs. |
@@ -308,13 +308,17 @@ this Secret; Job pods never see it (ADR-0009).
 | Setting | Type | Default | Description |
 | - | - | - | - |
 | `every` | duration | `6h` | The discovery Schedule's interval. A repository unseen for 3 × `every` is checked and, if it is gone or has no config file, offboarded. |
-| `probe` | string | `graphql` | How config files are found. `graphql` asks for every `config_paths` entry for 100 repositories in one query. `rest` lists the root and `.github` per repository, at most three calls each; it is the fallback. **Until IMPL-0003 ships, use `rest` for an installation above about 40 repositories:** with the 10 default paths, a 100-repository query exceeds GitHub's 10-second GraphQL limit and every attempt fails with 502 (issue #14, INV-0002). |
+| `probe` | string | `graphql` | How config files are found. `graphql` asks for every `config_paths` entry in one query per 100 / paths repositories (about 100 lookups, at most 100 repositories), which stays well inside GitHub's 10-second query limit. A query that still times out is split in half, down to single repositories, which are checked over REST (INV-0002). `rest` lists the root and `.github` per repository, at most three calls each. |
 | `skip_forks` | bool | `true` | Skip forked repositories. |
 | `skip_archived` | bool | `true` | Skip archived repositories. |
 
 Each probed repository counts in
 `boopd_discovery_repos_total{installation,config}` as `present`, `absent`
-or `unparsed`. A config file that does not parse is still onboarded,
+or `unparsed`. A GraphQL probe that timed out and was halved counts in
+`boopd_discovery_probe_splits_total{installation}`, and each repository it
+then checked over REST in `boopd_discovery_probe_fallbacks_total{installation}`.
+Splits at the default `config_paths` mean GitHub is slower than INV-0002
+measured. A config file that does not parse is still onboarded,
 without its `extends`, and logged at warn.
 
 ### budget

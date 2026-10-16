@@ -34,9 +34,14 @@ import (
 )
 
 const (
-	// probeBatch is how many node ids one GraphQL probe carries. It is a
-	// design choice, not a documented limit (DESIGN-0001 § DiscoveryWorkflow).
-	probeBatch = 100
+	// probeLookups is how many object(expression:) lookups one GraphQL
+	// probe carries: about 2 s of GitHub's time at 15-25 ms each, five
+	// times under its 10-second query limit (INV-0002).
+	probeLookups = 100
+
+	// maxProbeIDs is GitHub's cap on nodes(ids:); more is rejected with
+	// ARGUMENT_LIMIT (INV-0002).
+	maxProbeIDs = 100
 
 	// maxConfigBytes bounds the config text parsed for extends; a larger
 	// file is reported unparsed.
@@ -71,6 +76,11 @@ type ProbeResult struct {
 	// Cost is the sum of rateLimit.cost over the GraphQL queries; the
 	// pass records it (boopd_discovery_probe_cost). Zero for REST.
 	Cost int
+	// Splits is how many timed-out GraphQL slices were halved, and
+	// Fallbacks how many repositories were then probed over REST
+	// (ProbeConfig only). Queries includes those REST calls.
+	Splits    int
+	Fallbacks int
 	// Remaining and ResetAt are the GraphQL budget after the last query.
 	Remaining int
 	ResetAt   time.Time
@@ -123,28 +133,97 @@ func probeQuery(n int) string {
 		"}"
 }
 
+// probeBatchSize is how many repositories one probe query carries for
+// paths paths: the lookup budget split across them, at least 1 and at
+// most GitHub's 100-id cap.
+func probeBatchSize(paths int) int {
+	return min(max(probeLookups/max(paths, 1), 1), maxProbeIDs)
+}
+
+// errProbeTimeout marks a GraphQL probe GitHub cut at its 10-second
+// limit: HTTP 502 or 504, or a 200 with no data and a timeout message.
+// ProbeConfig splits the slice instead of failing; it also wraps the
+// classified error, so it stays platform.ErrTransient if it escapes.
+var errProbeTimeout = errors.New("github: probe timed out")
+
 // ProbeConfig asks GitHub's GraphQL API which config file each repository
-// carries on its default branch (HEAD), one query per 100 node ids with
-// every path in the same query, and parses extends from the first one
-// present (DESIGN-0001 OQ3). paths is in precedence order; empty means
+// carries on its default branch (HEAD), with every path in the same query,
+// and parses extends from the first one present (DESIGN-0001 OQ3). Each
+// query carries probeBatchSize(len(paths)) repositories, so it stays near
+// probeLookups lookups (INV-0002). A query that times out is halved and
+// each half retried; a single repository that still times out is probed
+// over REST. Any other error ends the probe. Answers are keyed by NodeID.
+// onQuery, when not nil, runs after every GraphQL query and every REST
+// fallback, so a caller can heartbeat. paths is in precedence order; empty means
 // the client's. Every query's rateLimit.cost is read and summed into the
 // result.
-func (c *Client) ProbeConfig(ctx context.Context, nodeIDs, paths []string) (*ProbeResult, error) {
+func (c *Client) ProbeConfig(ctx context.Context, repos []platform.Repository, paths []string, onQuery func()) (*ProbeResult, error) {
 	if len(paths) == 0 {
 		paths = c.paths()
 	}
-	res := &ProbeResult{Configs: make(map[string]ConfigProbe, len(nodeIDs))}
-	for _, id := range nodeIDs {
-		res.Configs[id] = ConfigProbe{}
+	res := &ProbeResult{Configs: make(map[string]ConfigProbe, len(repos))}
+	for i := range repos {
+		res.Configs[repos[i].NodeID] = ConfigProbe{}
 	}
-	query := probeQuery(len(paths))
-	for start := 0; start < len(nodeIDs); start += probeBatch {
-		batch := nodeIDs[start:min(start+probeBatch, len(nodeIDs))]
-		if err := c.probeBatch(ctx, query, batch, paths, res); err != nil {
+	p := &prober{c: c, query: probeQuery(len(paths)), paths: paths, res: res, onQuery: onQuery}
+	size := probeBatchSize(len(paths))
+	for start := 0; start < len(repos); start += size {
+		if err := p.slice(ctx, repos[start:min(start+size, len(repos))]); err != nil {
 			return nil, err
 		}
 	}
 	return res, nil
+}
+
+// prober is one ProbeConfig call's state.
+type prober struct {
+	c       *Client
+	query   string
+	paths   []string
+	res     *ProbeResult
+	onQuery func()
+}
+
+// slice probes repos in one query; on a timeout it halves them, down to
+// one repository, which it probes over REST.
+func (p *prober) slice(ctx context.Context, repos []platform.Repository) error {
+	ids := make([]string, len(repos))
+	for i := range repos {
+		ids[i] = repos[i].NodeID
+	}
+	err := p.c.probeBatch(ctx, p.query, ids, p.paths, p.res)
+	p.queried()
+	if !errors.Is(err, errProbeTimeout) {
+		return err
+	}
+	if len(repos) == 1 {
+		return p.fallback(ctx, &repos[0])
+	}
+	p.res.Splits++
+	half := len(repos) / 2
+	if err := p.slice(ctx, repos[:half]); err != nil {
+		return err
+	}
+	return p.slice(ctx, repos[half:])
+}
+
+// fallback probes one repository over REST.
+func (p *prober) fallback(ctx context.Context, repo *platform.Repository) error {
+	probe, calls, err := p.c.probeREST(ctx, repo, p.paths)
+	p.res.Queries += calls
+	p.res.Fallbacks++
+	p.queried()
+	if err != nil {
+		return err
+	}
+	p.res.Configs[repo.NodeID] = probe
+	return nil
+}
+
+func (p *prober) queried() {
+	if p.onQuery != nil {
+		p.onQuery()
+	}
 }
 
 func (c *Client) probeBatch(ctx context.Context, query string, ids, paths []string, res *ProbeResult) error {
@@ -163,14 +242,23 @@ func (c *Client) probeBatch(ctx context.Context, query string, ids, paths []stri
 	resp, err := c.gh.Do(ctx, req, &out)
 	res.Queries++
 	if err != nil {
-		return classifyErr(resp, err)
+		classified := classifyErr(resp, err)
+		if resp != nil && (resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusGatewayTimeout) {
+			return fmt.Errorf("%w: %w", errProbeTimeout, classified)
+		}
+		return classified
 	}
 	if out.Data == nil {
 		msgs := make([]string, 0, len(out.Errors))
 		for _, e := range out.Errors {
 			msgs = append(msgs, e.Message)
 		}
-		return fmt.Errorf("%w: github: probe returned no data: %s", platform.ErrTransient, strings.Join(msgs, "; "))
+		joined := strings.Join(msgs, "; ")
+		err := fmt.Errorf("%w: github: probe returned no data: %s", platform.ErrTransient, joined)
+		if strings.Contains(strings.ToLower(joined), "timeout") {
+			return fmt.Errorf("%w: %w", errProbeTimeout, err)
+		}
+		return err
 	}
 	res.Cost += out.Data.RateLimit.Cost
 	res.Remaining = out.Data.RateLimit.Remaining

@@ -19,6 +19,7 @@ import (
 
 	"github.com/donaldgifford/boop/internal/platform"
 	ghclient "github.com/donaldgifford/boop/internal/platform/github"
+	"github.com/donaldgifford/boop/test/fakegithub"
 )
 
 // graphqlServer answers the config probe. files maps node id to that
@@ -193,58 +194,91 @@ func nodeIDs(n int) []string {
 	return ids
 }
 
-func defaultExprs() []string {
-	out := make([]string, len(platform.DefaultConfigPaths))
-	for i, p := range platform.DefaultConfigPaths {
-		out[i] = "HEAD:" + p
+// reposFor returns one repository per node id, slug o/<id>.
+func reposFor(ids ...string) []platform.Repository {
+	repos := make([]platform.Repository, len(ids))
+	for i, id := range ids {
+		repos[i] = platform.Repository{NodeID: id, Slug: "o/" + id, DefaultBranch: "main"}
+	}
+	return repos
+}
+
+// probeRepos returns n repositories with node ids R_000 onwards.
+func probeRepos(n int) []platform.Repository { return reposFor(nodeIDs(n)...) }
+
+// testPaths returns n distinct config paths.
+func testPaths(n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = fmt.Sprintf("p%02d.json", i)
+	}
+	return out
+}
+
+// batchSizes is how probeBatchSize cuts repos ids at batch per query.
+func batchSizes(repos, batch int) []int {
+	var out []int
+	for left := repos; left > 0; left -= batch {
+		out = append(out, min(left, batch))
 	}
 	return out
 }
 
 func TestProbeConfig_Batches(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		repos       int
-		wantQueries int
-		wantSizes   []int
-	}{
-		{repos: 1, wantQueries: 1, wantSizes: []int{1}},
-		{repos: 100, wantQueries: 1, wantSizes: []int{100}},
-		{repos: 101, wantQueries: 2, wantSizes: []int{100, 1}},
-		{repos: 250, wantQueries: 3, wantSizes: []int{100, 100, 50}},
-	}
-	for _, tt := range tests {
-		t.Run(fmt.Sprint(tt.repos), func(t *testing.T) {
-			t.Parallel()
-			fake := &graphqlServer{cost: 2}
-			res, err := newProbeClient(t, fake).ProbeConfig(context.Background(), nodeIDs(tt.repos), nil)
-			if err != nil {
-				t.Fatalf("ProbeConfig(%d ids) err = %v", tt.repos, err)
-			}
-			if len(fake.queries) != tt.wantQueries || res.Queries != tt.wantQueries {
-				t.Fatalf("ProbeConfig(%d ids) sent %d queries (result says %d), want %d",
-					tt.repos, len(fake.queries), res.Queries, tt.wantQueries)
-			}
-			sizes := make([]int, 0, len(fake.queries))
-			for _, q := range fake.queries {
-				sizes = append(sizes, len(q.ids))
-				if !slices.Equal(q.exprs, defaultExprs()) {
-					t.Errorf("query exprs = %q, want every default path at HEAD", q.exprs)
+	// The lookup budget (100) over the path count, clamped to 1..100.
+	batchFor := map[int]int{1: 100, 4: 25, 10: 10, 16: 6}
+	for paths, batch := range batchFor {
+		for _, repos := range []int{1, 10, 100, 250} {
+			t.Run(fmt.Sprintf("%d paths %d repos", paths, repos), func(t *testing.T) {
+				t.Parallel()
+				fake := &graphqlServer{cost: 2}
+				c := newProbeClient(t, fake, ghclient.WithConfigPaths(testPaths(paths)))
+				res, err := c.ProbeConfig(context.Background(), probeRepos(repos), nil, nil)
+				if err != nil {
+					t.Fatalf("ProbeConfig(%d ids) err = %v", repos, err)
 				}
-			}
-			if !slices.Equal(sizes, tt.wantSizes) {
-				t.Errorf("batch sizes = %v, want %v", sizes, tt.wantSizes)
-			}
-			if want := 2 * tt.wantQueries; res.Cost != want {
-				t.Errorf("ProbeConfig(%d ids).Cost = %d, want %d (summed rateLimit.cost)", tt.repos, res.Cost, want)
-			}
-			if res.Remaining != 4990 || res.ResetAt.IsZero() {
-				t.Errorf("ProbeConfig() Remaining/ResetAt = %d/%v, want 4990/non-zero", res.Remaining, res.ResetAt)
-			}
-			if len(res.Configs) != tt.repos {
-				t.Errorf("ProbeConfig() answered %d repos, want %d", len(res.Configs), tt.repos)
-			}
-		})
+				want := batchSizes(repos, batch)
+				sizes := make([]int, 0, len(fake.queries))
+				for _, q := range fake.queries {
+					sizes = append(sizes, len(q.ids))
+					if len(q.exprs) != paths {
+						t.Errorf("query carried %d expressions, want %d", len(q.exprs), paths)
+					}
+				}
+				if !slices.Equal(sizes, want) {
+					t.Errorf("batch sizes = %v, want %v", sizes, want)
+				}
+				if res.Queries != len(want) {
+					t.Errorf("Queries = %d, want %d", res.Queries, len(want))
+				}
+				if res.Cost != 2*len(want) {
+					t.Errorf("Cost = %d, want %d (summed rateLimit.cost)", res.Cost, 2*len(want))
+				}
+				if res.Remaining != 4990 || res.ResetAt.IsZero() {
+					t.Errorf("Remaining/ResetAt = %d/%v, want 4990/non-zero", res.Remaining, res.ResetAt)
+				}
+				if len(res.Configs) != repos {
+					t.Errorf("answered %d repos, want %d", len(res.Configs), repos)
+				}
+			})
+		}
+	}
+}
+
+func TestProbeConfig_DefaultPathsUnderLookupLimit(t *testing.T) {
+	t.Parallel()
+	gh := fakegithub.New(t)
+	gh.SetGraphQLLookupLimit(100)
+	c, err := ghclient.NewWithToken(ghclient.TokenAuth{Token: "t", BaseURL: gh.BaseURL()}, ghclient.WithRateLimit(rate.Inf, 1))
+	if err != nil {
+		t.Fatalf("NewWithToken: %v", err)
+	}
+	if _, err := c.ProbeConfig(context.Background(), probeRepos(250), nil, nil); err != nil {
+		t.Fatalf("ProbeConfig(250 ids) err = %v", err)
+	}
+	if q, rejected := gh.ProbeQueries(), gh.ProbeTimeouts(); q != 25 || rejected != 0 {
+		t.Errorf("sent %d queries with %d rejected, want 25 and none (10 paths, 10 per query)", q, rejected)
 	}
 }
 
@@ -275,7 +309,7 @@ func TestProbeConfig_Answers(t *testing.T) {
 		missing: map[string]bool{"gone": true},
 	}
 	ids := []string{"json", "json5", "dotgithub", "renovaterc", "both", "noExtends", "broken", "dirOnly", "absent", "gone"}
-	res, err := newProbeClient(t, fake).ProbeConfig(context.Background(), ids, nil)
+	res, err := newProbeClient(t, fake).ProbeConfig(context.Background(), reposFor(ids...), nil, nil)
 	if err != nil {
 		t.Fatalf("ProbeConfig() err = %v", err)
 	}
@@ -312,7 +346,7 @@ func TestProbeConfig_ConfiguredPaths(t *testing.T) {
 		"a": {"renovate.json": `{}`, "ci/renovate.json5": `{extends: ["x"]}`},
 	}}
 	c := newProbeClient(t, fake, ghclient.WithConfigPaths([]string{"ci/renovate.json5"}))
-	res, err := c.ProbeConfig(context.Background(), []string{"a"}, nil)
+	res, err := c.ProbeConfig(context.Background(), reposFor("a"), nil, nil)
 	if err != nil {
 		t.Fatalf("ProbeConfig() err = %v", err)
 	}
@@ -329,7 +363,7 @@ func TestProbeConfig_ErrorsWithoutData(t *testing.T) {
 	h := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"data":null,"errors":[{"message":"something went wrong"}]}`))
 	})
-	_, err := newProbeClient(t, h).ProbeConfig(context.Background(), []string{"a"}, nil)
+	_, err := newProbeClient(t, h).ProbeConfig(context.Background(), reposFor("a"), nil, nil)
 	if !errors.Is(err, platform.ErrTransient) || !strings.Contains(err.Error(), "something went wrong") {
 		t.Errorf("ProbeConfig() err = %v, want transient carrying the GraphQL message", err)
 	}
@@ -340,7 +374,7 @@ func TestProbeConfig_Unauthorized(t *testing.T) {
 	h := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, `{"message":"Bad credentials"}`, http.StatusUnauthorized)
 	})
-	_, err := newProbeClient(t, h).ProbeConfig(context.Background(), []string{"a"}, nil)
+	_, err := newProbeClient(t, h).ProbeConfig(context.Background(), reposFor("a"), nil, nil)
 	if !errors.Is(err, platform.ErrUnauthorized) {
 		t.Errorf("ProbeConfig() err = %v, want ErrUnauthorized", err)
 	}

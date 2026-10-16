@@ -1,7 +1,7 @@
 ---
 id: IMPL-0003
 title: "GraphQL probe lookup budget, timeout split and REST fallback (issue 14)"
-status: Draft
+status: In Progress
 author: Donald Gifford
 created: 2026-10-15
 ---
@@ -179,20 +179,20 @@ tested against the real failure.
 
 #### Tasks
 
-- [ ] 2.1 `Server.SetGraphQLLookupLimit(n int)`: a probe whose
+- [x] 2.1 `Server.SetGraphQLLookupLimit(n int)`: a probe whose
   `len(ids) × len(expressions)` exceeds `n` answers **502 with an empty
   body**, as observed. Zero means no limit (the default, so existing tests
   are unchanged).
-- [ ] 2.2 `Server.SetGraphQLTimeoutShape(shape)`: choose whether an
+- [x] 2.2 `Server.SetGraphQLTimeoutShape(shape)`: choose whether an
   over-limit probe answers 502, 504, or 200 with `data: null` and
   GitHub's timeout message. Defaults to 502.
-- [ ] 2.3 Enforce the 100-id cap: more than 100 ids answers 200 with
+- [x] 2.3 Enforce the 100-id cap: more than 100 ids answers 200 with
   `errors[0].type = "ARGUMENT_LIMIT"` and GitHub's message, and no `data`.
-- [ ] 2.4 `Server.ProbeSizes() []int`: the ids per probe query, in order,
+- [x] 2.4 `Server.ProbeSizes() []int`: the ids per probe query, in order,
   for tests that assert the batch rule end to end. `ProbeQueries()` stays.
-- [ ] 2.5 `Server.ProbeTimeouts() int`: how many probes the limit
+- [x] 2.5 `Server.ProbeTimeouts() int`: how many probes the limit
   rejected.
-- [ ] 2.6 Unit tests in `test/fakegithub` for each knob.
+- [x] 2.6 Unit tests in `test/fakegithub` for each knob.
 
 #### Success Criteria
 
@@ -206,19 +206,19 @@ tested against the real failure.
 
 #### Tasks
 
-- [ ] 3.1 `probe.go` constants:
+- [x] 3.1 `probe.go` constants:
   - `probeLookups = 100`, documented with INV-0002's measurement (about
     2 s, five times under the 10 s limit);
   - `maxProbeIDs = 100` replaces `probeBatch`, documented as GitHub's
     `nodes(ids:)` cap, not a design choice.
-- [ ] 3.2 `probeBatchSize(paths int) int` returns
+- [x] 3.2 `probeBatchSize(paths int) int` returns
   `clamp(probeLookups / paths, 1, maxProbeIDs)`.
-- [ ] 3.3 `ProbeConfig` cuts its input into `probeBatchSize(len(paths))`
+- [x] 3.3 `ProbeConfig` cuts its input into `probeBatchSize(len(paths))`
   slices.
-- [ ] 3.4 Rewrite `TestProbeConfig_Batches` as a table over paths
+- [x] 3.4 Rewrite `TestProbeConfig_Batches` as a table over paths
   (1, 4, 10, 16) and repositories (1, 10, 100, 250). It asserts the
   slice sizes, `Queries` and summed `Cost`.
-- [ ] 3.5 The package doc in `client.go` ("100 node ids per query") and
+- [x] 3.5 The package doc in `client.go` ("100 node ids per query") and
   `ProbeConfig`'s doc comment describe the budget.
 
 #### Success Criteria
@@ -245,27 +245,27 @@ flowchart TD
 
 #### Tasks
 
-- [ ] 4.1 `ProbeConfig(ctx, repos []platform.Repository, paths []string,
+- [x] 4.1 `ProbeConfig(ctx, repos []platform.Repository, paths []string,
   onQuery func()) (*ProbeResult, error)` (OQ4 a).
   - It keys answers by `NodeID`, as today.
-  - `onQuery` may be nil; it is called after every request, GraphQL or
-    REST.
+  - `onQuery` may be nil; it is called after every GraphQL query and
+    after each REST fallback (one repository's REST calls).
   - Update the `InstallationAPI` interface in `internal/activities/github.go`
     and `fakeInstall`.
-- [ ] 4.2 A sentinel `errProbeTimeout`, returned by `probeBatch` for HTTP
+- [x] 4.2 A sentinel `errProbeTimeout`, returned by `probeBatch` for HTTP
   502 and 504 from `/graphql`, and for a 200 with no `data` whose error
   message contains "timeout" (OQ3 a). Every other response keeps today's
   classification.
-- [ ] 4.3 `probeSlice(ctx, query, repos, paths, res, onQuery)`: on
+- [x] 4.3 `prober.slice(ctx, repos)` (the call's state in a `prober`): on
   `errProbeTimeout` it splits the slice in half and recurses on each half.
   At one repository it calls `probeREST` for that repository and records
   its answer. Any other error returns immediately.
-- [ ] 4.4 `ProbeResult` gains `Splits int` (timed-out slices that were
+- [x] 4.4 `ProbeResult` gains `Splits int` (timed-out slices that were
   halved) and `Fallbacks int` (repositories probed over REST). `Queries`
   counts REST calls too, as `ProbeConfigREST` does.
-- [ ] 4.5 Log nothing in the platform package. The activity logs from
+- [x] 4.5 Log nothing in the platform package. The activity logs from
   the counts (Phase 5), as the package logs nothing today.
-- [ ] 4.6 Unit tests (`probe_test.go`, with the `graphqlServer` fake
+- [x] 4.6 Unit tests (`probe_test.go`, with the `graphqlServer` fake
   extended or `test/fakegithub`):
   - **Splits:** one slice of 10 at a limit of 50 splits into 5 + 5, both
     pass, `Splits = 1`.
@@ -292,11 +292,11 @@ flowchart TD
 
 #### Tasks
 
-- [ ] 5.1 `discoverPage` passes `repos` and a hook that calls
+- [x] 5.1 `discoverPage` passes `repos` and a hook that calls
   `activity.RecordHeartbeat(ctx, prog)` with the progress so far. A retry
   then resumes at the same page, as today; the hook only keeps the
   attempt alive.
-- [ ] 5.2 `Metrics` interface gains:
+- [x] 5.2 `Metrics` interface gains:
   - `ProbeSplits(installationID int64, n int)`, for
     `boopd_discovery_probe_splits_total{installation}`;
   - `ProbeFallbacks(installationID int64, n int)`, for
@@ -304,9 +304,9 @@ flowchart TD
 
   Implement both in `internal/observability/metrics.go` and the activity
   test fake (OQ5 a).
-- [ ] 5.3 When a page had splits, log at info with the installation, page,
+- [x] 5.3 When a page had splits, log at info with the installation, page,
   splits and fallbacks.
-- [ ] 5.4 Activity tests (`internal/activities/discovery_test.go`, Temporal
+- [x] 5.4 Activity tests (`internal/activities/discovery_test.go`, Temporal
   test environment and `test/fakegithub`):
   - **Update** `TestDiscoverInstallation_GraphQL` to the batch rule:
     55 queries for 250 repositories at 10 paths, asserted with
@@ -321,9 +321,11 @@ flowchart TD
     - every configured repository is still signalled;
     - the fallback metric is 170, and the summary matches the
       no-limit run.
-  - **New** `TestDiscoverInstallation_HeartbeatsPerQuery`: the recorded
-    heartbeats outnumber the pages.
-- [ ] 5.5 Worker e2e (`test/e2e/worker_test.go`, k3d): a `workerOption`
+  - **New** `TestDiscoverInstallation_HeartbeatsPerQuery`: the probe's
+    hook (which heartbeats) runs once per query and outnumbers the pages.
+    It counts hook calls through a wrapping client, because the SDK
+    throttles heartbeats before the test listener sees them.
+- [x] 5.5 Worker e2e (`test/e2e/worker_test.go`, k3d): a `workerOption`
   sets a lookup limit of 5 on the fake. Discovery still starts
   `repo/github/<id>` for the config repository through the REST fallback,
   and its first run completes. This reuses `TestWorker_DiscoveryRunRecheck`'s
@@ -341,16 +343,16 @@ flowchart TD
 
 #### Tasks
 
-- [ ] 6.1 `classifyErr`: for `*RateLimitError`, compute
+- [x] 6.1 `classifyErr`: for `*RateLimitError`, compute
   `RetryAfter = max(0, time.Until(rateErr.Rate.Reset.Time))`, rounded to
   seconds, and drop the absolute-epoch `int`.
-- [ ] 6.2 Extend `TestTypedRateLimitErrorClassifies`:
+- [x] 6.2 Extend `TestTypedRateLimitErrorClassifies`:
   - a reset 90 s ahead gives a `RetryAfter` between 85 and 90 s;
   - a reset in the past gives 0.
-- [ ] 6.3 Open a follow-up issue: "discovery: honour secondary-limit
+- [x] 6.3 Open a follow-up issue: "discovery: honour secondary-limit
   Retry-After". Return an `ApplicationError` with `NextRetryDelay` from
   `DiscoverInstallation` on `RateLimitedError`, and link INV-0002
-  Observation 6.
+  Observation 6. Opened as [#16](https://github.com/donaldgifford/boop/issues/16).
 
 #### Success Criteria
 
@@ -362,7 +364,7 @@ flowchart TD
 
 #### Tasks
 
-- [ ] 7.1 `docs/config.md`:
+- [x] 7.1 `docs/config.md`:
   - **`probe` row:** replace the interim note with the budget: about
     100 lookups per query, so 100 / paths repositories. A query that
     times out is split, and single repositories fall back to REST.
@@ -371,7 +373,7 @@ flowchart TD
   - **The metrics paragraph** after the table names
     `boopd_discovery_probe_splits_total` and
     `boopd_discovery_probe_fallbacks_total`.
-- [ ] 7.2 DESIGN-0001, as an amendment note dated on landing:
+- [x] 7.2 DESIGN-0001, as an amendment note dated on landing:
   - § DiscoveryWorkflow: "one query per 100 repositories" becomes "one
     query per 100 / paths repositories, at most 100".
   - The cost estimate becomes about 1,500 points per pass for 15,000
@@ -379,10 +381,10 @@ flowchart TD
   - "100 is a design choice" becomes "100 is GitHub's `nodes(ids:)`
     cap".
   - OQ3 a: the same correction.
-- [ ] 7.3 Go doc comments: `ProbeConfig`, `ProbeResult`,
+- [x] 7.3 Go doc comments: `ProbeConfig`, `ProbeResult`,
   `probeBatchSize`, `errProbeTimeout`, `DiscoverInstallation` (the
   heartbeat per query).
-- [ ] 7.4 `examples/boopd.hcl`: a comment on `config_paths` with the
+- [x] 7.4 `examples/boopd.hcl`: a comment on `config_paths` with the
   tenfold note. `boopd config validate` still loads it.
 
 #### Success Criteria
@@ -397,7 +399,7 @@ flowchart TD
 
 #### Tasks
 
-- [ ] 8.1 Conventional commits per phase:
+- [x] 8.1 Conventional commits per phase:
   - `test(fakegithub): …`;
   - `fix(platform): …` for Phases 3, 4 and 6;
   - `feat(activities): …` for the metrics;
@@ -405,9 +407,12 @@ flowchart TD
 
   Each is followed by `git cliff -o CHANGELOG.md` and a
   `chore: update changelog` commit.
-- [ ] 8.2 One PR with `Closes #14` and the `patch` label (OQ2 a).
-- [ ] 8.3 Iterate CI to green, including the E2E Tests job.
-- [ ] 8.4 After the release, check it shipped: `helm show chart` and the
+- [x] 8.2 One PR with `Closes #14` and the `patch` label (OQ2 a):
+  [#17](https://github.com/donaldgifford/boop/pull/17).
+- [x] 8.3 Iterate CI to green, including the E2E Tests job. PR #17: all
+  checks passed on the first push, and `just e2e` passed locally
+  (2026-10-15).
+- [ ] 8.4 **deferred - human required** (the merge cuts the release). After the release, check it shipped: `helm show chart` and the
   image tag match the release, and the release notes list the fix.
 - [ ] 8.5 **deferred - human required:** fartlab (OQ8 a).
   - Upgrade to the release.
@@ -417,7 +422,7 @@ flowchart TD
   - Confirm installation 170572643 completes with every configured
     repository onboarded, and `boopd_discovery_probe_splits_total` stays
     at 0.
-- [ ] 8.6 Set this document's status to Completed and check its tasks
+- [ ] 8.6 **deferred - human required** (after 8.4 and 8.5). Set this document's status to Completed and check its tasks
   off; mark DESIGN-0001's amendment as landed.
 
 #### Success Criteria

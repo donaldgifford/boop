@@ -5,6 +5,16 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Features
+
+- *(activities)* Heartbeat per probe query; count probe splits and fallbacks
+
+### Bug Fixes
+
+- *(platform)* Size GraphQL probe batches from a lookup budget
+- *(platform)* Split timed-out GraphQL probes and fall back to REST
+- *(platform)* RetryAfter on a primary rate limit is the time until reset
+
 ### Documentation
 
 - Verify release provenance against main; close IMPL-0002
@@ -16,6 +26,14 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - INV-0002 decisions, interim probe note, IMPL-0003 plan for issue 14
 - Restore IMPL-0002 toc anchors
 - *(impl)* IMPL-0003 record OQ decisions
+- GraphQL probe budget, split and fallback; amend DESIGN-0001
+- *(impl)* IMPL-0003 in progress
+- *(impl)* IMPL-0003 PR open and green; post-merge steps deferred
+
+### Testing
+
+- *(fakegithub)* GitHub's GraphQL limits: lookup timeout, timeout shapes, 100-id cap
+- *(e2e)* Discovery falls back to REST when every GraphQL probe times out
 
 ## [0.3.0] - 2026-10-13
 
