@@ -67,6 +67,14 @@ clean:
 run: build
     @{{ bin_dir }}/{{ binary_name }}
 
+# e.g. just temporal workflow list --namespace boopd
+# Run the temporal CLI through temporal-oidc (installed by nix-config)
+[group('run')]
+[positional-arguments]
+temporal *args:
+    @command -v temporal-oidc >/dev/null || { echo "temporal-oidc not on PATH (nix-config home/common/temporal-oidc.nix)" >&2; exit 1; }
+    @temporal-oidc "$@"
+
 # ─── Test ───────────────────────────────────────────────────────────
 
 # Run all tests with the race detector
