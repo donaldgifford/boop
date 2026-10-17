@@ -1,7 +1,7 @@
 ---
 id: IMPL-0003
 title: "GraphQL probe lookup budget, timeout split and REST fallback (issue 14)"
-status: In Progress
+status: Completed
 author: Donald Gifford
 created: 2026-10-15
 ---
@@ -11,6 +11,8 @@ created: 2026-10-15
 # IMPL-0003: GraphQL probe lookup budget, timeout split and REST fallback (issue 14)
 
 <!--toc:start-->
+<!-- markdownlint-capture -->
+<!-- markdownlint-disable MD013 -->
 - [Objective](#objective)
 - [Scope](#scope)
   - [In Scope](#in-scope)
@@ -54,6 +56,7 @@ created: 2026-10-15
   - [OQ7: Does the discovery page size change?](#oq7-does-the-discovery-page-size-change)
   - [OQ8: Who changes fartlab's config?](#oq8-who-changes-fartlabs-config)
 - [References](#references)
+<!-- markdownlint-restore -->
 <!--toc:end-->
 
 ## Objective
@@ -412,9 +415,14 @@ flowchart TD
 - [x] 8.3 Iterate CI to green, including the E2E Tests job. PR #17: all
   checks passed on the first push, and `just e2e` passed locally
   (2026-10-15).
-- [ ] 8.4 **deferred - human required** (the merge cuts the release). After the release, check it shipped: `helm show chart` and the
+- [x] 8.4 After the release, check it shipped: `helm show chart` and the
   image tag match the release, and the release notes list the fix.
-- [ ] 8.5 **deferred - human required:** fartlab (OQ8 a).
+  v0.3.1 (2026-10-16):
+  - `helm show chart` gives version and appVersion 0.3.1;
+  - `cosign tree` on `boopd:0.3.1` shows a signature and an SLSA
+    attestation;
+  - the release notes list the probe commits, and #14 is closed.
+- [x] 8.5 fartlab (OQ8 a), done by hand on the homelab:
   - Upgrade to the release.
   - Remove `probe = "rest"` (back to `graphql`), and set
     `config_paths = ["renovate.json5"]` in the homelab values.
@@ -422,8 +430,15 @@ flowchart TD
   - Confirm installation 170572643 completes with every configured
     repository onboarded, and `boopd_discovery_probe_splits_total` stays
     at 0.
-- [ ] 8.6 **deferred - human required** (after 8.4 and 8.5). Set this document's status to Completed and check its tasks
-  off; mark DESIGN-0001's amendment as landed.
+
+  Result: fartlab runs chart 0.3.1 with `probe: graphql` and
+  `configPaths: [renovate.json5]`. The discovery pass
+  `discovery/boop-bot-2026-10-17T12:00:00Z` returned `Failed: 0`,
+  `Seen: 205`, `Onboarded: 40`, `ProbeCost: 3`. Three 1-point queries for
+  three pages of up to 100 repositories at one path means no split
+  added a query.
+- [x] 8.6 Set this document's status to Completed and check its tasks
+  off; mark DESIGN-0001's amendment as landed (2026-10-17).
 
 #### Success Criteria
 

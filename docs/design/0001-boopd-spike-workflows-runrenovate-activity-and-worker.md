@@ -396,7 +396,7 @@ sequenceDiagram
     (`boopd_discovery_probe_cost`). 100 per query is a design choice, not a
     documented limit.
 
-    **Amended 2026-10-15 (INV-0002, IMPL-0003, issue #14).** GitHub cuts a
+    **Amended 2026-10-15 (INV-0002, IMPL-0003, issue #14; landed in v0.3.1).** GitHub cuts a
     query at 10 s, and each `object(expression:)` lookup takes about
     20 ms, so 100 repositories × 10 paths (about 20 s) failed every time.
     - A query now carries `100 / paths` repositories, about 100 lookups
