@@ -5,6 +5,10 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Features
+
+- *(just)* Temporal recipe through temporal-oidc
+
 ### Documentation
 
 - Close IMPL-0003 (v0.3.1 shipped, fartlab discovery on GraphQL)
