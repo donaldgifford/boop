@@ -30,9 +30,12 @@ docz create impl "Your Implementation Title"
 <!-- BEGIN DOCZ AUTO-GENERATED -->
 ## All Implementation Plans
 
+<!-- markdownlint-capture -->
+<!-- markdownlint-disable MD013 -->
 | ID | Title | Status | Date | Author | Link |
-|----|-------|--------|------|--------|------|
+| --- | --- | --- | --- | --- | --- |
 | IMPL-0001 | boopd spike: Temporal control plane, Job per run, discovery and the homelab deploy | In Progress | 2026-10-10 | Donald Gifford | [0001-boopd-spike-temporal-control-plane-job-per-run-discovery-and.md](0001-boopd-spike-temporal-control-plane-job-per-run-discovery-and.md) |
 | IMPL-0002 | Release signing, chart tag, GitOps Redis secret and the run cap (issues 8-11) | Completed | 2026-10-12 | Donald Gifford | [0002-release-signing-chart-tag-gitops-redis-secret-and-the-run-cap.md](0002-release-signing-chart-tag-gitops-redis-secret-and-the-run-cap.md) |
-| IMPL-0003 | GraphQL probe lookup budget, timeout split and REST fallback (issue 14) | In Progress | 2026-10-15 | Donald Gifford | [0003-graphql-probe-lookup-budget-timeout-split-and-rest-fallback.md](0003-graphql-probe-lookup-budget-timeout-split-and-rest-fallback.md) |
+| IMPL-0003 | GraphQL probe lookup budget, timeout split and REST fallback (issue 14) | Completed | 2026-10-15 | Donald Gifford | [0003-graphql-probe-lookup-budget-timeout-split-and-rest-fallback.md](0003-graphql-probe-lookup-budget-timeout-split-and-rest-fallback.md) |
+<!-- markdownlint-restore -->
 <!-- END DOCZ AUTO-GENERATED -->
