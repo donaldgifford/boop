@@ -12,6 +12,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Documentation
 
 - Close IMPL-0003 (v0.3.1 shipped, fartlab discovery on GraphQL)
+- *(design)* DESIGN-0003 webhook ingest
+- *(design)* DESIGN-0004 event store, API and management UI
+- *(impl)* IMPL-0004 webhook ingest
+- *(impl)* IMPL-0005 event store, API and management UI
 
 ## [0.3.1] - 2026-10-16
 
