@@ -266,11 +266,49 @@ func TestRateLimitedClassifies(t *testing.T) {
 	c := newFakeClient(t, handlers)
 
 	_, err := c.Discover(context.Background(), platform.DiscoveryFilter{Owner: "o"})
-	if _, ok := errors.AsType[*platform.RateLimitedError](err); !ok {
+	rl, ok := errors.AsType[*platform.RateLimitedError](err)
+	if !ok {
 		t.Fatalf("err = %v, want *RateLimitedError", err)
+	}
+	if rl.RetryAfter != 30*time.Second {
+		t.Errorf("RetryAfter = %v, want the 429's Retry-After (30s)", rl.RetryAfter)
 	}
 	if !errors.Is(err, platform.ErrTransient) {
 		t.Errorf("RateLimitedError should be ErrTransient, got %v", err)
+	}
+}
+
+// TestRateLimited_RetryAfterHeader: a plain 429's Retry-After becomes
+// RetryAfter; absent, malformed or non-positive values read as no
+// suggestion (#16).
+func TestRateLimited_RetryAfterHeader(t *testing.T) {
+	t.Parallel()
+	for header, want := range map[string]time.Duration{
+		"":     0,
+		"soon": 0,
+		"-5":   0,
+		"0":    0,
+		"12":   12 * time.Second,
+	} {
+		t.Run(fmt.Sprintf("%q", header), func(t *testing.T) {
+			t.Parallel()
+			handlers := map[string]http.HandlerFunc{
+				testOrgReposRoute: func(w http.ResponseWriter, _ *http.Request) {
+					if header != "" {
+						w.Header().Set("Retry-After", header)
+					}
+					http.Error(w, "rate limited", http.StatusTooManyRequests)
+				},
+			}
+			_, err := newFakeClient(t, handlers).Discover(context.Background(), platform.DiscoveryFilter{Owner: "o"})
+			rl, ok := errors.AsType[*platform.RateLimitedError](err)
+			if !ok {
+				t.Fatalf("err = %v, want *RateLimitedError", err)
+			}
+			if rl.RetryAfter != want {
+				t.Errorf("RetryAfter = %v, want %v", rl.RetryAfter, want)
+			}
+		})
 	}
 }
 
@@ -505,7 +543,37 @@ func TestAbuseRateLimitErrorClassifies(t *testing.T) {
 	if err == nil {
 		t.Fatal("err = nil")
 	}
-	if _, ok := errors.AsType[*platform.RateLimitedError](err); !ok {
-		t.Errorf("err = %v, want *RateLimitedError", err)
+	rl, ok := errors.AsType[*platform.RateLimitedError](err)
+	if !ok {
+		t.Fatalf("err = %v, want *RateLimitedError", err)
+	}
+	if rl.RetryAfter != time.Minute {
+		t.Errorf("RetryAfter = %v, want the Retry-After (1m)", rl.RetryAfter)
+	}
+}
+
+// secondaryDocURL is GitHub's documentation_url on a secondary limit.
+const secondaryDocURL = "https://docs.github.com/rest/overview/rate-limits-for-the-rest-api#about-secondary-rate-limits"
+
+// TestAbuseRateLimit_PastReset: go-github falls back to x-ratelimit-reset
+// when a secondary limit has no Retry-After, and a reset already past is
+// a negative wait. It must read as no suggestion, not a huge or negative
+// delay (#16).
+func TestAbuseRateLimit_PastReset(t *testing.T) {
+	t.Parallel()
+	handlers := map[string]http.HandlerFunc{
+		testOrgReposRoute: func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(time.Now().Add(-time.Minute).Unix(), 10))
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"message":"secondary","documentation_url":"` + secondaryDocURL + `"}`))
+		},
+	}
+	_, err := newFakeClient(t, handlers).Discover(context.Background(), platform.DiscoveryFilter{Owner: "o"})
+	rl, ok := errors.AsType[*platform.RateLimitedError](err)
+	if !ok {
+		t.Fatalf("err = %v, want *RateLimitedError", err)
+	}
+	if rl.RetryAfter != 0 {
+		t.Errorf("RetryAfter = %v, want 0 for a reset in the past", rl.RetryAfter)
 	}
 }

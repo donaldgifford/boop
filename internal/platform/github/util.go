@@ -16,7 +16,11 @@ limitations under the License.
 
 package github
 
-import "time"
+import (
+	"net/http"
+	"strconv"
+	"time"
+)
 
 // durationFrom converts a seconds count into a positive time.Duration. We
 // floor at zero so a negative value (clock skew on the upstream platform)
@@ -26,4 +30,14 @@ func durationFrom(seconds int) time.Duration {
 		return 0
 	}
 	return time.Duration(seconds) * time.Second
+}
+
+// retryAfter reads a Retry-After header in seconds, as GitHub sends it;
+// zero when it is absent, malformed or not positive.
+func retryAfter(h http.Header) time.Duration {
+	seconds, err := strconv.Atoi(h.Get("Retry-After"))
+	if err != nil {
+		return 0
+	}
+	return durationFrom(seconds)
 }

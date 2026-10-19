@@ -25,6 +25,7 @@ import (
 	"slices"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"golang.org/x/time/rate"
 
@@ -245,5 +246,28 @@ func TestProbeConfig_OtherErrorsWithoutDataDoNotSplit(t *testing.T) {
 	}
 	if q.Load() != 1 {
 		t.Errorf("sent %d queries, want 1 (no split)", q.Load())
+	}
+}
+
+// TestProbeConfig_SecondaryLimit: a secondary limit on the GraphQL probe
+// is a RateLimitedError carrying GitHub's Retry-After, not a timeout to
+// split on (#16).
+func TestProbeConfig_SecondaryLimit(t *testing.T) {
+	t.Parallel()
+	gh, repos := splitFleet(t, 4, 0)
+	gh.SetSecondaryLimit(fakegithub.SecondaryProbe, 1, 7*time.Second)
+	res, err := fakeClient(t, gh).ProbeConfig(context.Background(), repos, nil, nil)
+	rl, ok := errors.AsType[*platform.RateLimitedError](err)
+	if !ok {
+		t.Fatalf("ProbeConfig() err = %v, want *RateLimitedError", err)
+	}
+	if rl.RetryAfter != 7*time.Second {
+		t.Errorf("RetryAfter = %v, want 7s", rl.RetryAfter)
+	}
+	if res != nil && res.Splits != 0 {
+		t.Errorf("Splits = %d, want 0: a secondary limit is not a timeout", res.Splits)
+	}
+	if n := len(gh.ProbeTimes()); n != 1 {
+		t.Errorf("probe requests = %d, want 1 (no retry inside the client)", n)
 	}
 }
