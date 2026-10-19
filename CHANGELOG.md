@@ -46,6 +46,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(config)* Ingest and webhook settings
 - Webhooks guide, config chart notes and the ingest layout
 - *(impl)* IMPL-0004 Phase 11 notes
+- *(impl)* IMPL-0004 PRs opened; merge and homelab tasks deferred
 
 ### Testing
 
