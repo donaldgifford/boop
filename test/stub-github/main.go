@@ -27,16 +27,29 @@ limitations under the License.
 //	                      in fakegithub's Installation and Repo shapes
 //
 // GET /_stub/state returns the recorded mints, revokes, probe queries
-// and rate reads for assertions.
+// and rate reads for assertions. The ingest e2e changes the fake as it
+// goes:
+//
+//	POST   /_stub/repos               JSON []Repo: replace the repositories
+//	DELETE /_stub/installations/{id}  the installation is deleted (mint 404)
+//	POST   /_stub/deliveries          JSON stubDelivery: list a delivery
+//
+// With STUB_FORWARD_TO=host:port it is instead a plain TCP forwarder on
+// STUB_GITHUB_ADDR, so the e2e can take Temporal away from boopd by
+// scaling it to zero.
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/donaldgifford/boop/test/fakegithub"
@@ -56,6 +69,15 @@ type state struct {
 	RateReads    int               `json:"rateReads"`
 }
 
+// stubDelivery is the /_stub/deliveries body: a delivery the test made,
+// with the status ingest answered.
+type stubDelivery struct {
+	Event   string          `json:"event"`
+	GUID    string          `json:"guid"`
+	Status  int             `json:"status"`
+	Payload json.RawMessage `json:"payload"`
+}
+
 func main() {
 	if err := run(); err != nil {
 		slog.Error("stub-github", "error", err)
@@ -64,6 +86,9 @@ func main() {
 }
 
 func run() error {
+	if to := os.Getenv("STUB_FORWARD_TO"); to != "" {
+		return forward(envOr("STUB_GITHUB_ADDR", ":7233"), to)
+	}
 	cert, key := os.Getenv("STUB_GITHUB_TLS_CERT"), os.Getenv("STUB_GITHUB_TLS_KEY")
 	if cert == "" || key == "" {
 		return errors.New("STUB_GITHUB_TLS_CERT and STUB_GITHUB_TLS_KEY are required")
@@ -77,10 +102,7 @@ func run() error {
 			return err
 		}
 	}
-	addr := os.Getenv("STUB_GITHUB_ADDR")
-	if addr == "" {
-		addr = ":8443"
-	}
+	addr := envOr("STUB_GITHUB_ADDR", ":8443")
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /_stub/state", func(w http.ResponseWriter, _ *http.Request) {
@@ -91,6 +113,33 @@ func run() error {
 		if err != nil {
 			slog.Error("write state", "error", err)
 		}
+	})
+	mux.HandleFunc("POST /_stub/repos", func(w http.ResponseWriter, r *http.Request) {
+		var repos []fakegithub.Repo
+		if err := json.NewDecoder(r.Body).Decode(&repos); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		gh.SetRepos(repos...)
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("DELETE /_stub/installations/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		gh.DeleteInstallation(id)
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /_stub/deliveries", func(w http.ResponseWriter, r *http.Request) {
+		var d stubDelivery
+		if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		gh.AddDelivery(d.Event, d.GUID, d.Payload, d.Status)
+		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("GET /_stub/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.Handle("/", gh.Handler())
@@ -114,4 +163,52 @@ func load(gh *fakegithub.Server, path string) error {
 	}
 	gh.SetRepos(f.Repos...)
 	return nil
+}
+
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+// forward copies every connection on addr to and from to.
+func forward(addr, to string) error {
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", addr)
+	if err != nil {
+		return fmt.Errorf("listen %s: %w", addr, err)
+	}
+	slog.Info("stub-github forwarding", "addr", addr, "to", to)
+	var d net.Dialer
+	for {
+		in, err := ln.Accept()
+		if err != nil {
+			return fmt.Errorf("accept: %w", err)
+		}
+		go func() {
+			defer closeConn(in)
+			out, err := d.DialContext(context.Background(), "tcp", to)
+			if err != nil {
+				slog.Warn("forward dial", "to", to, "error", err)
+				return
+			}
+			defer closeConn(out)
+			done := make(chan struct{}, 2)
+			pipe := func(dst, src net.Conn) {
+				if _, err := io.Copy(dst, src); err != nil {
+					slog.Debug("forward copy", "error", err)
+				}
+				done <- struct{}{}
+			}
+			go pipe(out, in)
+			go pipe(in, out)
+			<-done
+		}()
+	}
+}
+
+func closeConn(c net.Conn) {
+	if err := c.Close(); err != nil {
+		slog.Debug("forward close", "error", err)
+	}
 }
