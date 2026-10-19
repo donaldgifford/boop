@@ -17,11 +17,15 @@ limitations under the License.
 package workflows
 
 import (
+	"slices"
+
 	"go.temporal.io/sdk/workflow"
 )
 
 // DiscoveryWorkflow is one discovery pass for one App, started by the
-// discovery/<app> Schedule (DESIGN-0001 § DiscoveryWorkflow): list the
+// discovery/<app> Schedule (DESIGN-0001 § DiscoveryWorkflow) or, for
+// named installations only, by ingest (DESIGN-0003 § Targeted
+// discovery): list the
 // installations, tell each budget whether it is suspended, then run one
 // DiscoverInstallation per active installation in parallel. Repository
 // lists never enter the workflow; each activity signals the
@@ -34,6 +38,9 @@ func DiscoveryWorkflow(ctx workflow.Context, in *DiscoveryInput) (*DiscoveryResu
 		&ListInstallationsInput{App: in.App}).Get(ctx, &installs)
 	if err != nil {
 		return nil, err
+	}
+	if len(in.Installations) > 0 {
+		installs = targeted(ctx, installs, in.Installations)
 	}
 
 	out := &DiscoveryResult{App: in.App, Installations: len(installs)}
@@ -76,4 +83,21 @@ func DiscoveryWorkflow(ctx workflow.Context, in *DiscoveryInput) (*DiscoveryResu
 		out.ProbeCost += sum.ProbeCost
 	}
 	return out, nil
+}
+
+// targeted keeps the listed installations whose IDs were asked for. The
+// listing is already filtered by the App's allowlist, so an asked-for ID
+// missing from it is outside the allowlist or not the App's: skipped
+// with a warn.
+func targeted(ctx workflow.Context, installs []InstallationInfo, ids []int64) []InstallationInfo {
+	out := make([]InstallationInfo, 0, len(ids))
+	for _, id := range ids {
+		i := slices.IndexFunc(installs, func(in InstallationInfo) bool { return in.ID == id })
+		if i < 0 {
+			workflow.GetLogger(ctx).Warn("targeted installation skipped: not in the app's allowlisted listing", "installation", id)
+			continue
+		}
+		out = append(out, installs[i])
+	}
+	return out
 }

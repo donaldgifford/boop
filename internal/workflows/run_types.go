@@ -296,6 +296,11 @@ type RunPlan struct {
 // Schedule passes it.
 type DiscoveryInput struct {
 	App string
+	// Installations, when set, limits the pass to these installation IDs
+	// (targeted discovery, DESIGN-0003). The App's allowlist still holds:
+	// an ID outside it, or not in the App's listing, is skipped with a
+	// warn. Empty is every installation, as the Schedule passes.
+	Installations []int64
 }
 
 // DiscoveryResult is DiscoveryWorkflow's summary of one pass.
