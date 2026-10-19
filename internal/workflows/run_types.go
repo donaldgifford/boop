@@ -200,6 +200,9 @@ type CheckRepoResult struct {
 	State         string
 	Slug          string
 	DefaultBranch string
+	// Extends is a present repository's config extends; histories from
+	// before it decode it empty.
+	Extends []string
 }
 
 // CheckRepo states.

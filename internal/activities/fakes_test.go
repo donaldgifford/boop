@@ -33,6 +33,7 @@ func (f *fakeGitHub) Token(*config.App, string) (activities.RateReader, error) {
 
 type fakeApp struct {
 	installs []platform.Installation
+	listErr  error
 
 	mu      sync.Mutex
 	minted  [][]int64
@@ -42,7 +43,7 @@ type fakeApp struct {
 }
 
 func (f *fakeApp) ListInstallations(context.Context) ([]platform.Installation, error) {
-	return f.installs, nil
+	return f.installs, f.listErr
 }
 
 func (f *fakeApp) Mint(_ context.Context, _ int64, ids []int64) (string, time.Time, error) {
@@ -69,7 +70,9 @@ type fakeInstall struct {
 	readings *workflows.Readings
 	state    platform.RepoState
 	repo     *platform.Repository
-	ids      map[string]int64 // slug -> id
+	config   github.ConfigProbe // CheckRepo's probe
+	checkErr error              // CheckRepo's error, when set
+	ids      map[string]int64   // slug -> id
 
 	mu        sync.Mutex
 	limit     int
@@ -131,8 +134,11 @@ func (f *fakeInstall) ReadRateLimit(context.Context) (*workflows.Readings, error
 	return f.readings, nil
 }
 
-func (f *fakeInstall) CheckRepo(context.Context, int64) (platform.RepoState, *platform.Repository, error) {
-	return f.state, f.repo, nil
+func (f *fakeInstall) CheckRepo(context.Context, int64) (*github.RepoCheck, error) {
+	if f.checkErr != nil {
+		return nil, f.checkErr
+	}
+	return &github.RepoCheck{State: f.state, Repo: f.repo, Config: f.config}, nil
 }
 
 func (f *fakeInstall) RepoIDBySlug(_ context.Context, slug string) (int64, error) {

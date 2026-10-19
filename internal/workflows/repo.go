@@ -225,9 +225,10 @@ func (r *repo) absentAt() (time.Time, bool) {
 }
 
 // checkRepo runs CheckRepo after discovery stopped seeing the
-// repository. Gone or no config ends the workflow; present resets
-// LastSeen; a failure retries after another discovery interval, so an
-// outage never looks like an offboarding.
+// repository. Gone or no config ends the workflow; present refreshes the
+// slug, branch and extends and resets LastSeen; a failure retries after
+// another discovery interval, so an outage never looks like an
+// offboarding.
 func (r *repo) checkRepo(ctx workflow.Context) (gone bool) {
 	r.upsert(ctx, PhaseChecking)
 	defer r.upsert(ctx, PhaseWaiting)
@@ -249,6 +250,7 @@ func (r *repo) checkRepo(ctx workflow.Context) (gone bool) {
 		if res.Slug != "" {
 			r.s.Slug, r.s.DefaultBranch = res.Slug, res.DefaultBranch
 		}
+		r.s.Extends = res.Extends
 		r.s.LastSeen = now
 		r.nextCheck = time.Time{}
 		return false

@@ -121,7 +121,9 @@ func (a *Activities) app(name string) (*config.App, error) {
 
 // appFor returns the app an installation belongs to: the only app when
 // one is configured, else the one whose listing included it. A worker
-// that has not run discovery yet lists every app once to learn.
+// that has not run discovery yet lists every app once to learn. An
+// installation in no app's fresh listing is platform.ErrInstallationGone;
+// a listing failure is its own error.
 func (a *Activities) appFor(ctx context.Context, installationID int64) (*config.App, error) {
 	if len(a.cfg.Apps) == 1 {
 		return a.cfg.Apps[0], nil
@@ -137,7 +139,7 @@ func (a *Activities) appFor(ctx context.Context, installationID int64) (*config.
 	if name, ok := a.knownApp(installationID); ok {
 		return a.app(name)
 	}
-	return nil, fmt.Errorf("installation %d is in no configured app's listing", installationID)
+	return nil, fmt.Errorf("installation %d is in no configured app's listing: %w", installationID, platform.ErrInstallationGone)
 }
 
 func (a *Activities) knownApp(installationID int64) (string, bool) {

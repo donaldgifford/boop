@@ -246,20 +246,20 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 4.1 `internal/platform/github/check.go`: `CheckRepo` probes with
+- [x] 4.1 `internal/platform/github/check.go`: `CheckRepo` probes with
   `ProbeConfigREST` for the one repository and returns its `Extends`
   (`ParseErr` is a warn log in the activity). The signature gains the
   config paths it needs (the client already carries them).
-- [ ] 4.2 The installation-token mint answers 404 →
+- [x] 4.2 The installation-token mint answers 404 →
   `platform.ErrInstallationGone`. `CheckRepo` (the activity) maps it to
   `RepoGone`. Every other mint error stays an activity error.
-- [ ] 4.3 `CheckRepoResult.Extends`; the absence check in `repo.go`
+- [x] 4.3 `CheckRepoResult.Extends`; the absence check in `repo.go`
   applies `Extends` when `present` (the refresh also helps discovery).
-- [ ] 4.4 `appFor`: "absent from every App's fresh listing" becomes
+- [x] 4.4 `appFor`: "absent from every App's fresh listing" becomes
   `platform.ErrInstallationGone`, which `CheckRepo` maps to `RepoGone`.
   A listing failure stays an error. There are tests for one App (the
   mint 404 path) and two Apps (the listing path).
-- [ ] 4.5 Tests:
+- [x] 4.5 Tests:
   - `check_test.go`: extends returned, no config, archived, deleted,
     mint 404 against fakegithub;
   - activity tests: `gone` from a mint 404, and a transient mint error

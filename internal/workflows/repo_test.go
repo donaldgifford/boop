@@ -416,7 +416,10 @@ func TestRepoWorkflow_AcquireRetryAt(t *testing.T) {
 func TestRepoWorkflow_Absence(t *testing.T) {
 	t.Parallel()
 	p := newRW(t, succeeded())
-	p.checks = []CheckRepoResult{{State: RepoPresent, Slug: "acme/renamed", DefaultBranch: "main"}, {State: RepoGone}}
+	p.checks = []CheckRepoResult{
+		{State: RepoPresent, Slug: "acme/renamed", DefaultBranch: "main", Extends: []string{"config:recommended"}},
+		{State: RepoGone},
+	}
 	in := state(t0)
 	in.NextDue = t0.Add(30 * 24 * time.Hour) // never due within the test
 	var renamed RepoState
@@ -427,8 +430,8 @@ func TestRepoWorkflow_Absence(t *testing.T) {
 	if got := gaps(append([]time.Time{t0}, p.checked...)); !slices.Equal(got, []time.Duration{3 * testEvery, 3 * testEvery}) {
 		t.Errorf("checks after %v, want after 3 intervals each", got)
 	}
-	if renamed.Slug != "acme/renamed" {
-		t.Errorf("slug after a present check = %q, want the refreshed one", renamed.Slug)
+	if renamed.Slug != "acme/renamed" || !slices.Equal(renamed.Extends, []string{"config:recommended"}) {
+		t.Errorf("state after a present check = %q %q, want the refreshed slug and extends", renamed.Slug, renamed.Extends)
 	}
 	if !p.env.IsWorkflowCompleted() {
 		t.Error("workflow still running after CheckRepo said gone")

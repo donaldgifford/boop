@@ -43,7 +43,7 @@ type InstallationAPI interface {
 	ProbeConfig(ctx context.Context, repos []platform.Repository, paths []string, onQuery func()) (*github.ProbeResult, error)
 	ProbeConfigREST(ctx context.Context, repos []platform.Repository, paths []string) (*github.ProbeResult, error)
 	ReadRateLimit(ctx context.Context) (*workflows.Readings, error)
-	CheckRepo(ctx context.Context, repoID int64) (platform.RepoState, *platform.Repository, error)
+	CheckRepo(ctx context.Context, repoID int64) (*github.RepoCheck, error)
 	RepoIDBySlug(ctx context.Context, slug string) (int64, error)
 	SetDiscoveredLimit(limit int)
 }

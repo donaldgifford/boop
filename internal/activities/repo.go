@@ -18,37 +18,55 @@ package activities
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/donaldgifford/boop/internal/platform"
 	"github.com/donaldgifford/boop/internal/workflows"
 )
 
-// CheckRepo answers RepoWorkflow's absence timer: gone, no-config or
-// present. Could-not-tell is an error, so the workflow retries rather
-// than ending on an outage (DESIGN-0001 § RepoWorkflow).
+// CheckRepo answers RepoWorkflow's absence timer and its changed signal:
+// gone, no-config or present, with the current slug, default branch and
+// extends. A deleted installation (its mint answers 404, or it is in no
+// App's fresh listing) is gone. Could-not-tell is an error, so the
+// workflow retries rather than ending on an outage (DESIGN-0001 §
+// RepoWorkflow, DESIGN-0003 § CheckRepo returns extends).
 func (a *Activities) CheckRepo(ctx context.Context, in *workflows.CheckRepoInput) (*workflows.CheckRepoResult, error) {
+	gone := &workflows.CheckRepoResult{State: workflows.RepoGone}
 	api, err := a.installation(ctx, in.InstallationID)
+	if errors.Is(err, platform.ErrInstallationGone) {
+		a.log.Info("installation gone", "installation", in.InstallationID, "repo_id", in.RepoID, "error", err)
+		return gone, nil
+	}
 	if err != nil {
 		return nil, err
 	}
-	state, repo, err := api.CheckRepo(ctx, in.RepoID)
+	check, err := api.CheckRepo(ctx, in.RepoID)
+	if errors.Is(err, platform.ErrInstallationGone) {
+		a.log.Info("installation gone", "installation", in.InstallationID, "repo_id", in.RepoID, "error", err)
+		return gone, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("check repository %d: %w", in.RepoID, err)
 	}
 	out := &workflows.CheckRepoResult{}
-	switch state {
+	switch check.State {
 	case platform.RepoGone:
 		out.State = workflows.RepoGone
 	case platform.RepoNoConfig:
 		out.State = workflows.RepoNoConfig
 	case platform.RepoPresent:
 		out.State = workflows.RepoPresent
+		out.Extends = check.Config.Extends
+		if check.Config.ParseErr != nil {
+			a.log.Warn("config file does not parse; onboarded without its extends",
+				"repo_id", in.RepoID, "path", check.Config.Path, "error", check.Config.ParseErr)
+		}
 	default:
 		return nil, fmt.Errorf("check repository %d: no answer", in.RepoID)
 	}
-	if repo != nil {
-		out.Slug, out.DefaultBranch = repo.Slug, repo.DefaultBranch
+	if check.Repo != nil {
+		out.Slug, out.DefaultBranch = check.Repo.Slug, check.Repo.DefaultBranch
 	}
 	return out, nil
 }
