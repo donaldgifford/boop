@@ -26,7 +26,8 @@ import (
 )
 
 // PlanRun resolves the next run's profile from the repository's extends
-// and managers, and returns its app's cadence. The config file never
+// and managers, and returns its app's cadence and the ingest settle and
+// min_interval. The config file never
 // travels in a payload, so RepoWorkflow asks here before each run.
 func (a *Activities) PlanRun(ctx context.Context, in *workflows.PlanRunInput) (*workflows.RunPlan, error) {
 	app, err := a.appFor(ctx, in.InstallationID)
@@ -41,7 +42,12 @@ func (a *Activities) PlanRun(ctx context.Context, in *workflows.PlanRunInput) (*
 	if cadence <= 0 {
 		cadence = config.DefaultCadence
 	}
-	return &workflows.RunPlan{Profile: res.Resolve(in.Extends, in.Managers), Cadence: cadence}, nil
+	return &workflows.RunPlan{
+		Profile:     res.Resolve(in.Extends, in.Managers),
+		Cadence:     cadence,
+		Settle:      a.cfg.Ingest.Settle,
+		MinInterval: a.cfg.Ingest.MinInterval,
+	}, nil
 }
 
 // resolver builds the profile resolver once.

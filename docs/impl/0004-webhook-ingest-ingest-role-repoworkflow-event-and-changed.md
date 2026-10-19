@@ -227,7 +227,7 @@ green, and one commit per numbered task. The PR split is in OQ1.
   Each has diagnostics with ranges, as for the existing blocks.
 - [x] 3.3 `secrets.go`: read each webhook secret the same way as the
   App key.
-- [ ] 3.4 `PlanRun` returns `Settle` and `MinInterval` from the config;
+- [x] 3.4 `PlanRun` returns `Settle` and `MinInterval` from the config;
   `RunPlan` gains the fields.
 - [ ] 3.5 `examples/boopd.hcl` gains a commented `ingest` block and a
   `webhook` block on `boop-bot`; `boopd config validate` keeps it

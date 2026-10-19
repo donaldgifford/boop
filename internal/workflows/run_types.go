@@ -218,10 +218,18 @@ type PlanRunInput struct {
 }
 
 // RunPlan is PlanRun's answer from the config file, which never travels
-// in a payload: the profile for the next run and the app's cadence.
+// in a payload: the profile for the next run, the app's cadence, and the
+// ingest timings webhook events are scheduled by (DESIGN-0003 § Settle
+// and min_interval). Histories from before Settle and MinInterval decode
+// them as zero.
 type RunPlan struct {
 	Profile string
 	Cadence time.Duration
+	// Settle delays a run an event asks for, gathering a burst into one.
+	Settle time.Duration
+	// MinInterval is the least time from the last run's start to a run a
+	// normal-priority event asks for.
+	MinInterval time.Duration
 }
 
 // DiscoveryInput is DiscoveryWorkflow's input; the discovery/<app>
