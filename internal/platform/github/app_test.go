@@ -18,6 +18,7 @@ import (
 
 	"github.com/donaldgifford/boop/internal/platform"
 	ghclient "github.com/donaldgifford/boop/internal/platform/github"
+	"github.com/donaldgifford/boop/test/fakegithub"
 )
 
 // appServer records every request so tests can assert paths, methods,
@@ -257,5 +258,64 @@ func TestRevoke_EmptyToken(t *testing.T) {
 	_, srv := newAppServer(t, func(w http.ResponseWriter, r *http.Request, _ string) { http.NotFound(w, r) })
 	if err := newTestAppClient(t, srv).Revoke(context.Background(), ""); err == nil {
 		t.Error(`Revoke("") err = nil, want error`)
+	}
+}
+
+// ListHookDeliveries pages the fake's deliveries newest first by cursor.
+func TestListHookDeliveries_Pages(t *testing.T) {
+	t.Parallel()
+	gh := fakegithub.New(t)
+	gh.SetWebhookSecret("s")
+	recv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }))
+	t.Cleanup(recv.Close)
+	for range 3 {
+		gh.Deliver(t, recv.URL, "ping", fakegithub.Ping(1))
+	}
+	repo := fakegithub.Repo{ID: 7, Slug: "acme/app", DefaultBranch: "main"}
+	gh.Deliver(t, "http://127.0.0.1:1/", "issues", fakegithub.IssuesEdited(&repo, 1, "boop-bot[bot]", "alice"))
+
+	c, err := ghclient.NewAppClient(1, gh.PEM, gh.BaseURL(), ghclient.WithAppRateLimit(rate.Inf, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []ghclient.HookDelivery
+	cursor, pages := "", 0
+	for {
+		page, next, err := c.ListHookDeliveries(context.Background(), cursor, 3)
+		if err != nil {
+			t.Fatalf("ListHookDeliveries: %v", err)
+		}
+		got, pages = append(got, page...), pages+1
+		if next == "" {
+			break
+		}
+		cursor = next
+	}
+	if pages != 2 || len(got) != 4 {
+		t.Fatalf("%d pages, %d deliveries; want 2 and 4", pages, len(got))
+	}
+	first := got[0]
+	if first.ID != 4 || first.Event != "issues" || first.Action != "edited" || first.StatusCode != 0 || first.OK() ||
+		first.RepositoryID != 7 || first.InstallationID != 1 || first.GUID == "" || first.DeliveredAt.IsZero() {
+		t.Errorf("newest = %+v, want the failed issues delivery", first)
+	}
+	if !got[3].OK() || got[3].ID != 1 {
+		t.Errorf("oldest = %+v, want the first ping, 2xx", got[3])
+	}
+}
+
+// A primary rate limit on the App JWT comes back as RateLimitedError.
+func TestListHookDeliveries_RateLimited(t *testing.T) {
+	t.Parallel()
+	_, srv := newAppServer(t, func(w http.ResponseWriter, _ *http.Request, _ string) {
+		w.Header().Set("X-RateLimit-Limit", "5000")
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(time.Now().Add(time.Minute).Unix()))
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"message":"API rate limit exceeded"}`))
+	})
+	_, _, err := newTestAppClient(t, srv).ListHookDeliveries(context.Background(), "", 100)
+	if _, ok := errors.AsType[*platform.RateLimitedError](err); !ok {
+		t.Errorf("err = %v, want *RateLimitedError", err)
 	}
 }

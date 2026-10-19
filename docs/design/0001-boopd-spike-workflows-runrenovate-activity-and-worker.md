@@ -97,7 +97,7 @@ each question.
 ### Non-Goals
 
 - Postgres store, HTTP API, UI (ADR-0006).
-- Webhook ingest (INV-0001 OQ8).
+- Webhook ingest (INV-0001 OQ8) → DESIGN-0003.
 - Extracting shared code into `donaldgifford/x` (ADR-0007).
 - Evals, security findings, automerge, and the post-run steps (Wiz,
   Dependabot alerts, ranking). The workflow is shaped so they slot in after

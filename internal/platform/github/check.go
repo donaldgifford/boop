@@ -24,47 +24,65 @@ import (
 	"github.com/donaldgifford/boop/internal/platform"
 )
 
-// CheckRepo answers whether a repository discovery has stopped seeing is
-// really gone (DESIGN-0001 § RepoWorkflow): GET /repositories/{id} with
-// the installation token, then the config file on its default branch.
+// RepoCheck is CheckRepo's answer.
+type RepoCheck struct {
+	State platform.RepoState
+	// Repo is the repository's current metadata; nil when GitHub
+	// answered 404.
+	Repo *platform.Repository
+	// Config is the config probe of a present repository: the file
+	// found and its extends (ParseErr when it does not parse).
+	Config ConfigProbe
+}
+
+// CheckRepo answers whether a repository is still onboarded
+// (DESIGN-0001 § RepoWorkflow, DESIGN-0003 § CheckRepo returns extends):
+// GET /repositories/{id} with the installation token, then the
+// one-repository REST config probe over the client's config paths on
+// its default branch.
 //
 //   - 404 on the repository, or archived: RepoGone.
-//   - Present without the configured file: RepoNoConfig.
-//   - Present with it: RepoPresent, with the current metadata so the
-//     caller can pick up a rename or a new default branch.
+//   - The installation token's mint answered 404: an error wrapping
+//     platform.ErrInstallationGone, which the caller maps to gone.
+//   - Present without a config file: RepoNoConfig.
+//   - Present with one: RepoPresent, with the current metadata so the
+//     caller can pick up a rename or a new default branch, and the
+//     probe's extends.
 //   - Anything else (5xx, 401/403, rate limits, network): an error and
 //     RepoUnknown. The caller keeps waiting; it never offboards on one.
 //
 // GitHub answers /repositories/{id} for any public repository, so a
 // public repository removed from a "selected" installation reads as
 // present here; its next run's scoped mint fails instead.
-func (c *Client) CheckRepo(ctx context.Context, repoID int64) (platform.RepoState, *platform.Repository, error) {
+func (c *Client) CheckRepo(ctx context.Context, repoID int64) (*RepoCheck, error) {
+	unknown := &RepoCheck{State: platform.RepoUnknown}
 	if repoID <= 0 {
-		return platform.RepoUnknown, nil, errors.New("github: repository id required")
+		return unknown, errors.New("github: repository id required")
 	}
 	if err := c.wait(ctx); err != nil {
-		return platform.RepoUnknown, nil, err
+		return unknown, err
 	}
 	r, resp, err := c.gh.Repositories.GetByID(ctx, repoID)
 	if err != nil {
 		classified := classifyErr(resp, err)
 		if errors.Is(classified, platform.ErrNotFound) {
-			return platform.RepoGone, nil, nil
+			return &RepoCheck{State: platform.RepoGone}, nil
 		}
-		return platform.RepoUnknown, nil, classified
+		return unknown, classified
 	}
 	repo := toRepo(r)
 	if repo.Archived {
-		return platform.RepoGone, &repo, nil
+		return &RepoCheck{State: platform.RepoGone, Repo: &repo}, nil
 	}
-	ok, err := c.HasRenovateConfig(ctx, &repo)
+	probe, err := c.ProbeConfigREST(ctx, []platform.Repository{repo}, nil)
 	if err != nil {
-		return platform.RepoUnknown, nil, err
+		return unknown, err
 	}
-	if !ok {
-		return platform.RepoNoConfig, &repo, nil
+	cfg := probe.Configs[repo.NodeID]
+	if !cfg.Exists {
+		return &RepoCheck{State: platform.RepoNoConfig, Repo: &repo}, nil
 	}
-	return platform.RepoPresent, &repo, nil
+	return &RepoCheck{State: platform.RepoPresent, Repo: &repo, Config: cfg}, nil
 }
 
 // RepoIDBySlug returns the numeric id of owner/name, for the shared-preset

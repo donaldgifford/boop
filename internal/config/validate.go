@@ -74,6 +74,11 @@ func (b *builder) validate(cfg *Config, raw *fileSchema) {
 			b.errorf(pod.TerminationRange, "Invalid grace period", "termination_grace_period_seconds must not be negative.")
 		}
 	}
+	if in := raw.Ingest; in != nil && in.Path != nil {
+		if p := *in.Path; !strings.HasPrefix(p, "/") || path.Clean(p) != p {
+			b.errorf(in.PathRange, "Invalid ingest path", "ingest.path %q must be a clean absolute URL path, such as %s.", p, DefaultIngestPath)
+		}
+	}
 	b.validateApps(raw.Apps)
 }
 
@@ -193,6 +198,12 @@ func (b *builder) validateApps(apps []appBlock) {
 		b.validateSecretRef(&a.PrivateKeySecretRef, "private_key_secret_ref")
 		if bg := a.Budget; bg != nil {
 			b.validateBudget(bg)
+		}
+		if w := a.Webhook; w != nil {
+			b.validateSecretRef(&w.SecretRef, "webhook.secret_ref")
+			if w.Bot != nil && strings.TrimSpace(*w.Bot) == "" {
+				b.errorf(w.BotRange, "Invalid webhook bot", "webhook.bot must not be empty; omit it for %q.", a.Name+"[bot]")
+			}
 		}
 	}
 }

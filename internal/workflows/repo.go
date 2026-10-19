@@ -63,6 +63,18 @@ type repo struct {
 
 	discovered workflow.ReceiveChannel
 	recheck    workflow.ReceiveChannel
+	event      workflow.ReceiveChannel
+	changed    workflow.ReceiveChannel
+
+	// settle and minInterval schedule events, from the last PlanRun.
+	settle, minInterval time.Duration
+	// lastStart is the last run attempt's start, min_interval's base.
+	lastStart time.Time
+	// runReason is the event reason of the run wait returned for, if any.
+	runReason string
+	// onboarding is set for a workflow started by a changed signal until
+	// CheckRepo confirms the repository.
+	onboarding bool
 
 	// nextCheck delays the absence check after a CheckRepo failure.
 	nextCheck time.Time
@@ -71,20 +83,26 @@ type repo struct {
 	phase    string
 }
 
-// RepoWorkflow owns one repository: it waits for its due time or a
-// recheck, takes a lease from the installation's budget, runs Renovate
-// once per lease, reports the spend, and decides the next run from the
-// outcome (DESIGN-0001 § RepoWorkflow, § Convergence and stall). It ends
-// only when the repository is confirmed gone or offboarded, and
+// RepoWorkflow owns one repository: it waits for its due time, a
+// recheck or a webhook event, takes a lease from the installation's
+// budget, runs Renovate once per lease, reports the spend, and decides
+// the next run from the outcome (DESIGN-0001 § RepoWorkflow, §
+// Convergence and stall; DESIGN-0003 § RepoWorkflow: event and changed).
+// It ends only when the repository is confirmed gone or offboarded, and
 // continues as new to bound its history.
 func RepoWorkflow(ctx workflow.Context, in *RepoState) error {
 	r := &repo{
 		s:          *in,
 		discovered: workflow.GetSignalChannel(ctx, DiscoveredSignal),
 		recheck:    workflow.GetSignalChannel(ctx, RecheckSignal),
+		event:      workflow.GetSignalChannel(ctx, EventSignal),
+		changed:    workflow.GetSignalChannel(ctx, ChangedSignal),
 	}
 	if r.s.Platform == "" {
 		r.s.Platform = Platform
+	}
+	if r.s.LastRun != nil {
+		r.lastStart = r.s.LastRun.StartedAt
 	}
 	if err := workflow.SetQueryHandler(ctx, StateQuery, func() (RepoState, error) { return r.s, nil }); err != nil {
 		return err
@@ -92,9 +110,7 @@ func RepoWorkflow(ctx workflow.Context, in *RepoState) error {
 	if err := r.plan(ctx, PriorityNormal); err != nil {
 		return err
 	}
-	if r.s.NextDue.IsZero() {
-		r.s.NextDue = workflow.Now(ctx).Add(firstDueJitter(r.s.RepoID, r.cadence))
-	}
+	r.firstDue(ctx)
 	r.upsert(ctx, PhaseWaiting)
 
 	for {
@@ -110,6 +126,26 @@ func RepoWorkflow(ctx workflow.Context, in *RepoState) error {
 			return err
 		}
 		r.upsert(ctx, PhaseWaiting)
+	}
+}
+
+// firstDue sets a new execution's NextDue. A workflow started by
+// SignalWithStart(changed) runs CheckRepo first and the changed's event
+// schedules its first run, so it skips the jitter; others are jittered
+// over the cadence. A first execution logs its onboarding.
+func (r *repo) firstDue(ctx workflow.Context) {
+	fresh := workflow.GetInfo(ctx).ContinuedExecutionRunID == "" && r.s.LastRun == nil
+	switch {
+	case r.changed.Len() > 0:
+		r.onboarding = fresh
+		if r.s.NextDue.IsZero() {
+			r.s.NextDue = workflow.Now(ctx).Add(r.cadence)
+		}
+	case r.s.NextDue.IsZero():
+		r.s.NextDue = workflow.Now(ctx).Add(firstDueJitter(r.s.RepoID, r.cadence))
+	}
+	if fresh && !r.onboarding {
+		workflow.GetLogger(ctx).Info("onboarded", "repo_id", r.s.RepoID, "via", "discovery")
 	}
 }
 
@@ -136,25 +172,39 @@ func (r *repo) plan(ctx workflow.Context, p Priority) error {
 		return fmt.Errorf("plan run: %w", err)
 	}
 	r.s.Profile, r.cadence = plan.Profile, plan.Cadence
+	r.settle, r.minInterval = plan.Settle, plan.MinInterval
 	return nil
 }
 
-// wait blocks until the repository is due or rechecked. It applies
-// discovered signals and runs the absence check meanwhile; end is true
-// when CheckRepo confirmed the repository gone or offboarded.
+// wait blocks until the repository is due, rechecked or an event's run
+// is due. It applies discovered and event signals, handles changed
+// signals and runs the absence check meanwhile; end is true when
+// CheckRepo confirmed the repository gone or offboarded. A pending
+// changed is handled before the due check, so a workflow it started runs
+// CheckRepo before any run.
 func (r *repo) wait(ctx workflow.Context) (prio Priority, end bool) {
+	r.runReason = ""
 	for {
+		if c, ok := r.takeChanged(); ok {
+			if r.handleChanged(ctx, &c) {
+				return 0, true
+			}
+			continue
+		}
+		r.drainEvents(ctx)
 		now := workflow.Now(ctx)
 		if r.drainRecheck() {
 			return PriorityHigh, false
 		}
-		if !r.s.NextDue.After(now) {
-			return PriorityNormal, false
+		at, atPrio, reason := r.due()
+		if !at.After(now) {
+			r.runReason = reason
+			return atPrio, false
 		}
 		tctx, cancel := workflow.WithCancel(ctx)
 		sel := workflow.NewSelector(ctx)
 		fired := ""
-		sel.AddFuture(workflow.NewTimer(tctx, r.s.NextDue.Sub(now)), func(workflow.Future) { fired = "due" })
+		sel.AddFuture(workflow.NewTimer(tctx, at.Sub(now)), func(workflow.Future) { fired = "due" })
 		if at, ok := r.absentAt(); ok {
 			sel.AddFuture(workflow.NewTimer(tctx, max(at.Sub(now), 0)), func(workflow.Future) { fired = "absent" })
 		}
@@ -168,12 +218,16 @@ func (r *repo) wait(ctx workflow.Context) (prio Priority, end bool) {
 			r.applyDiscovered(&d, workflow.Now(ctx))
 			fired = "discovered"
 		})
+		// event and changed are received at the top of the loop.
+		sel.AddReceive(r.event, func(workflow.ReceiveChannel, bool) { fired = "event" })
+		sel.AddReceive(r.changed, func(workflow.ReceiveChannel, bool) { fired = "changed" })
 		sel.Select(ctx)
 		cancel()
 
 		switch fired {
 		case "due":
-			return PriorityNormal, false
+			r.runReason = reason
+			return atPrio, false
 		case "recheck":
 			return PriorityHigh, false
 		case "absent":
@@ -225,15 +279,12 @@ func (r *repo) absentAt() (time.Time, bool) {
 }
 
 // checkRepo runs CheckRepo after discovery stopped seeing the
-// repository. Gone or no config ends the workflow; present resets
-// LastSeen; a failure retries after another discovery interval, so an
-// outage never looks like an offboarding.
+// repository. Gone or no config ends the workflow; present refreshes the
+// slug, branch and extends and resets LastSeen; a failure retries after
+// another discovery interval, so an outage never looks like an
+// offboarding.
 func (r *repo) checkRepo(ctx workflow.Context) (gone bool) {
-	r.upsert(ctx, PhaseChecking)
-	defer r.upsert(ctx, PhaseWaiting)
-	var res CheckRepoResult
-	err := workflow.ExecuteActivity(shortOptions(ctx, PriorityNormal, r.s.InstallationID), CheckRepoActivity,
-		&CheckRepoInput{InstallationID: r.s.InstallationID, RepoID: r.s.RepoID}).Get(ctx, &res)
+	res, err := r.check(ctx)
 	now := workflow.Now(ctx)
 	if err != nil {
 		workflow.GetLogger(ctx).Warn("CheckRepo failed; keeping the repository", "error", err)
@@ -242,23 +293,41 @@ func (r *repo) checkRepo(ctx workflow.Context) (gone bool) {
 	}
 	switch res.State {
 	case RepoGone, RepoNoConfig:
-		workflow.GetLogger(ctx).Info("offboarded", "repo_id", r.s.RepoID, "state", res.State)
+		workflow.GetLogger(ctx).Info("offboarded", "repo_id", r.s.RepoID, "reason", res.State, "state", res.State)
 		return true
 	default:
 		workflow.GetMetricsHandler(ctx).Counter(MetricDiscoveryMissed).Inc(1)
 		if res.Slug != "" {
 			r.s.Slug, r.s.DefaultBranch = res.Slug, res.DefaultBranch
 		}
+		r.s.Extends = res.Extends
 		r.s.LastSeen = now
 		r.nextCheck = time.Time{}
 		return false
 	}
 }
 
+// check runs the CheckRepo activity in the checking phase.
+func (r *repo) check(ctx workflow.Context) (*CheckRepoResult, error) {
+	r.upsert(ctx, PhaseChecking)
+	defer r.upsert(ctx, PhaseWaiting)
+	var res CheckRepoResult
+	err := workflow.ExecuteActivity(shortOptions(ctx, PriorityNormal, r.s.InstallationID), CheckRepoActivity,
+		&CheckRepoInput{InstallationID: r.s.InstallationID, RepoID: r.s.RepoID}).Get(ctx, &res)
+	if err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
 // runOnce takes leases and runs until one attempt has an outcome the
 // convergence table decides on. end is true when the outcome offboards
 // the repository.
 func (r *repo) runOnce(ctx workflow.Context, prio Priority) (end bool, err error) {
+	// The run covers any pending event; events that arrive during it stay
+	// buffered and schedule one more run after it.
+	r.clearEvent()
+	countEventRun(ctx, r.runReason)
 	if err := r.plan(ctx, prio); err != nil {
 		return false, err
 	}
@@ -270,6 +339,7 @@ func (r *repo) runOnce(ctx workflow.Context, prio Priority) (end bool, err error
 		}
 		r.upsert(ctx, PhaseRunning)
 		start := workflow.Now(ctx)
+		r.lastStart = start
 		r.s.Iterations++
 		var res RunResult
 		runErr := workflow.ExecuteActivity(runOptions(ctx, prio, r.s.InstallationID), RunRenovateActivity, &RunInput{
@@ -505,7 +575,7 @@ func (r *repo) report(ctx workflow.Context, l leases, a attempt) {
 // rerun asks for a new lease at once; offboard ends the workflow.
 func (r *repo) decide(ctx workflow.Context, a attempt, start time.Time) (rerun, offboard bool) {
 	now := workflow.Now(ctx)
-	r.s.LastRun = &RunSummary{Outcome: a.outcome, FinishedAt: now, Progress: a.progress}
+	r.s.LastRun = &RunSummary{Outcome: a.outcome, StartedAt: start, FinishedAt: now, Progress: a.progress}
 	if a.result != nil {
 		r.s.LastRun.RepositoryResult = a.result.RepositoryResult
 	}
@@ -582,8 +652,20 @@ func (r *repo) upsert(ctx workflow.Context, phase string) {
 }
 
 // continueAsNew carries the state, with any buffered signals applied: a
-// discovered refreshes the state, a recheck makes the next run due now.
+// changed runs its CheckRepo (and may end the workflow instead), an
+// event schedules its run in the carried state, a discovered refreshes
+// the state, a recheck makes the next run due now.
 func (r *repo) continueAsNew(ctx workflow.Context) error {
+	for {
+		c, ok := r.takeChanged()
+		if !ok {
+			break
+		}
+		if r.handleChanged(ctx, &c) {
+			return nil
+		}
+	}
+	r.drainEvents(ctx)
 	var d Discovered
 	for r.discovered.ReceiveAsync(&d) {
 		r.applyDiscovered(&d, workflow.Now(ctx))

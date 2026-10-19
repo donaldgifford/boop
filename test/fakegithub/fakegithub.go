@@ -160,6 +160,10 @@ type Server struct {
 	rateReads     int
 	secondary     map[SecondaryScope]secondaryLimit
 	probeTimes    []time.Time
+	appID         int64
+	webhookSecret string
+	deliveries    []Delivery
+	deleted       map[int64]bool
 }
 
 // NewFake returns a fake GitHub with one installation (id 1) and
@@ -184,6 +188,8 @@ func NewFake() (*Server, error) {
 		revokeStatus: http.StatusNoContent,
 		failPages:    make(map[int]int),
 		secondary:    make(map[SecondaryScope]secondaryLimit),
+		appID:        1,
+		deleted:      make(map[int64]bool),
 	}, nil
 }
 
@@ -362,6 +368,16 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.serveApp(w, r, path)
 		return
 	}
+	if s.revokedToken(r) {
+		// GitHub revokes a deleted installation's tokens.
+		writeJSON(w, http.StatusUnauthorized, message("Bad credentials"))
+		return
+	}
+	s.serveInstallation(w, r, path)
+}
+
+// serveInstallation serves the installation-token REST endpoints.
+func (s *Server) serveInstallation(w http.ResponseWriter, r *http.Request, path string) {
 	switch {
 	case r.Method == http.MethodDelete && path == "/installation/token":
 		s.revoke(w, r)
@@ -388,6 +404,8 @@ func (s *Server) serveApp(w http.ResponseWriter, r *http.Request, path string) {
 		s.listInstallations(w)
 	case r.Method == http.MethodPost && isMint:
 		s.mint(w, r, id)
+	case r.Method == http.MethodGet && path == "/app/hook/deliveries":
+		s.listDeliveries(w, r)
 	default:
 		notFound(w)
 	}
@@ -411,6 +429,20 @@ func queryInt(r *http.Request, name string, def int) int {
 		return def
 	}
 	return n
+}
+
+// revokedToken reports whether r carries a token minted for an
+// installation that has since been deleted.
+func (s *Server) revokedToken(r *http.Request) bool {
+	tok := strings.TrimPrefix(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), "token ")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, m := range s.mints {
+		if m.Token == tok {
+			return s.deleted[m.InstallationID]
+		}
+	}
+	return false
 }
 
 func notFound(w http.ResponseWriter) {
@@ -449,6 +481,10 @@ func (s *Server) mint(w http.ResponseWriter, r *http.Request, id string) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.deleted[instID] {
+		notFound(w)
+		return
+	}
 	tok := fmt.Sprintf("ghs_fake_%d_%d", instID, len(s.mints)+1)
 	s.mints = append(s.mints, Mint{InstallationID: instID, RepoIDs: body.RepositoryIDs, Token: tok})
 	writeJSON(w, http.StatusCreated, map[string]any{

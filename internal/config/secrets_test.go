@@ -179,3 +179,67 @@ func TestReadSecrets_RedisPasswordMissing(t *testing.T) {
 		t.Fatalf("ReadSecrets() = %v, want a redis password error", err)
 	}
 }
+
+func webhookConfig(t *testing.T) *config.Config {
+	t.Helper()
+	src := minimalApp + `
+app "boop-bot" {
+  app_id = 1
+  private_key_secret_ref {
+    name = "boop-bot-app"
+    key  = "private-key.pem"
+  }
+  webhook {
+    secret_ref {
+      name = "boop-bot-webhook"
+      key  = "secret"
+    }
+  }
+}
+`
+	cfg, diags := config.Parse("webhook.hcl", []byte(src))
+	if diags.HasErrors() {
+		t.Fatalf("Parse: %v", diags.Error())
+	}
+	cfg.SecretsDir = t.TempDir()
+	return cfg
+}
+
+// Ingest reads the webhook secret, trimmed, and never the App key; the
+// worker's ReadSecrets never reads the webhook secret.
+func TestReadWebhookSecrets(t *testing.T) {
+	t.Parallel()
+	cfg := webhookConfig(t)
+	writeSecret(t, cfg.SecretsDir, "boop-bot-webhook", "secret", "s3cret\n")
+	if err := cfg.ReadWebhookSecrets(); err != nil {
+		t.Fatalf("ReadWebhookSecrets() = %v", err)
+	}
+	if got := cfg.Apps[0].Webhook.Secret.Reveal(); got != "s3cret" {
+		t.Errorf("webhook secret = %q, want trimmed s3cret", got)
+	}
+	if !cfg.Apps[0].PrivateKey.IsZero() {
+		t.Error("ReadWebhookSecrets read the App key")
+	}
+
+	worker := webhookConfig(t)
+	writeSecret(t, worker.SecretsDir, "boop-bot-app", "private-key.pem", "pem")
+	if err := worker.ReadSecrets(); err != nil {
+		t.Fatalf("ReadSecrets() without the webhook secret mounted = %v", err)
+	}
+	if !worker.Apps[0].Webhook.Secret.IsZero() {
+		t.Error("ReadSecrets read the webhook secret")
+	}
+}
+
+func TestReadWebhookSecrets_MissingOrEmpty(t *testing.T) {
+	t.Parallel()
+	cfg := webhookConfig(t)
+	err := cfg.ReadWebhookSecrets()
+	if want := filepath.Join(cfg.SecretsDir, "boop-bot-webhook", "secret"); err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("missing secret: err = %v, want it to name %s", err, want)
+	}
+	writeSecret(t, cfg.SecretsDir, "boop-bot-webhook", "secret", " \n")
+	if err := cfg.ReadWebhookSecrets(); err == nil || !strings.Contains(err.Error(), "empty") {
+		t.Errorf("empty secret: err = %v, want empty", err)
+	}
+}

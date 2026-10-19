@@ -33,6 +33,7 @@ import (
 // AppAPI is what the activities need from the App-level client.
 type AppAPI interface {
 	ListInstallations(ctx context.Context) ([]platform.Installation, error)
+	ListHookDeliveries(ctx context.Context, cursor string, perPage int) ([]github.HookDelivery, string, error)
 	platform.Minter
 }
 
@@ -43,7 +44,7 @@ type InstallationAPI interface {
 	ProbeConfig(ctx context.Context, repos []platform.Repository, paths []string, onQuery func()) (*github.ProbeResult, error)
 	ProbeConfigREST(ctx context.Context, repos []platform.Repository, paths []string) (*github.ProbeResult, error)
 	ReadRateLimit(ctx context.Context) (*workflows.Readings, error)
-	CheckRepo(ctx context.Context, repoID int64) (platform.RepoState, *platform.Repository, error)
+	CheckRepo(ctx context.Context, repoID int64) (*github.RepoCheck, error)
 	RepoIDBySlug(ctx context.Context, slug string) (int64, error)
 	SetDiscoveredLimit(limit int)
 }
@@ -57,6 +58,9 @@ type RateReader interface {
 type GitHub interface {
 	App(app *config.App) (AppAPI, error)
 	Installation(app *config.App, installationID int64, configPaths []string) (InstallationAPI, error)
+	// Forget drops the cached installation client, so the next call
+	// mints a fresh token.
+	Forget(installationID int64)
 	Token(app *config.App, token string) (RateReader, error)
 }
 
@@ -104,6 +108,12 @@ func (g *ghClients) Installation(app *config.App, installationID int64, configPa
 	}
 	g.installs[installationID] = c
 	return c, nil
+}
+
+func (g *ghClients) Forget(installationID int64) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	delete(g.installs, installationID)
 }
 
 func (*ghClients) Token(app *config.App, token string) (RateReader, error) {

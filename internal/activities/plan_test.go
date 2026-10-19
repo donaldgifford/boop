@@ -21,6 +21,7 @@ func TestPlanRun(t *testing.T) {
 		DefaultProfile: "baseline",
 		UnknownProfile: "strict",
 		ProfileRules:   []config.ProfileRule{{Managers: []string{"pip_requirements"}, Profile: "python"}},
+		Ingest:         config.Ingest{Settle: 30 * time.Second, MinInterval: 5 * time.Minute},
 		Apps:           []*config.App{{Name: "main", AppID: 7, Cadence: 12 * time.Hour}},
 	}
 	tests := []struct {
@@ -51,6 +52,9 @@ func TestPlanRun(t *testing.T) {
 			}
 			if got.Profile != tt.want || got.Cadence != 12*time.Hour {
 				t.Errorf("plan = %+v, want %s every 12h", got, tt.want)
+			}
+			if got.Settle != 30*time.Second || got.MinInterval != 5*time.Minute {
+				t.Errorf("plan = %+v, want the ingest settle 30s and min_interval 5m", got)
 			}
 		})
 	}

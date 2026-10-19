@@ -20,6 +20,8 @@
   - [private\_key\_secret\_ref](#private_key_secret_ref)
   - [discovery](#discovery)
   - [budget](#budget)
+  - [webhook](#webhook)
+- [ingest](#ingest)
 - [Secrets](#secrets)
 - [Chart values](#chart-values)
 - [Validation](#validation)
@@ -27,7 +29,9 @@
 
 `boopd.hcl` is the worker's only configuration (ADR-0004): which Renovate
 image runs, where its Jobs go, the ecosystem profiles and how a repository
-is matched to one, and the GitHub Apps whose installations are discovered.
+is matched to one, the GitHub Apps whose installations are discovered, and
+webhook ingest. `boopd ingest` reads the same file for the `ingest` block
+and each App's `webhook` block.
 Limits are never configured. The installation budget is read from
 `/rate_limit` (ADR-0008).
 
@@ -53,6 +57,7 @@ describes every setting in it. `TestReferenceCoversSchema` in
 - Every error is reported at once, each with file, line and column.
 - Durations are strings in Go form: `"90s"`, `"10m"`, `"6h"`, `"24h"`. A
   set duration must be positive; omit the attribute to get its default.
+  `ingest.settle` and `ingest.min_interval` may be `"0s"`.
 - `env("NAME")` returns an environment variable of the worker, or `""`.
   Secrets do not go through it; see [Secrets](#secrets).
 - Optional attributes may be omitted; the defaults below apply.
@@ -82,7 +87,9 @@ default_profile = "baseline"
 unknown_profile = "python"
 profile_rule { … } # zero or more
 
-app "boop-bot" { … } # one or more
+ingest { … } # optional: webhook ingest timings
+
+app "boop-bot" { … } # one or more; webhook { … } inside enables ingest for it
 ```
 
 ## Top level
@@ -97,6 +104,7 @@ app "boop-bot" { … } # one or more
 | `default_profile` | string | required | The profile for a repository whose config extends presets no rule matches. |
 | `unknown_profile` | string | required | The profile for a repository whose config has no `extends`. |
 | `profile_rule` | block | none | Maps presets and managers to a profile. |
+| `ingest` | block | defaults | Webhook ingest's path and the timings webhook events run by. |
 | `app` | block, labelled | at least one | A GitHub App whose installations are discovered. |
 
 ## renovate
@@ -282,6 +290,7 @@ app "boop-bot" {
   private_key_secret_ref { … }
   discovery { … }
   budget { … }
+  webhook { … } # optional
 }
 ```
 
@@ -297,6 +306,7 @@ The label names the App in logs, metrics and the discovery Schedule
 | `private_key_secret_ref` | block | required | The Secret holding the App's PEM private key. |
 | `discovery` | block | defaults | How repositories are found. |
 | `budget` | block | defaults | How runs are admitted against the installation's rate limits. |
+| `webhook` | block | none | The App delivers webhooks to `boopd ingest` (DESIGN-0003). Without it, ingest rejects the App's deliveries and no delivery audit runs for it. |
 
 ### private_key_secret_ref
 
@@ -329,15 +339,59 @@ without its `extends`, and logged at warn.
 | `max_concurrent_runs` | number | `10` | Concurrent runs per installation, a guard against GitHub's secondary limits, which `/rate_limit` does not show (DESIGN-0001 OQ5). 0 means the budget alone decides. |
 | `default_estimate` | map of numbers | `{ core = 300, graphql = 150 }` | Requests per run assumed for each resource until measured runs replace the estimate (DESIGN-0001 OQ6). Keys are `core` and `graphql`; values are positive. Keys you omit keep their defaults. |
 
+### webhook
+
+```hcl
+webhook {
+  bot = "boop-bot[bot]"
+  secret_ref {
+    name = "boop-bot-webhook"
+    key  = "secret"
+  }
+}
+```
+
+| Setting | Type | Default | Description |
+| - | - | - | - |
+| `bot` | string | `<label>[bot]` | The App's bot login. An event whose `sender` is the bot is recorded but never routed, so Renovate's own dashboard edits and PR changes do not cause runs. Not empty. |
+| `secret_ref` | block | required | The Secret holding the webhook secret set in the App's settings: `name` (a DNS subdomain) and `key`. Surrounding whitespace is trimmed. Only the ingest pods mount it. |
+
+Ingest picks the App by `X-GitHub-Hook-Installation-Target-ID` (its
+`app_id`) and verifies `X-Hub-Signature-256` with this secret. Each App
+with a `webhook` block also gets a `delivery-audit/<label>` Schedule every
+`ingest.audit_every`.
+
+## ingest
+
+```hcl
+ingest {
+  path         = "/webhooks/github"
+  settle       = "30s"
+  min_interval = "5m"
+  audit_every  = "15m"
+}
+```
+
+| Setting | Type | Default | Description |
+| - | - | - | - |
+| `path` | string | `/webhooks/github` | Where `boopd ingest` serves deliveries, and the only path the chart's Ingress or `HTTPRoute` routes. A clean absolute URL path. |
+| `settle` | duration | `30s` | How long a webhook event waits before its run, so a burst (several boxes ticked, a merge that closes and pushes) gives one run. At least `0s`. |
+| `min_interval` | duration | `5m` | The least time from the last run's start to a run a normal-priority event asks for. Dashboard and PR checkbox clicks skip it. At least `0s`. |
+| `audit_every` | duration | `15m` | How often the delivery audit reads GitHub's recent deliveries and counts failed ones. At least `1m`. |
+
+The worker reads `settle` and `min_interval` through `PlanRun` before each
+run, so a change applies to running RepoWorkflows from their next run.
+
 ## Secrets
 
 Secrets are files, never values in this file and never environment
 variables:
 
 - Each `*_secret_ref` names a Kubernetes Secret and key. The chart mounts
-  it read-only at `<secrets_dir>/<name>/<key>`, in the worker only.
-- The worker reads them once at start. A missing or empty file stops it,
-  naming the path.
+  it read-only at `<secrets_dir>/<name>/<key>`: the App key and Redis in
+  the worker only, the webhook secrets in the ingest pods only.
+- Each role reads its own once at start. A missing or empty file stops
+  it, naming the path.
 - `boopd config validate` does not read them.
 - Read values print and log as `[redacted]`.
 
@@ -354,7 +408,8 @@ labelled blocks become maps keyed by label:
 | `profile "<name>"` | `boopd.profiles.<name>`: `inherit`, `pod`, `renovate`; pod keys in camelCase, `toleration` blocks as `pod.tolerations` |
 | `order`, `default_profile`, `unknown_profile` | `boopd.order`, `boopd.defaultProfile`, `boopd.unknownProfile` |
 | `profile_rule` | `boopd.profileRules`, a list |
-| `app "<name>"` | `boopd.apps.<name>`: `endpoint`, `appId`, `installations`, `cadence`, `privateKeySecretRef`, `discovery`, `budget` |
+| `ingest.*` | `boopd.ingest.*`: `path`, `settle`, `minInterval`, `auditEvery` |
+| `app "<name>"` | `boopd.apps.<name>`: `endpoint`, `appId`, `installations`, `cadence`, `privateKeySecretRef`, `discovery`, `budget`, `webhook` (`bot`, `secretRef`) |
 
 What the chart adds:
 
@@ -393,7 +448,11 @@ Load fails, listing every problem, when:
   - `redis_password_secret_ref` is set without `redis_url`.
 - **Enum values:** `log_level`, `dry_run` or `discovery.probe` is outside
   its set.
-- **Durations:** a duration does not parse or is not positive.
+- **Durations:** a duration does not parse or is not positive
+  (`ingest.settle` and `ingest.min_interval` may be zero; `audit_every`
+  is at least `1m`).
+- **ingest:** `path` is not a clean absolute URL path.
+- **webhook:** `bot` is set but empty.
 - **Secret refs:** a name is not a DNS subdomain, or a key is not a valid
   Secret key.
 - **runs:** `namespace` is not a DNS label, or `max_concurrent` is

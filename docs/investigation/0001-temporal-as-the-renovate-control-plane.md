@@ -715,6 +715,8 @@ Success criteria:
   first version. Recommended: (b). Add ingest once the per-repository loop is
   proven. The first webhook worth handling is a push that adds the Renovate
   config file, because it makes onboarding immediate (Observation 9).
+  **Resolved by DESIGN-0003** (2026-10-18): (a), an `ingest` role, now
+  that the per-repository loop is proven.
 
 ## Handoff: starting `boop`
 

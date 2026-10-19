@@ -3,6 +3,45 @@
 All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
+## [unreleased]
+
+### Features
+
+- *(config)* Ingest block and per-App webhook block
+- *(config)* Read webhook secrets for ingest, apart from the App key
+- *(activities)* PlanRun returns the ingest settle and min_interval
+- *(github)* CheckRepo returns the config probe; a mint 404 is ErrInstallationGone
+- *(activities)* CheckRepo offboards deleted installations and refreshes extends
+- *(workflows)* Event and changed signal types and RepoState's pending event
+- *(workflows)* RepoWorkflow handles event and changed signals
+- *(workflows)* Targeted discovery of named installations
+- *(workflows)* TargetedDiscoveryID
+- *(github)* List the App's hook deliveries with the App JWT
+- *(activities)* ListHookDeliveries audits the App's webhook deliveries
+- *(workflows)* DeliveryAuditWorkflow counts failed deliveries per pass
+- *(worker)* A delivery-audit Schedule per App with a webhook
+
+### Bug Fixes
+
+- *(activities)* CheckRepo re-mints after a revoked installation token
+
+### Documentation
+
+- Approve DESIGN-0003 and note it in DESIGN-0001 and INV-0001
+- *(design-0003)* Fix a line read as a heading
+- *(examples)* Ingest block and boop-bot's webhook block
+- *(config)* Ingest and webhook settings
+
+### Testing
+
+- *(workflows)* Record replay baselines from the current code
+- *(workflows)* Replay the recorded histories in just test
+- *(fakegithub)* Signed deliveries, hook deliveries and deleted installations
+- *(fakegithub)* Payload builders for the routed webhook events
+- *(fakegithub)* Cover deliveries, hook-delivery paging, deleted installations and payloads
+- *(workflows)* Event and changed timings on the test clock
+- *(workflows)* Targeted discovery passes and the untargeted replay
+
 ## [0.3.2] - 2026-10-19
 
 ### Features

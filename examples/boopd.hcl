@@ -96,6 +96,15 @@ profile_rule {
   profile  = "node"
 }
 
+# Webhook ingest (DESIGN-0003): `boopd ingest` serves GitHub's deliveries
+# for every app with a webhook block. Omit the block for the defaults.
+ingest {
+  path         = "/webhooks/github" # the only path the Ingress or HTTPRoute exposes
+  settle       = "30s"              # gather a burst of events into one run
+  min_interval = "5m"               # least time between run starts; checkbox clicks skip it
+  audit_every  = "15m"              # delivery audit Schedule, per app with a webhook
+}
+
 app "boop-bot" {
   endpoint      = "https://api.github.com"
   app_id        = 123456
@@ -119,5 +128,15 @@ app "boop-bot" {
     reserve_fraction    = 0.10
     max_concurrent_runs = 10 # per-installation cap for secondary limits; 0 = budget only
     default_estimate    = { core = 300, graphql = 150 }
+  }
+
+  # Deliveries from this App reach ingest. Events boop-bot itself sends
+  # are recorded but never routed.
+  webhook {
+    bot = "boop-bot[bot]" # default: "<app label>[bot]"
+    secret_ref {
+      name = "boop-bot-webhook"
+      key  = "secret"
+    }
   }
 }

@@ -125,12 +125,62 @@ type Discovered struct {
 	Extends           []string
 }
 
+// Event is the event signal: something on GitHub wants a run
+// (DESIGN-0003 § RepoWorkflow: event and changed). It never runs at once:
+// it schedules a run after the settle time, and later events merge into
+// that schedule.
+type Event struct {
+	// Reason is why, one of the EventReason values.
+	Reason string
+	// Priority is PriorityHigh for a person's checkbox click, which skips
+	// min_interval; PriorityNormal otherwise. Zero means normal.
+	Priority Priority
+	// DeliveryID is the X-GitHub-Delivery that caused it, for the
+	// decision log.
+	DeliveryID string
+}
+
+// Event reasons ingest sends.
+const (
+	EventReasonDashboard  = "dashboard"
+	EventReasonPRCheckbox = "pr-checkbox"
+	EventReasonPRClosed   = "pr-closed"
+	EventReasonChanged    = "changed"
+)
+
+// Changed is the changed signal: the repository itself may have changed
+// (config, slug, branch, lifecycle). The workflow runs CheckRepo first;
+// ingest also starts a workflow with it (SignalWithStart) for a push
+// that adds a config file.
+type Changed struct {
+	// Reason is why, one of the ChangedReason values.
+	Reason string
+	// Slug, DefaultBranch and InstallationID are the payload's; zero
+	// values leave the state's.
+	Slug           string
+	DefaultBranch  string
+	InstallationID int64
+	// DeliveryID is the X-GitHub-Delivery that caused it.
+	DeliveryID string
+}
+
+// Changed reasons ingest sends.
+const (
+	ChangedReasonConfig              = "config"
+	ChangedReasonRepository          = "repository"
+	ChangedReasonRemoved             = "removed"
+	ChangedReasonInstallationDeleted = "installation-deleted"
+)
+
 // RunSummary is the last run as RepoWorkflow keeps it.
 type RunSummary struct {
 	Outcome          Outcome
 	RepositoryResult string
-	FinishedAt       time.Time
-	Progress         Progress
+	// StartedAt is the run's start, which min_interval is measured from;
+	// zero in state from before webhooks.
+	StartedAt  time.Time
+	FinishedAt time.Time
+	Progress   Progress
 }
 
 // RepoState is RepoWorkflow's input and its ContinueAsNew state
@@ -151,6 +201,13 @@ type RepoState struct {
 	StallCount        int
 	ConsecutiveReruns int
 	Iterations        int
+	// EventDue is when a pending webhook event's run is due; zero when
+	// none is pending. The run happens at min(NextDue, EventDue).
+	EventDue time.Time
+	// EventPriority is the highest priority among the pending events.
+	EventPriority Priority
+	// EventReason is the reason of the event EventDue came from.
+	EventReason string
 }
 
 // ListInstallationsInput is the ListInstallations activity input.
@@ -200,6 +257,9 @@ type CheckRepoResult struct {
 	State         string
 	Slug          string
 	DefaultBranch string
+	// Extends is a present repository's config extends; histories from
+	// before it decode it empty.
+	Extends []string
 }
 
 // CheckRepo states.
@@ -218,16 +278,29 @@ type PlanRunInput struct {
 }
 
 // RunPlan is PlanRun's answer from the config file, which never travels
-// in a payload: the profile for the next run and the app's cadence.
+// in a payload: the profile for the next run, the app's cadence, and the
+// ingest timings webhook events are scheduled by (DESIGN-0003 § Settle
+// and min_interval). Histories from before Settle and MinInterval decode
+// them as zero.
 type RunPlan struct {
 	Profile string
 	Cadence time.Duration
+	// Settle delays a run an event asks for, gathering a burst into one.
+	Settle time.Duration
+	// MinInterval is the least time from the last run's start to a run a
+	// normal-priority event asks for.
+	MinInterval time.Duration
 }
 
 // DiscoveryInput is DiscoveryWorkflow's input; the discovery/<app>
 // Schedule passes it.
 type DiscoveryInput struct {
 	App string
+	// Installations, when set, limits the pass to these installation IDs
+	// (targeted discovery, DESIGN-0003). The App's allowlist still holds:
+	// an ID outside it, or not in the App's listing, is skipped with a
+	// warn. Empty is every installation, as the Schedule passes.
+	Installations []int64
 }
 
 // DiscoveryResult is DiscoveryWorkflow's summary of one pass.
@@ -244,3 +317,42 @@ type DiscoveryResult struct {
 // OffboardResults are the repository results that end a RepoWorkflow
 // (DESIGN-0001 § RunRenovate activity, Classification, first row).
 var OffboardResults = []string{"disabled-no-config", "archived", "not-found", "renamed", "pending-deletion", "mirror"}
+
+// ListHookDeliveriesInput is the ListHookDeliveries activity input.
+type ListHookDeliveriesInput struct {
+	App string
+	// After is the newest delivery id the last pass read; the activity
+	// reads only newer ones. Zero reads GitHub's whole 3-day window.
+	After int64
+}
+
+// DeliveryCounts is one event's deliveries in one audit pass, by
+// outcome: Failed (the last attempt was not 2xx), Redelivered (a later
+// attempt was 2xx) or OK.
+type DeliveryCounts struct {
+	Event       string
+	Failed      int
+	Redelivered int
+	OK          int
+}
+
+// DeliveryAudit is ListHookDeliveries' answer.
+type DeliveryAudit struct {
+	// Newest is the newest delivery id read, the next pass's After.
+	Newest int64
+	// Read is how many delivery attempts the pass read, in Pages pages.
+	Read  int
+	Pages int
+	// Counts are by event, sorted by event name.
+	Counts []DeliveryCounts
+}
+
+// DeliveryAuditInput is DeliveryAuditWorkflow's input and its
+// ContinueAsNew state.
+type DeliveryAuditInput struct {
+	App string
+	// Every is the wait between passes (ingest.audit_every).
+	Every time.Duration
+	// Cursor is the newest delivery id read so far.
+	Cursor int64
+}

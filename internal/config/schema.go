@@ -34,7 +34,18 @@ type fileSchema struct {
 	DefaultProfile  string             `hcl:"default_profile"`
 	UnknownProfile  string             `hcl:"unknown_profile"`
 	ProfileRules    []profileRuleBlock `hcl:"profile_rule,block"`
+	Ingest          *ingestBlock       `hcl:"ingest,block"`
 	Apps            []appBlock         `hcl:"app,block"`
+}
+
+// ingestBlock tunes webhook ingest and the delivery audit (DESIGN-0003).
+type ingestBlock struct {
+	Path        *string        `hcl:"path,optional"`
+	PathRange   hcl.Range      `hcl:"path,attr_value_range"`
+	Settle      hcl.Expression `hcl:"settle,optional"`
+	MinInterval hcl.Expression `hcl:"min_interval,optional"`
+	AuditEvery  hcl.Expression `hcl:"audit_every,optional"`
+	DefRange    hcl.Range      `hcl:",def_range"`
 }
 
 type renovateBlock struct {
@@ -136,7 +147,16 @@ type appBlock struct {
 	Cadence             hcl.Expression  `hcl:"cadence,optional"`
 	Discovery           *discoveryBlock `hcl:"discovery,block"`
 	Budget              *budgetBlock    `hcl:"budget,block"`
+	Webhook             *webhookBlock   `hcl:"webhook,block"`
 	DefRange            hcl.Range       `hcl:",def_range"`
+}
+
+// webhookBlock is an App's webhook: its bot login and signing secret.
+type webhookBlock struct {
+	Bot       *string        `hcl:"bot,optional"`
+	BotRange  hcl.Range      `hcl:"bot,attr_value_range"`
+	SecretRef secretRefBlock `hcl:"secret_ref,block"`
+	DefRange  hcl.Range      `hcl:",def_range"`
 }
 
 type discoveryBlock struct {

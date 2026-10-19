@@ -1,7 +1,7 @@
 ---
 id: DESIGN-0003
 title: "Webhook ingest: GitHub events to RepoWorkflow signals"
-status: Draft
+status: Approved
 author: Donald Gifford
 created: 2026-10-17
 ---
@@ -485,7 +485,7 @@ every `installation_repositories.added`, so discovery passes become more
 frequent and more bursty. #16 is a small, separate change to
 `DiscoverInstallation`'s error. It lands first, in its own PR (OQ12).
 
-#16 is fixed: `DiscoverInstallation` and `ListInstallations` return a
+Issue #16 is fixed: `DiscoverInstallation` and `ListInstallations` return a
 `github-rate-limited` error whose `NextRetryDelay` is GitHub's wait, so a
 retried pass waits as long as GitHub asks and no longer.
 

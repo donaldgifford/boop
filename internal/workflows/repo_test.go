@@ -75,6 +75,9 @@ type rwProbe struct {
 	capDenials  int // AcquireCapacity denies this many times before granting
 	capAcquires []time.Time
 	capReports  []Report
+
+	settle, minInterval time.Duration // PlanRun's ingest timings
+	checkInputs         []CheckRepoInput
 }
 
 func newRW(t *testing.T, script ...runReply) *rwProbe {
@@ -90,7 +93,7 @@ func newRW(t *testing.T, script ...runReply) *rwProbe {
 		defer p.mu.Unlock()
 		p.plans++
 		p.managers = append(p.managers, slices.Clone(in.Managers))
-		return &RunPlan{Profile: "default", Cadence: testCadence}, nil
+		return &RunPlan{Profile: "default", Cadence: testCadence, Settle: p.settle, MinInterval: p.minInterval}, nil
 	}, activity.RegisterOptions{Name: PlanRunActivity})
 
 	env.RegisterActivityWithOptions(func(_ context.Context, in *AcquireInput) (*AcquireResult, error) {
@@ -130,10 +133,11 @@ func newRW(t *testing.T, script ...runReply) *rwProbe {
 		return r.res, r.err
 	}, activity.RegisterOptions{Name: RunRenovateActivity})
 
-	env.RegisterActivityWithOptions(func(context.Context, *CheckRepoInput) (*CheckRepoResult, error) {
+	env.RegisterActivityWithOptions(func(_ context.Context, in *CheckRepoInput) (*CheckRepoResult, error) {
 		p.mu.Lock()
 		defer p.mu.Unlock()
 		p.checked = append(p.checked, env.Now())
+		p.checkInputs = append(p.checkInputs, *in)
 		if p.checkErr != nil {
 			return nil, temporal.NewNonRetryableApplicationError("github down", "test", p.checkErr)
 		}
@@ -416,7 +420,10 @@ func TestRepoWorkflow_AcquireRetryAt(t *testing.T) {
 func TestRepoWorkflow_Absence(t *testing.T) {
 	t.Parallel()
 	p := newRW(t, succeeded())
-	p.checks = []CheckRepoResult{{State: RepoPresent, Slug: "acme/renamed", DefaultBranch: "main"}, {State: RepoGone}}
+	p.checks = []CheckRepoResult{
+		{State: RepoPresent, Slug: "acme/renamed", DefaultBranch: "main", Extends: []string{"config:recommended"}},
+		{State: RepoGone},
+	}
 	in := state(t0)
 	in.NextDue = t0.Add(30 * 24 * time.Hour) // never due within the test
 	var renamed RepoState
@@ -427,8 +434,8 @@ func TestRepoWorkflow_Absence(t *testing.T) {
 	if got := gaps(append([]time.Time{t0}, p.checked...)); !slices.Equal(got, []time.Duration{3 * testEvery, 3 * testEvery}) {
 		t.Errorf("checks after %v, want after 3 intervals each", got)
 	}
-	if renamed.Slug != "acme/renamed" {
-		t.Errorf("slug after a present check = %q, want the refreshed one", renamed.Slug)
+	if renamed.Slug != "acme/renamed" || !slices.Equal(renamed.Extends, []string{"config:recommended"}) {
+		t.Errorf("state after a present check = %q %q, want the refreshed slug and extends", renamed.Slug, renamed.Extends)
 	}
 	if !p.env.IsWorkflowCompleted() {
 		t.Error("workflow still running after CheckRepo said gone")

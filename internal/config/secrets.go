@@ -99,6 +99,24 @@ func (c *Config) ReadSecrets() error {
 	return errors.Join(errs...)
 }
 
+// ReadWebhookSecrets reads each App's webhook signing secret from the
+// file its secret_ref names under SecretsDir, the way ReadSecrets reads
+// the App key, trimmed of surrounding whitespace. Ingest calls it at
+// start and reads nothing else: it never holds an App key. A missing or
+// empty file is an error naming its path; every failure is reported.
+func (c *Config) ReadWebhookSecrets() error {
+	var errs []error
+	for _, app := range c.WebhookApps() {
+		v, err := readSecret(app.Webhook.SecretRef.Path(c.SecretsDir))
+		if err != nil {
+			errs = append(errs, fmt.Errorf("app %q webhook secret: %w", app.Name, err))
+			continue
+		}
+		app.Webhook.Secret = Secret{value: bytes.TrimSpace(v.value)}
+	}
+	return errors.Join(errs...)
+}
+
 // composeRedisURL builds RedisURL from RedisEndpoint and, when named, the
 // password Secret. url.UserPassword escapes the password, so it need not
 // be URL-safe. The endpoint's user, if any, is kept.

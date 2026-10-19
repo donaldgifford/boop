@@ -121,6 +121,9 @@ func (c *AppClient) Mint(ctx context.Context, installationID int64, repoIDs []in
 		RepositoryIDs: repoIDs,
 	})
 	if err != nil {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			return "", time.Time{}, fmt.Errorf("github: mint installation token: %w: %w", platform.ErrInstallationGone, err)
+		}
 		return "", time.Time{}, fmt.Errorf("github: mint installation token: %w", classifyErr(resp, err))
 	}
 	if tok.GetToken() == "" {
@@ -180,4 +183,48 @@ func toInstallation(in *gogithub.Installation) platform.Installation {
 		SuspendedAt:         in.GetSuspendedAt().Time,
 		RepositorySelection: in.GetRepositorySelection(),
 	}
+}
+
+// HookDelivery is one attempt to deliver the App's webhook, as GET
+// /app/hook/deliveries lists it.
+type HookDelivery struct {
+	// ID is GitHub's id for this attempt; later attempts have higher ids.
+	ID int64
+	// GUID is X-GitHub-Delivery, shared by redeliveries of one event.
+	GUID        string
+	DeliveredAt time.Time
+	Redelivery  bool
+	// StatusCode is the receiver's answer; 0 when GitHub got none.
+	StatusCode     int
+	Status         string
+	Event, Action  string
+	InstallationID int64
+	RepositoryID   int64
+}
+
+// OK reports whether the receiver answered 2xx.
+func (d *HookDelivery) OK() bool { return d.StatusCode >= 200 && d.StatusCode < 300 }
+
+// ListHookDeliveries reads one page of GET /app/hook/deliveries with the
+// App JWT, newest first: perPage deliveries from cursor ("" for the
+// newest). next is the cursor of the following page, "" after the last.
+// App-JWT calls spend no installation's budget. Errors are classified;
+// a rate limit is a platform.RateLimitedError.
+func (c *AppClient) ListHookDeliveries(ctx context.Context, cursor string, perPage int) (out []HookDelivery, next string, err error) {
+	if err := c.limiter.Wait(ctx); err != nil {
+		return nil, "", err
+	}
+	page, resp, err := c.gh.Apps.ListHookDeliveries(ctx, &gogithub.ListCursorOptions{Cursor: cursor, PerPage: perPage})
+	if err != nil {
+		return nil, "", fmt.Errorf("github: list hook deliveries: %w", classifyErr(resp, err))
+	}
+	out = make([]HookDelivery, 0, len(page))
+	for _, d := range page {
+		out = append(out, HookDelivery{
+			ID: d.GetID(), GUID: d.GetGUID(), DeliveredAt: d.GetDeliveredAt().Time, Redelivery: d.GetRedelivery(),
+			StatusCode: d.GetStatusCode(), Status: d.GetStatus(), Event: d.GetEvent(), Action: d.GetAction(),
+			InstallationID: d.GetInstallationID(), RepositoryID: d.GetRepositoryID(),
+		})
+	}
+	return out, resp.Cursor, nil
 }

@@ -49,12 +49,38 @@ func DiscoverySchedules(cfg *config.Config, taskQueue string) []*temporal.Schedu
 	return out
 }
 
-// EnsureSchedules creates or updates every discovery schedule. Every
-// worker calls it at start; it is idempotent.
+// DeliveryAuditSchedules is one Schedule per App with a webhook block:
+// delivery-audit/<app> every ingest.audit_every, starting
+// DeliveryAuditWorkflow, overlap skip. The workflow waits audit_every
+// itself and continues as new with its cursor, so the Schedule only
+// restarts it if the chain ends (DESIGN-0003 § Delivery audit).
+func DeliveryAuditSchedules(cfg *config.Config, taskQueue string) []*temporal.Schedule {
+	apps := cfg.WebhookApps()
+	out := make([]*temporal.Schedule, 0, len(apps))
+	for _, app := range apps {
+		out = append(out, &temporal.Schedule{
+			ID:        workflows.DeliveryAuditScheduleID(app.Name),
+			Every:     cfg.Ingest.AuditEvery,
+			Workflow:  workflows.DeliveryAuditWorkflowName,
+			Args:      []any{&workflows.DeliveryAuditInput{App: app.Name, Every: cfg.Ingest.AuditEvery}},
+			TaskQueue: taskQueue,
+			Priority:  workflows.TaskPriority(workflows.PriorityNormal, 0),
+		})
+	}
+	return out
+}
+
+// EnsureSchedules creates or updates every discovery and delivery-audit
+// schedule. Every worker calls it at start; it is idempotent.
 func EnsureSchedules(ctx context.Context, c client.Client, cfg *config.Config, taskQueue string) error {
 	for _, s := range DiscoverySchedules(cfg, taskQueue) {
 		if err := temporal.EnsureSchedule(ctx, c, s); err != nil {
 			return fmt.Errorf("discovery schedule: %w", err)
+		}
+	}
+	for _, s := range DeliveryAuditSchedules(cfg, taskQueue) {
+		if err := temporal.EnsureSchedule(ctx, c, s); err != nil {
+			return fmt.Errorf("delivery audit schedule: %w", err)
 		}
 	}
 	return nil

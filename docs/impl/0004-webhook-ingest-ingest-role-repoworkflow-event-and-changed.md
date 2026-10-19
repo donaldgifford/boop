@@ -152,10 +152,10 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 1.1 DESIGN-0003 status → Approved; DESIGN-0001's non-goals line
+- [x] 1.1 DESIGN-0003 status → Approved; DESIGN-0001's non-goals line
   "Webhook ingest (INV-0001 OQ8)" gains "→ DESIGN-0003"; INV-0001 OQ8
   gets a "resolved by DESIGN-0003" note.
-- [ ] 1.2 `internal/workflows/testdata/replay/`: record histories from
+- [x] 1.2 `internal/workflows/testdata/replay/`: record histories from
   the **current** code with the dev-server test helper
   (`internal/temporal/temporaltest`) under the integration tag:
   - a `RepoWorkflow` that discovered, ran once, received a `recheck`,
@@ -165,7 +165,7 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
   A `go:generate`-style recorder test (`TestRecordReplayHistories`,
   skipped unless `BOOPD_RECORD_HISTORIES=1`) writes the JSON histories.
-- [ ] 1.3 `TestReplay_Histories` replays every file through
+- [x] 1.3 `TestReplay_Histories` replays every file through
   `worker.NewWorkflowReplayer` with the registered workflows. It runs in
   `just test` (no dev server needed).
 
@@ -179,12 +179,12 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 2.1 `fakegithub.Delivery` and `(*Server).Deliver(t, url, event,
+- [x] 2.1 `fakegithub.Delivery` and `(*Server).Deliver(t, url, event,
   payload any)`. It signs with the configured secret (`X-Hub-Signature-256`)
   and sets `X-GitHub-Event`, `X-GitHub-Delivery` (a UUID, or a given one
   for redelivery tests) and `X-GitHub-Hook-Installation-Target-ID`/`-Type`.
   It records the response status for the hook-deliveries API.
-- [ ] 2.2 Payload builders for the routed events, trimmed to the fields
+- [x] 2.2 Payload builders for the routed events, trimmed to the fields
   ingest reads:
   - `issues.edited`, `pull_request` (`edited`, `closed`);
   - `push` (with commits' `added`, `modified`, `removed`, and a
@@ -192,15 +192,15 @@ green, and one commit per numbered task. The PR split is in OQ1.
   - `repository` (each routed action);
   - `installation` and `installation_repositories`;
   - `ping`.
-- [ ] 2.3 `GET /app/hook/deliveries` (App JWT, `per_page`, `cursor` link
+- [x] 2.3 `GET /app/hook/deliveries` (App JWT, `per_page`, `cursor` link
   paging, newest first) over the recorded deliveries. It returns
   `guid`, `delivered_at`, `redelivery`, `status_code`, `event`, `action`,
   `installation_id` and `repository_id`.
   `(*Server).RecordUndelivered(event, action)` adds a delivery GitHub
   "sent" that never reached ingest, for the missed case.
-- [ ] 2.4 `(*Server).DeleteInstallation(id)`: token minting for that
+- [x] 2.4 `(*Server).DeleteInstallation(id)`: token minting for that
   installation answers 404 from then on.
-- [ ] 2.5 Unit tests for each knob in `fakegithub_test.go`.
+- [x] 2.5 Unit tests for each knob in `fakegithub_test.go`.
 
 #### Success Criteria
 
@@ -213,10 +213,10 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 3.1 `internal/config/schema.go`: an optional `ingest` block
+- [x] 3.1 `internal/config/schema.go`: an optional `ingest` block
   (`path`, `settle`, `min_interval`, `audit_every`) and an optional
   per-App `webhook` block (`bot`, `secret_ref`).
-- [ ] 3.2 `config.go`, `validate.go`, defaults and validation:
+- [x] 3.2 `config.go`, `validate.go`, defaults and validation:
   - `path` defaults to `/webhooks/github` and must start with `/`;
   - `settle` defaults to `30s` and `min_interval` to `5m`, both at least
     `0`;
@@ -225,14 +225,14 @@ green, and one commit per numbered task. The PR split is in OQ1.
   - the secret must be non-empty when read.
 
   Each has diagnostics with ranges, as for the existing blocks.
-- [ ] 3.3 `secrets.go`: read each webhook secret the same way as the
+- [x] 3.3 `secrets.go`: read each webhook secret the same way as the
   App key.
-- [ ] 3.4 `PlanRun` returns `Settle` and `MinInterval` from the config;
+- [x] 3.4 `PlanRun` returns `Settle` and `MinInterval` from the config;
   `RunPlan` gains the fields.
-- [ ] 3.5 `examples/boopd.hcl` gains a commented `ingest` block and a
+- [x] 3.5 `examples/boopd.hcl` gains a commented `ingest` block and a
   `webhook` block on `boop-bot`; `boopd config validate` keeps it
   loadable.
-- [ ] 3.6 `docs/config.md` rows for every new setting, with defaults and
+- [x] 3.6 `docs/config.md` rows for every new setting, with defaults and
   chart keys.
 
 #### Success Criteria
@@ -246,20 +246,20 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 4.1 `internal/platform/github/check.go`: `CheckRepo` probes with
+- [x] 4.1 `internal/platform/github/check.go`: `CheckRepo` probes with
   `ProbeConfigREST` for the one repository and returns its `Extends`
   (`ParseErr` is a warn log in the activity). The signature gains the
   config paths it needs (the client already carries them).
-- [ ] 4.2 The installation-token mint answers 404 →
+- [x] 4.2 The installation-token mint answers 404 →
   `platform.ErrInstallationGone`. `CheckRepo` (the activity) maps it to
   `RepoGone`. Every other mint error stays an activity error.
-- [ ] 4.3 `CheckRepoResult.Extends`; the absence check in `repo.go`
+- [x] 4.3 `CheckRepoResult.Extends`; the absence check in `repo.go`
   applies `Extends` when `present` (the refresh also helps discovery).
-- [ ] 4.4 `appFor`: "absent from every App's fresh listing" becomes
+- [x] 4.4 `appFor`: "absent from every App's fresh listing" becomes
   `platform.ErrInstallationGone`, which `CheckRepo` maps to `RepoGone`.
   A listing failure stays an error. There are tests for one App (the
   mint 404 path) and two Apps (the listing path).
-- [ ] 4.5 Tests:
+- [x] 4.5 Tests:
   - `check_test.go`: extends returned, no config, archived, deleted,
     mint 404 against fakegithub;
   - activity tests: `gone` from a mint 404, and a transient mint error
@@ -275,13 +275,13 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 5.1 `names.go`: `EventSignal = "event"`, `ChangedSignal =
+- [x] 5.1 `names.go`: `EventSignal = "event"`, `ChangedSignal =
   "changed"`; `run_types.go`: `Event{Reason string; Priority Priority}`,
   `Changed{Reason string; Slug, DefaultBranch string; InstallationID
   int64}`.
-- [ ] 5.2 `RepoState` gains `EventDue time.Time`, `EventPriority
+- [x] 5.2 `RepoState` gains `EventDue time.Time`, `EventPriority
   Priority`, `EventReason string`.
-- [ ] 5.3 `wait()` changes:
+- [x] 5.3 `wait()` changes:
   - a pending `changed` is drained before the due check and runs
     `checkRepo` (ending on `gone` or `no-config`; on `present` it applies
     the refresh and re-plans with `plan()`);
@@ -290,20 +290,20 @@ green, and one commit per numbered task. The PR split is in OQ1.
     later events keep the earlier `EventDue` and the highest priority;
   - the due timer is `min(NextDue, EventDue)`;
   - `changed{present}` becomes an `event{changed, normal}`.
-- [ ] 5.4 `runOnce` clears `EventDue` when a run starts. Events received
+- [x] 5.4 `runOnce` clears `EventDue` when a run starts. Events received
   during a run stay buffered and are applied after it, so they lead to
   one further run.
-- [ ] 5.5 `continueAsNew` carries `EventDue`, `EventPriority` and
+- [x] 5.5 `continueAsNew` carries `EventDue`, `EventPriority` and
   `EventReason`, and drains buffered `event` and `changed` signals into
   the state as it does `discovered` and `recheck`.
-- [ ] 5.6 A workflow started by `SignalWithStart(changed)`: the start
+- [x] 5.6 A workflow started by `SignalWithStart(changed)`: the start
   path skips `firstDueJitter` when a `changed` is pending, so
   `CheckRepo` runs before any run.
-- [ ] 5.7 Decision log lines: `onboarded`, `offboarded` (with reason),
+- [x] 5.7 Decision log lines: `onboarded`, `offboarded` (with reason),
   `refreshed`, `run-scheduled` (with reason, priority and time), each
   with the cause (the delivery ID from the signal). Add
   `boopd_repo_event_runs_total{reason}` (workflow metric).
-- [ ] 5.8 Tests (`repo_test.go`, testsuite):
+- [x] 5.8 Tests (`repo_test.go`, testsuite):
   - an event settles and merges with later ones;
   - `min_interval` holds for normal events but not for high ones;
   - an event during a run gives exactly one more run;
@@ -313,7 +313,7 @@ green, and one commit per numbered task. The PR split is in OQ1.
     `NextDue` is past;
   - ContinueAsNew carries the pending event;
   - `recheck` is unchanged.
-- [ ] 5.9 The replay test passes over the Phase 1 histories. If it shows
+- [x] 5.9 The replay test passes over the Phase 1 histories. If it shows
   a new command on an old history, gate the change with
   `workflow.GetVersion("webhook-signals", …)` (as `capacityLeaseChange`
   does) and re-run.
@@ -328,13 +328,13 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 6.1 `DiscoveryInput.Installations []int64`. When it is set,
+- [x] 6.1 `DiscoveryInput.Installations []int64`. When it is set,
   `DiscoveryWorkflow` filters `ListInstallations`' result to those IDs and
   ignores the App's allowlist only if an ID is in it. An ID outside the
   allowlist is skipped with a warn.
-- [ ] 6.2 `workflows.TargetedDiscoveryID(app, installationID)` →
+- [x] 6.2 `workflows.TargetedDiscoveryID(app, installationID)` →
   `discovery/<app>/installation/<id>`.
-- [ ] 6.3 Tests: a targeted pass probes one installation only; an
+- [x] 6.3 Tests: a targeted pass probes one installation only; an
   allowlisted-out ID is skipped; the Schedule's untargeted pass is
   unchanged (replay).
 
@@ -347,31 +347,31 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 7.1 `internal/platform/github`: `AppClient.ListHookDeliveries(ctx,
+- [x] 7.1 `internal/platform/github`: `AppClient.ListHookDeliveries(ctx,
   cursor string, perPage int)`, a thin wrapper over go-github's
   `Apps.ListHookDeliveries` with the App JWT. It returns the deliveries
   and the next cursor, classifies errors through `classifyErr`, and
   passes primary-limit errors through as `RateLimitedError`.
-- [ ] 7.2 `ListHookDeliveries` activity: pages newest first until it
+- [x] 7.2 `ListHookDeliveries` activity: pages newest first until it
   reaches the previous cursor (the newest GUID seen) or GitHub's 3-day
   window ends. It classifies each delivery as `failed` (non-2xx),
   `redelivered` (a later 2xx for the same GUID) or `ok`.
-- [ ] 7.3 Missed deliveries. Until the store exists, ingest's record of
+- [x] 7.3 Missed deliveries. Until the store exists, ingest's record of
   a GUID is not queryable, so `missed` is detected only through GitHub's
   own status: a connection failure or timeout reports a non-2xx or
   empty status. The activity counts those as `failed`, and true `missed`
   (2xx at GitHub, no ingest record) starts with IMPL-0005 phase 6
   (OQ6).
-- [ ] 7.4 `DeliveryAuditWorkflow(app)`: one activity call, records the
+- [x] 7.4 `DeliveryAuditWorkflow(app)`: one activity call, records the
   counts, and continues as new with the cursor. The cursor bounds the
   next pass.
-- [ ] 7.5 `internal/worker/schedules.go`: one Schedule per App with a
+- [x] 7.5 `internal/worker/schedules.go`: one Schedule per App with a
   `webhook` block, every `ingest.audit_every`, overlap `SKIP`, ID
   `delivery-audit/<app>`.
-- [ ] 7.6 Metrics `boopd_ingest_deliveries_failed_total{app,event}` and
+- [x] 7.6 Metrics `boopd_ingest_deliveries_failed_total{app,event}` and
   `boopd_ingest_deliveries_missed_total{app,event}` (the latter
   registered now, incremented from IMPL-0005).
-- [ ] 7.7 Tests: activity against fakegithub (failed, redelivered,
+- [x] 7.7 Tests: activity against fakegithub (failed, redelivered,
   cursor stop, lost cursor re-reads idempotently), workflow testsuite,
   and `schedules_test.go` for the per-App Schedule.
 
