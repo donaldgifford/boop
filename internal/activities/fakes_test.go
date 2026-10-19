@@ -17,6 +17,9 @@ type fakeGitHub struct {
 	apps     map[string]*fakeApp
 	installs map[int64]*fakeInstall
 	token    activities.RateReader
+	// fresh replaces an installation's client on Forget.
+	fresh  map[int64]*fakeInstall
+	forgot []int64
 }
 
 func (f *fakeGitHub) App(app *config.App) (activities.AppAPI, error) {
@@ -25,6 +28,13 @@ func (f *fakeGitHub) App(app *config.App) (activities.AppAPI, error) {
 
 func (f *fakeGitHub) Installation(_ *config.App, id int64, _ []string) (activities.InstallationAPI, error) {
 	return f.installs[id], nil
+}
+
+func (f *fakeGitHub) Forget(id int64) {
+	f.forgot = append(f.forgot, id)
+	if next, ok := f.fresh[id]; ok {
+		f.installs[id] = next
+	}
 }
 
 func (f *fakeGitHub) Token(*config.App, string) (activities.RateReader, error) {
