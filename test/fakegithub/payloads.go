@@ -24,6 +24,14 @@ import (
 // Routing table), trimmed to the fields it reads. Each returns a value
 // for Deliver.
 
+// JSON keys the builders repeat.
+const (
+	keyLogin = "login"
+	keyName  = "name"
+	keyFrom  = "from"
+	keyType  = "type"
+)
+
 // PushCommitCap is how many commits GitHub lists in a push payload at
 // most; a push at the cap may hide more.
 const PushCommitCap = 2048
@@ -39,7 +47,7 @@ func user(login string) map[string]any {
 	if strings.HasSuffix(login, "[bot]") {
 		typ = "Bot"
 	}
-	return map[string]any{"login": login, "type": typ}
+	return map[string]any{keyLogin: login, keyType: typ}
 }
 
 func base(action string, repo *Repo, installationID int64, sender string) map[string]any {
@@ -57,36 +65,37 @@ func base(action string, repo *Repo, installationID int64, sender string) map[st
 func Ping(appID int64) map[string]any {
 	return map[string]any{
 		"zen": "Design for failure.", "hook_id": 1,
-		"hook": map[string]any{"type": "App", "app_id": appID, "events": []string{"issues", "pull_request", "push", "repository"}},
+		"hook": map[string]any{keyType: "App", "app_id": appID, "events": []string{"issues", "pull_request", "push", "repository"}},
 	}
 }
 
 // IssuesEdited is an issues.edited whose body went from an unticked to a
 // ticked box, as on a Dependency Dashboard.
-func IssuesEdited(repo Repo, installationID int64, author, sender string) map[string]any {
-	p := base("edited", &repo, installationID, sender)
+func IssuesEdited(repo *Repo, installationID int64, author, sender string) map[string]any {
+	p := base("edited", repo, installationID, sender)
 	p["issue"] = map[string]any{"number": 1, "title": "Dependency Dashboard", "user": user(author), "body": "- [x] <!-- approve-all -->"}
-	p["changes"] = map[string]any{"body": map[string]any{"from": "- [ ] <!-- approve-all -->"}}
+	p["changes"] = map[string]any{"body": map[string]any{keyFrom: "- [ ] <!-- approve-all -->"}}
 	return p
 }
 
 // PullRequest is a pull_request event (edited, closed, ...) on PR number.
-func PullRequest(action string, repo Repo, installationID int64, number int, author, sender string) map[string]any {
-	p := base(action, &repo, installationID, sender)
+func PullRequest(action string, repo *Repo, installationID int64, number int, author, sender string) map[string]any {
+	p := base(action, repo, installationID, sender)
 	p["number"] = number
-	p["pull_request"] = map[string]any{
-		"number": number, "user": user(author), "state": "open",
-		"head": map[string]any{"ref": "renovate/all"}, "base": map[string]any{"ref": repo.DefaultBranch},
-	}
+	state := "open"
 	if action == "closed" {
-		p["pull_request"].(map[string]any)["state"] = "closed"
+		state = "closed"
+	}
+	p["pull_request"] = map[string]any{
+		"number": number, "user": user(author), "state": state,
+		"head": map[string]any{"ref": "renovate/all"}, "base": map[string]any{"ref": repo.DefaultBranch},
 	}
 	return p
 }
 
 // Push is a push to ref with commits' file lists.
-func Push(repo Repo, installationID int64, ref, sender string, commits ...Commit) map[string]any {
-	p := base("", &repo, installationID, sender)
+func Push(repo *Repo, installationID int64, ref, sender string, commits ...Commit) map[string]any {
+	p := base("", repo, installationID, sender)
 	list := make([]map[string]any, 0, len(commits))
 	for _, c := range commits {
 		list = append(list, map[string]any{
@@ -101,7 +110,7 @@ func Push(repo Repo, installationID int64, ref, sender string, commits ...Commit
 
 // PushAtCap is a push to ref listing PushCommitCap commits that touch no
 // config path.
-func PushAtCap(repo Repo, installationID int64, ref, sender string) map[string]any {
+func PushAtCap(repo *Repo, installationID int64, ref, sender string) map[string]any {
 	commits := make([]Commit, PushCommitCap)
 	for i := range commits {
 		commits[i] = Commit{Modified: []string{"main.go"}}
@@ -111,13 +120,13 @@ func PushAtCap(repo Repo, installationID int64, ref, sender string) map[string]a
 
 // RepositoryEvent is a repository event; edited carries a default branch
 // change from "master", renamed a name change.
-func RepositoryEvent(action string, repo Repo, installationID int64, sender string) map[string]any {
-	p := base(action, &repo, installationID, sender)
+func RepositoryEvent(action string, repo *Repo, installationID int64, sender string) map[string]any {
+	p := base(action, repo, installationID, sender)
 	switch action {
 	case "edited":
-		p["changes"] = map[string]any{"default_branch": map[string]any{"from": "master"}}
+		p["changes"] = map[string]any{"default_branch": map[string]any{keyFrom: "master"}}
 	case "renamed":
-		p["changes"] = map[string]any{"repository": map[string]any{"name": map[string]any{"from": "old-name"}}}
+		p["changes"] = map[string]any{"repository": map[string]any{keyName: map[string]any{keyFrom: "old-name"}}}
 	}
 	return p
 }
@@ -126,7 +135,7 @@ func RepositoryEvent(action string, repo Repo, installationID int64, sender stri
 // unsuspend, new_permissions_accepted) listing repos.
 func InstallationEvent(action string, in Installation, sender string, repos ...Repo) map[string]any {
 	p := base(action, nil, in.ID, sender)
-	p["installation"] = map[string]any{"id": in.ID, "account": map[string]any{"login": in.Account}}
+	p["installation"] = map[string]any{"id": in.ID, "account": map[string]any{keyLogin: in.Account}}
 	p["repositories"] = shortRepos(repos)
 	return p
 }
@@ -151,7 +160,7 @@ func shortRepos(repos []Repo) []map[string]any {
 	out := make([]map[string]any, 0, len(repos))
 	for i := range repos {
 		_, name, _ := strings.Cut(repos[i].Slug, "/")
-		out = append(out, map[string]any{"id": repos[i].ID, "node_id": repos[i].NodeID, "full_name": repos[i].Slug, "name": name})
+		out = append(out, map[string]any{"id": repos[i].ID, "node_id": repos[i].NodeID, "full_name": repos[i].Slug, keyName: name})
 	}
 	return out
 }

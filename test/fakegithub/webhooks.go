@@ -130,7 +130,9 @@ func (s *Server) Deliver(tb testing.TB, url, event string, payload any, opts ...
 	status := 0
 	if resp, err := http.DefaultClient.Do(req); err == nil {
 		status = resp.StatusCode
-		_, _ = io.Copy(io.Discard, resp.Body)
+		if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+			tb.Logf("fakegithub: read the %s answer: %v", event, err)
+		}
 		_ = resp.Body.Close()
 	}
 	return s.record(event, body, o.guid, status)
@@ -154,18 +156,23 @@ func (s *Server) Deliveries() []Delivery {
 	return slices.Clone(s.deliveries)
 }
 
+// deliveryFields are the payload fields the deliveries list reports.
+type deliveryFields struct {
+	Action       string `json:"action"`
+	Installation struct {
+		ID int64 `json:"id"`
+	} `json:"installation"`
+	Repository struct {
+		ID int64 `json:"id"`
+	} `json:"repository"`
+}
+
 // record appends one attempt; a GUID seen before is a redelivery.
 func (s *Server) record(event string, body []byte, guid string, status int) Delivery {
-	var p struct {
-		Action       string `json:"action"`
-		Installation struct {
-			ID int64 `json:"id"`
-		} `json:"installation"`
-		Repository struct {
-			ID int64 `json:"id"`
-		} `json:"repository"`
+	var p deliveryFields
+	if err := json.Unmarshal(body, &p); err != nil {
+		p = deliveryFields{} // a non-object payload records no fields
 	}
-	_ = json.Unmarshal(body, &p) // a non-object payload records no fields
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	d := Delivery{

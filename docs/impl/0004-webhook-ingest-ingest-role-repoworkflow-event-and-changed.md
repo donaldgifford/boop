@@ -179,12 +179,12 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 2.1 `fakegithub.Delivery` and `(*Server).Deliver(t, url, event,
+- [x] 2.1 `fakegithub.Delivery` and `(*Server).Deliver(t, url, event,
   payload any)`. It signs with the configured secret (`X-Hub-Signature-256`)
   and sets `X-GitHub-Event`, `X-GitHub-Delivery` (a UUID, or a given one
   for redelivery tests) and `X-GitHub-Hook-Installation-Target-ID`/`-Type`.
   It records the response status for the hook-deliveries API.
-- [ ] 2.2 Payload builders for the routed events, trimmed to the fields
+- [x] 2.2 Payload builders for the routed events, trimmed to the fields
   ingest reads:
   - `issues.edited`, `pull_request` (`edited`, `closed`);
   - `push` (with commits' `added`, `modified`, `removed`, and a
@@ -192,15 +192,15 @@ green, and one commit per numbered task. The PR split is in OQ1.
   - `repository` (each routed action);
   - `installation` and `installation_repositories`;
   - `ping`.
-- [ ] 2.3 `GET /app/hook/deliveries` (App JWT, `per_page`, `cursor` link
+- [x] 2.3 `GET /app/hook/deliveries` (App JWT, `per_page`, `cursor` link
   paging, newest first) over the recorded deliveries. It returns
   `guid`, `delivered_at`, `redelivery`, `status_code`, `event`, `action`,
   `installation_id` and `repository_id`.
   `(*Server).RecordUndelivered(event, action)` adds a delivery GitHub
   "sent" that never reached ingest, for the missed case.
-- [ ] 2.4 `(*Server).DeleteInstallation(id)`: token minting for that
+- [x] 2.4 `(*Server).DeleteInstallation(id)`: token minting for that
   installation answers 404 from then on.
-- [ ] 2.5 Unit tests for each knob in `fakegithub_test.go`.
+- [x] 2.5 Unit tests for each knob in `fakegithub_test.go`.
 
 #### Success Criteria
 
