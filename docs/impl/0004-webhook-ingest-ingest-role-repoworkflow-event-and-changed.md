@@ -564,6 +564,7 @@ Notes from the build:
 - [x] 12.3 Chart README regenerated; CLAUDE.md's layout gains
   `internal/ingest/` and the role list `boopd ingest`.
 - [ ] 12.4 DESIGN-0003 status → Implemented once Phase 13.2 ships.
+  `deferred - human required`: waits on merging #24.
 
 #### Success Criteria
 
@@ -574,10 +575,11 @@ Notes from the build:
 
 #### Tasks
 
-- [x] 13.1 PR A (worker side, phases 1–7), label `minor`. Merging
+- [x] 13.1 #23: PR A (worker side, phases 1–7), label `minor`. Merging
   releases it. With no ingest the signals are inert; the audit reads
   only.
-- [ ] 13.2 PR B (ingest, chart, e2e, docs; phases 8–12), label `minor`.
+- [x] 13.2 PR B (ingest, chart, e2e, docs; phases 8–12), label `minor`.
+  #24 (PR A is #23).
 - [ ] 13.3 **Deferred, human required.** Homelab setup:
   - create the Keycloak client `boopd-ingest` (client credentials, the
     Temporal audience, the namespace writer role);
@@ -591,6 +593,7 @@ Notes from the build:
   proxmox-go-sdk dashboard and time it to the run. Push a config to a
   scratch repository and time the onboarding. Record both here.
 - [ ] 13.5 IMPL status → Completed, with the evidence.
+  `deferred - human required`: waits on 13.3 and 13.4.
 
 #### Success Criteria
 
