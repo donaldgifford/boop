@@ -75,6 +75,9 @@ type rwProbe struct {
 	capDenials  int // AcquireCapacity denies this many times before granting
 	capAcquires []time.Time
 	capReports  []Report
+
+	settle, minInterval time.Duration // PlanRun's ingest timings
+	checkInputs         []CheckRepoInput
 }
 
 func newRW(t *testing.T, script ...runReply) *rwProbe {
@@ -90,7 +93,7 @@ func newRW(t *testing.T, script ...runReply) *rwProbe {
 		defer p.mu.Unlock()
 		p.plans++
 		p.managers = append(p.managers, slices.Clone(in.Managers))
-		return &RunPlan{Profile: "default", Cadence: testCadence}, nil
+		return &RunPlan{Profile: "default", Cadence: testCadence, Settle: p.settle, MinInterval: p.minInterval}, nil
 	}, activity.RegisterOptions{Name: PlanRunActivity})
 
 	env.RegisterActivityWithOptions(func(_ context.Context, in *AcquireInput) (*AcquireResult, error) {
@@ -130,10 +133,11 @@ func newRW(t *testing.T, script ...runReply) *rwProbe {
 		return r.res, r.err
 	}, activity.RegisterOptions{Name: RunRenovateActivity})
 
-	env.RegisterActivityWithOptions(func(context.Context, *CheckRepoInput) (*CheckRepoResult, error) {
+	env.RegisterActivityWithOptions(func(_ context.Context, in *CheckRepoInput) (*CheckRepoResult, error) {
 		p.mu.Lock()
 		defer p.mu.Unlock()
 		p.checked = append(p.checked, env.Now())
+		p.checkInputs = append(p.checkInputs, *in)
 		if p.checkErr != nil {
 			return nil, temporal.NewNonRetryableApplicationError("github down", "test", p.checkErr)
 		}

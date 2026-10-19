@@ -281,7 +281,7 @@ green, and one commit per numbered task. The PR split is in OQ1.
   int64}`.
 - [x] 5.2 `RepoState` gains `EventDue time.Time`, `EventPriority
   Priority`, `EventReason string`.
-- [ ] 5.3 `wait()` changes:
+- [x] 5.3 `wait()` changes:
   - a pending `changed` is drained before the due check and runs
     `checkRepo` (ending on `gone` or `no-config`; on `present` it applies
     the refresh and re-plans with `plan()`);
@@ -290,20 +290,20 @@ green, and one commit per numbered task. The PR split is in OQ1.
     later events keep the earlier `EventDue` and the highest priority;
   - the due timer is `min(NextDue, EventDue)`;
   - `changed{present}` becomes an `event{changed, normal}`.
-- [ ] 5.4 `runOnce` clears `EventDue` when a run starts. Events received
+- [x] 5.4 `runOnce` clears `EventDue` when a run starts. Events received
   during a run stay buffered and are applied after it, so they lead to
   one further run.
-- [ ] 5.5 `continueAsNew` carries `EventDue`, `EventPriority` and
+- [x] 5.5 `continueAsNew` carries `EventDue`, `EventPriority` and
   `EventReason`, and drains buffered `event` and `changed` signals into
   the state as it does `discovered` and `recheck`.
-- [ ] 5.6 A workflow started by `SignalWithStart(changed)`: the start
+- [x] 5.6 A workflow started by `SignalWithStart(changed)`: the start
   path skips `firstDueJitter` when a `changed` is pending, so
   `CheckRepo` runs before any run.
-- [ ] 5.7 Decision log lines: `onboarded`, `offboarded` (with reason),
+- [x] 5.7 Decision log lines: `onboarded`, `offboarded` (with reason),
   `refreshed`, `run-scheduled` (with reason, priority and time), each
   with the cause (the delivery ID from the signal). Add
   `boopd_repo_event_runs_total{reason}` (workflow metric).
-- [ ] 5.8 Tests (`repo_test.go`, testsuite):
+- [x] 5.8 Tests (`repo_test.go`, testsuite):
   - an event settles and merges with later ones;
   - `min_interval` holds for normal events but not for high ones;
   - an event during a run gives exactly one more run;
@@ -313,7 +313,7 @@ green, and one commit per numbered task. The PR split is in OQ1.
     `NextDue` is past;
   - ContinueAsNew carries the pending event;
   - `recheck` is unchanged.
-- [ ] 5.9 The replay test passes over the Phase 1 histories. If it shows
+- [x] 5.9 The replay test passes over the Phase 1 histories. If it shows
   a new command on an old history, gate the change with
   `workflow.GetVersion("webhook-signals", …)` (as `capacityLeaseChange`
   does) and re-run.
