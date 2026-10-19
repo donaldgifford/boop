@@ -347,7 +347,7 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 7.1 `internal/platform/github`: `AppClient.ListHookDeliveries(ctx,
+- [x] 7.1 `internal/platform/github`: `AppClient.ListHookDeliveries(ctx,
   cursor string, perPage int)`, a thin wrapper over go-github's
   `Apps.ListHookDeliveries` with the App JWT. It returns the deliveries
   and the next cursor, classifies errors through `classifyErr`, and
