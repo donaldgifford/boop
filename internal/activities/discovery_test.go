@@ -2,6 +2,7 @@ package activities_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -13,6 +14,7 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 
 	"github.com/donaldgifford/boop/internal/activities"
@@ -480,5 +482,91 @@ func TestDiscoverInstallation_SleepsUnderReserve(t *testing.T) {
 	}
 	if got, want := h.start.ids(), onboardedIDs(repos, 1); !slices.Equal(got, want) {
 		t.Errorf("signalled %v, want %v", got, want)
+	}
+}
+
+// A secondary limit with Retry-After, on the probe or on the repository
+// listing, reaches Temporal as a github-rate-limited ApplicationError
+// whose NextRetryDelay is GitHub's wait (#16).
+func TestDiscoverInstallation_HonoursRetryAfter(t *testing.T) {
+	t.Parallel()
+	for name, scope := range map[string]fakegithub.SecondaryScope{
+		"probe":   fakegithub.SecondaryProbe,
+		"listing": fakegithub.SecondaryRepos,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			gh := fastFake(t, fleet(5))
+			gh.SetSecondaryLimit(scope, 1, 7*time.Second)
+			_, err := newDiscovery(t, gh, config.ProbeGraphQL).run()
+			assertRetryAfter(t, err, 7*time.Second)
+		})
+	}
+}
+
+// Without a Retry-After the error stays an ordinary transient one, so the
+// retry policy's backoff applies.
+func TestDiscoverInstallation_RateLimitWithoutWait(t *testing.T) {
+	t.Parallel()
+	gh := fastFake(t, fleet(5))
+	gh.SetSecondaryLimit(fakegithub.SecondaryProbe, 1, 0)
+	_, err := newDiscovery(t, gh, config.ProbeGraphQL).run()
+	if err == nil {
+		t.Fatal("want the secondary-limit error")
+	}
+	if appErr, ok := errors.AsType[*temporal.ApplicationError](err); ok && appErr.Type() == workflows.ErrTypeGitHubRateLimited {
+		t.Errorf("err = %v, want no github-rate-limited error without a wait", err)
+	}
+}
+
+func TestListInstallations_HonoursRetryAfter(t *testing.T) {
+	t.Parallel()
+	gh := fastFake(t, nil)
+	gh.SetSecondaryLimit(fakegithub.SecondaryInstallations, 1, 7*time.Second)
+	h := newDiscovery(t, gh, config.ProbeGraphQL)
+	_, err := h.env.ExecuteActivity(workflows.ListInstallationsActivity, &workflows.ListInstallationsInput{App: "main"})
+	assertRetryAfter(t, err, 7*time.Second)
+}
+
+func assertRetryAfter(t *testing.T, err error, want time.Duration) {
+	t.Helper()
+	appErr, ok := errors.AsType[*temporal.ApplicationError](err)
+	if !ok {
+		t.Fatalf("err = %T %v, want *temporal.ApplicationError", err, err)
+	}
+	if appErr.Type() != workflows.ErrTypeGitHubRateLimited {
+		t.Errorf("Type() = %q, want %q", appErr.Type(), workflows.ErrTypeGitHubRateLimited)
+	}
+	if appErr.NextRetryDelay() != want {
+		t.Errorf("NextRetryDelay() = %v, want %v", appErr.NextRetryDelay(), want)
+	}
+}
+
+// A secondary limit mid-listing keeps the heartbeat, so the retry Temporal
+// schedules after Retry-After resumes from the next page.
+func TestDiscoverInstallation_RetryAfterKeepsProgress(t *testing.T) {
+	t.Parallel()
+	repos := fleet(250)
+	gh := fastFake(t, repos)
+	gh.SetSecondaryLimit(fakegithub.SecondaryLaterPages, 1, 7*time.Second)
+	h := newDiscovery(t, gh, config.ProbeGraphQL)
+	_, err := h.run()
+	assertRetryAfter(t, err, 7*time.Second)
+	beat := h.lastBeat()
+	if beat.Page != 1 || beat.Seen != 100 {
+		t.Fatalf("last heartbeat = %+v, want page 1 of 100", beat)
+	}
+
+	retry := newDiscovery(t, gh, config.ProbeGraphQL)
+	retry.env.SetHeartbeatDetails(beat)
+	sum, err := retry.run()
+	if err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	if got, want := retry.start.ids(), onboardedIDs(repos, 2); !slices.Equal(got, want) {
+		t.Errorf("retry signalled %v, want pages 2-3 only: %v", got, want)
+	}
+	if sum.Seen != 250 {
+		t.Errorf("summary = %+v, want all 250 seen", *sum)
 	}
 }

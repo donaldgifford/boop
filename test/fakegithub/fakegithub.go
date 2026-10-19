@@ -107,6 +107,8 @@ const (
 	SecondaryProbe SecondaryScope = iota
 	// SecondaryRepos is the installation's repository listing.
 	SecondaryRepos
+	// SecondaryLaterPages is the repository listing past its first page.
+	SecondaryLaterPages
 	// SecondaryInstallations is the App's installation listing.
 	SecondaryInstallations
 )
@@ -482,7 +484,7 @@ func (s *Server) listRepos(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.pageRequests = append(s.pageRequests, page)
-	if s.secondaryLocked(w, SecondaryRepos) {
+	if s.secondaryLocked(w, SecondaryRepos) || (page > 1 && s.secondaryLocked(w, SecondaryLaterPages)) {
 		return
 	}
 	if s.failPages[page] > 0 {
