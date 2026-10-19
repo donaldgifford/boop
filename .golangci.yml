@@ -110,6 +110,8 @@ linters:
         workflows:
           files:
             - "**/internal/workflows/*.go"
+            # The replay recorder drives a dev server with the client.
+            - "!**/internal/workflows/replay_record_test.go"
           deny:
             - pkg: github.com/donaldgifford/boop/internal/activities
               desc: workflows call activities by name, not by import
