@@ -61,6 +61,17 @@ const (
 	DefaultDiscoveryEvery = 6 * time.Hour
 )
 
+// Ingest defaults and bounds (DESIGN-0003 § boopd.hcl).
+const (
+	DefaultIngestPath  = "/webhooks/github"
+	DefaultSettle      = 30 * time.Second
+	DefaultMinInterval = 5 * time.Minute
+	DefaultAuditEvery  = 15 * time.Minute
+	// MinAuditEvery bounds audit_every: GitHub keeps deliveries 3 days,
+	// and a faster audit only spends App-JWT calls.
+	MinAuditEvery = time.Minute
+)
+
 // Probe modes for discovery.probe (DESIGN-0001 OQ3).
 const (
 	ProbeGraphQL = "graphql"
@@ -87,7 +98,33 @@ type Config struct {
 	DefaultProfile string
 	UnknownProfile string
 	ProfileRules   []ProfileRule
-	Apps           []*App
+	// Ingest is the ingest block, defaulted when absent.
+	Ingest Ingest
+	Apps   []*App
+}
+
+// Ingest is the ingest block: webhook ingest's path and the timings
+// RepoWorkflow applies to webhook events (DESIGN-0003).
+type Ingest struct {
+	// Path is where ingest serves GitHub's deliveries.
+	Path string
+	// Settle gathers a burst of events into one run.
+	Settle time.Duration
+	// MinInterval is the least time between run starts for normal-priority
+	// events.
+	MinInterval time.Duration
+	// AuditEvery is the delivery audit Schedule's interval.
+	AuditEvery time.Duration
+}
+
+// Webhook is an App's webhook block.
+type Webhook struct {
+	// Bot is the App's bot login; events it sends are never routed.
+	Bot       string
+	SecretRef SecretRef
+	// Secret is the signing secret, read from SecretRef by
+	// ReadWebhookSecrets.
+	Secret Secret
 }
 
 // Renovate is the renovate block: what every run shares.
@@ -163,9 +200,22 @@ type App struct {
 	Cadence   time.Duration
 	Discovery Discovery
 	Budget    Budget
+	// Webhook is set when the App delivers webhooks to ingest.
+	Webhook *Webhook
 	// PrivateKey is the App's PEM key, read from PrivateKeySecretRef by
 	// ReadSecrets.
 	PrivateKey Secret
+}
+
+// WebhookApps returns the Apps with a webhook block.
+func (c *Config) WebhookApps() []*App {
+	var out []*App
+	for _, a := range c.Apps {
+		if a.Webhook != nil {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // Discovery is an app's discovery block.
@@ -280,6 +330,7 @@ func (b *builder) build(raw *fileSchema) *Config {
 		UnknownProfile: raw.UnknownProfile,
 	}
 	cfg.SecretsDir = derefOr(raw.SecretsDir, DefaultSecretsDir)
+	cfg.Ingest = b.ingest(raw.Ingest)
 	cfg.Profiles = b.profiles(raw.Profiles)
 	for i := range raw.ProfileRules {
 		r := &raw.ProfileRules[i]
@@ -365,7 +416,25 @@ func (b *builder) app(a *appBlock) *App {
 			workflows.ResourceGraphQL: workflows.DefaultEstimateGraphQL,
 		}, bg.DefaultEstimate),
 	}
+	if w := a.Webhook; w != nil {
+		out.Webhook = &Webhook{
+			Bot:       derefOr(w.Bot, a.Name+"[bot]"),
+			SecretRef: SecretRef{Name: w.SecretRef.Name, Key: w.SecretRef.Key},
+		}
+	}
 	return out
+}
+
+func (b *builder) ingest(in *ingestBlock) Ingest {
+	if in == nil {
+		in = &ingestBlock{}
+	}
+	return Ingest{
+		Path:        derefOr(in.Path, DefaultIngestPath),
+		Settle:      b.durationAtLeast(in.Settle, DefaultSettle, 0, "settle"),
+		MinInterval: b.durationAtLeast(in.MinInterval, DefaultMinInterval, 0, "min_interval"),
+		AuditEvery:  b.durationAtLeast(in.AuditEvery, DefaultAuditEvery, MinAuditEvery, "audit_every"),
+	}
 }
 
 // duration evaluates an optional duration attribute: def when absent.
@@ -378,6 +447,20 @@ func (b *builder) duration(expr hcl.Expression, def time.Duration) time.Duration
 	b.diags = append(b.diags, diags...)
 	if !diags.HasErrors() && d <= 0 {
 		b.errorf(expr.Range(), "Invalid duration", "The duration must be positive; omit the attribute for the default.")
+	}
+	return d
+}
+
+// durationAtLeast evaluates an optional duration attribute that may be
+// as low as lowest, zero included when lowest is: def when absent.
+func (b *builder) durationAtLeast(expr hcl.Expression, def, lowest time.Duration, name string) time.Duration {
+	if isNull(expr, b.ctx) {
+		return def
+	}
+	d, diags := ctytypes.DecodeDuration(expr, b.ctx)
+	b.diags = append(b.diags, diags...)
+	if !diags.HasErrors() && d < lowest {
+		b.errorf(expr.Range(), "Invalid duration", "%s must be at least %v.", name, lowest)
 	}
 	return d
 }

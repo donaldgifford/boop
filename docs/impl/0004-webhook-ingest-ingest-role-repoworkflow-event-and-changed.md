@@ -213,10 +213,10 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 3.1 `internal/config/schema.go`: an optional `ingest` block
+- [x] 3.1 `internal/config/schema.go`: an optional `ingest` block
   (`path`, `settle`, `min_interval`, `audit_every`) and an optional
   per-App `webhook` block (`bot`, `secret_ref`).
-- [ ] 3.2 `config.go`, `validate.go`, defaults and validation:
+- [x] 3.2 `config.go`, `validate.go`, defaults and validation:
   - `path` defaults to `/webhooks/github` and must start with `/`;
   - `settle` defaults to `30s` and `min_interval` to `5m`, both at least
     `0`;
