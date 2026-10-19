@@ -444,16 +444,16 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 9.1 `cmd/boopd`: `boopd ingest --config <file>`, with the usage
+- [x] 9.1 `cmd/boopd`: `boopd ingest --config <file>`, with the usage
   text updated. It loads the config and reads only the webhook secrets
   (never the App key). It dials Temporal with the shared `TEMPORAL_*`
   settings and serves the handler on `LISTEN_ADDR`, with `/healthz`,
   `/readyz` (Temporal dial succeeded) and metrics on `METRICS_ADDR`.
-- [ ] 9.2 Graceful stop: on SIGTERM, `/readyz` fails, then the server
+- [x] 9.2 Graceful stop: on SIGTERM, `/readyz` fails, then the server
   drains in-flight requests (`Shutdown` with a timeout below the pod's
   grace period).
-- [ ] 9.3 Fail at start if no App has a `webhook` block.
-- [ ] 9.4 `main_test.go`: usage, a missing config, no webhook App, and a
+- [x] 9.3 Fail at start if no App has a `webhook` block.
+- [x] 9.4 `main_test.go`: usage, a missing config, no webhook App, and a
   start and stop against the dev server (integration tag).
 
 #### Success Criteria
