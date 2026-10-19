@@ -1,0 +1,30 @@
+{{- if and .Values.ingest.enabled .Values.ingest.httpRoute.enabled -}}
+# A Gateway API route for the ingest path only, never /healthz, /readyz
+# or metrics (DESIGN-0003 OQ2).
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "boopd.ingest.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "boopd.ingest.labels" . | nindent 4 }}
+  {{- with .Values.ingest.httpRoute.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- required "ingest.httpRoute.parentRefs needs at least one Gateway" .Values.ingest.httpRoute.parentRefs | toYaml | nindent 4 }}
+  {{- with .Values.ingest.httpRoute.hostnames }}
+  hostnames:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - matches:
+        - path:
+            type: Exact
+            value: {{ include "boopd.ingest.path" . }}
+      backendRefs:
+        - name: {{ include "boopd.ingest.fullname" . }}
+          port: {{ .Values.ingest.service.port }}
+{{- end }}
