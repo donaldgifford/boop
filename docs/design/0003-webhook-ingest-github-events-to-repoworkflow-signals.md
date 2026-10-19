@@ -1,7 +1,7 @@
 ---
 id: DESIGN-0003
 title: "Webhook ingest: GitHub events to RepoWorkflow signals"
-status: Draft
+status: Approved
 author: Donald Gifford
 created: 2026-10-17
 ---

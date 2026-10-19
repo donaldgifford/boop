@@ -152,7 +152,7 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 1.1 DESIGN-0003 status → Approved; DESIGN-0001's non-goals line
+- [x] 1.1 DESIGN-0003 status → Approved; DESIGN-0001's non-goals line
   "Webhook ingest (INV-0001 OQ8)" gains "→ DESIGN-0003"; INV-0001 OQ8
   gets a "resolved by DESIGN-0003" note.
 - [ ] 1.2 `internal/workflows/testdata/replay/`: record histories from
