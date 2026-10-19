@@ -1,0 +1,14 @@
+{
+  "action": "new_permissions_accepted",
+  "installation": {
+    "account": {
+      "login": "acme"
+    },
+    "id": 7
+  },
+  "repositories": [],
+  "sender": {
+    "login": "alice",
+    "type": "User"
+  }
+}

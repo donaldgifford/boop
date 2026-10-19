@@ -385,18 +385,18 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 8.1 `internal/ingest/verify.go`: select the App by
+- [x] 8.1 `internal/ingest/verify.go`: select the App by
   `X-GitHub-Hook-Installation-Target-ID`, require `X-Hub-Signature-256`
   with a `sha256=` prefix (so a `sha1`-only delivery is rejected), and
   call go-github's `ValidatePayloadFromBody` on the size-limited body
   with that header only. Missing, malformed and wrong signatures are
   rejected.
-- [ ] 8.2 `internal/ingest/payload.go`: `github.ParseWebHook(event,
+- [x] 8.2 `internal/ingest/payload.go`: `github.ParseWebHook(event,
   body)` into go-github's typed events (OQ4). `Route` takes the typed
   event, and a small adapter reads the shared fields (sender,
   installation, repository) across event types. An event type go-github
   does not know is recorded and ignored.
-- [ ] 8.3 `internal/ingest/route.go`: `Route(event string, p *Payload,
+- [x] 8.3 `internal/ingest/route.go`: `Route(event string, p *Payload,
   app *config.App, paths []string) []Action`, a pure function
   implementing DESIGN-0003's table top to bottom:
   - the own-bot filter;
@@ -407,10 +407,10 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
   `Action` is `{Kind: signal|signalWithStart|startDiscovery; WorkflowID;
   Signal; Arg; Start *workflows.RepoState}`.
-- [ ] 8.4 `internal/ingest/record.go`: the `Record` type (DESIGN-0003
+- [x] 8.4 `internal/ingest/record.go`: the `Record` type (DESIGN-0003
   § Recording deliveries) and `Sink` interface. `LogSink` writes one info
   line per delivery (headers only for a rejected one).
-- [ ] 8.5 `internal/ingest/handler.go`: the handler.
+- [x] 8.5 `internal/ingest/handler.go`: the handler.
   - It enforces `POST` on `ingest.path`, reads at most 25 MiB (413
     above), verifies, answers `ping` with 200, routes, and runs the
     actions with a 5 s deadline.
@@ -421,10 +421,10 @@ green, and one commit per numbered task. The PR split is in OQ1.
   - It takes a `Temporal` interface (`SignalWorkflow`,
     `SignalWithStartWorkflow`, `ExecuteWorkflow` with
     `WorkflowIDConflictPolicy: USE_EXISTING`).
-- [ ] 8.6 Metrics: `boopd_ingest_deliveries_total{app,event,outcome}`
+- [x] 8.6 Metrics: `boopd_ingest_deliveries_total{app,event,outcome}`
   and `boopd_ingest_temporal_seconds{action}` in
   `internal/observability`.
-- [ ] 8.7 Tests:
+- [x] 8.7 Tests:
   - `route_test.go`: a table over testdata payloads, one case per
     DESIGN-0003 row plus own-bot, unknown App, commit cap and non-default
     branch;

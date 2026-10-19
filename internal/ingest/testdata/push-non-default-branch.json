@@ -1,0 +1,32 @@
+{
+  "commits": [
+    {
+      "added": [
+        "renovate.json5"
+      ],
+      "id": "0000000000000000000000000000000000000000",
+      "modified": [],
+      "removed": []
+    }
+  ],
+  "installation": {
+    "id": 7
+  },
+  "ref": "refs/heads/feature",
+  "repository": {
+    "archived": false,
+    "default_branch": "main",
+    "fork": false,
+    "full_name": "acme/app",
+    "id": 101,
+    "name": "app",
+    "node_id": "R_101",
+    "owner": {
+      "login": "acme"
+    }
+  },
+  "sender": {
+    "login": "alice",
+    "type": "User"
+  }
+}

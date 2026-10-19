@@ -1,0 +1,27 @@
+{
+  "action": "deleted",
+  "installation": {
+    "account": {
+      "login": "acme"
+    },
+    "id": 7
+  },
+  "repositories": [
+    {
+      "full_name": "acme/app",
+      "id": 101,
+      "name": "app",
+      "node_id": "R_101"
+    },
+    {
+      "full_name": "acme/lib",
+      "id": 102,
+      "name": "lib",
+      "node_id": "R_102"
+    }
+  ],
+  "sender": {
+    "login": "alice",
+    "type": "User"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "action": "closed",
+  "installation": {
+    "id": 7
+  },
+  "number": 6,
+  "pull_request": {
+    "base": {
+      "ref": "main"
+    },
+    "head": {
+      "ref": "renovate/all"
+    },
+    "number": 6,
+    "state": "closed",
+    "user": {
+      "login": "alice",
+      "type": "User"
+    }
+  },
+  "repository": {
+    "archived": false,
+    "default_branch": "main",
+    "fork": false,
+    "full_name": "acme/app",
+    "id": 101,
+    "name": "app",
+    "node_id": "R_101",
+    "owner": {
+      "login": "acme"
+    }
+  },
+  "sender": {
+    "login": "alice",
+    "type": "User"
+  }
+}
