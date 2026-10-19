@@ -34,6 +34,13 @@ const (
 	ErrTypeInfrastructure = "infrastructure"
 )
 
+// ErrTypeGitHubRateLimited is the type of a GitHub rate limit returned
+// by the discovery activities (ListInstallations, DiscoverInstallation)
+// when GitHub named a wait. The error's NextRetryDelay is that wait, so
+// Temporal's next attempt honours it instead of the retry policy's
+// backoff (#16). It carries no details.
+const ErrTypeGitHubRateLimited = "github-rate-limited"
+
 // RateLimited is the details of an ErrTypeRateLimited error.
 type RateLimited struct {
 	RetryAt time.Time

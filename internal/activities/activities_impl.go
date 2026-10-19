@@ -176,7 +176,7 @@ func (a *Activities) ListInstallations(ctx context.Context, in *workflows.ListIn
 	}
 	installs, err := api.ListInstallations(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list installations of %s: %w", app.Name, err)
+		return nil, honourRetryAfter(fmt.Errorf("list installations of %s: %w", app.Name, err))
 	}
 	out := make([]workflows.InstallationInfo, 0, len(installs))
 	for i := range installs {
