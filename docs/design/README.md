@@ -34,6 +34,6 @@ docz create design "Your Design Title"
 |----|-------|--------|------|--------|------|
 | DESIGN-0001 | boopd spike: workflows, RunRenovate activity and worker | Approved | 2026-10-01 | Donald Gifford | [0001-boopd-spike-workflows-runrenovate-activity-and-worker.md](0001-boopd-spike-workflows-runrenovate-activity-and-worker.md) |
 | DESIGN-0002 | Valkey as the bundled Renovate cache | Draft | 2026-10-15 | Donald Gifford | [0002-valkey-as-the-bundled-renovate-cache.md](0002-valkey-as-the-bundled-renovate-cache.md) |
-| DESIGN-0003 | Webhook ingest: GitHub events to RepoWorkflow signals | Approved | 2026-10-17 | Donald Gifford | [0003-webhook-ingest-github-events-to-repoworkflow-signals.md](0003-webhook-ingest-github-events-to-repoworkflow-signals.md) |
+| DESIGN-0003 | Webhook ingest: GitHub events to RepoWorkflow signals | Implemented | 2026-10-17 | Donald Gifford | [0003-webhook-ingest-github-events-to-repoworkflow-signals.md](0003-webhook-ingest-github-events-to-repoworkflow-signals.md) |
 | DESIGN-0004 | boopd API and management UI: event store, PR inventory and estate view | Draft | 2026-10-18 | Donald Gifford | [0004-boopd-api-and-management-ui-event-store-pr-inventory-and-estate.md](0004-boopd-api-and-management-ui-event-store-pr-inventory-and-estate.md) |
 <!-- END DOCZ AUTO-GENERATED -->
