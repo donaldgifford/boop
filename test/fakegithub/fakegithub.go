@@ -99,6 +99,32 @@ const (
 	TimeoutGraphQLError
 )
 
+// SecondaryScope picks the requests a secondary rate limit answers.
+type SecondaryScope int
+
+const (
+	// SecondaryProbe is the GraphQL config probe (POST /graphql).
+	SecondaryProbe SecondaryScope = iota
+	// SecondaryRepos is the installation's repository listing.
+	SecondaryRepos
+	// SecondaryLaterPages is the repository listing past its first page.
+	SecondaryLaterPages
+	// SecondaryInstallations is the App's installation listing.
+	SecondaryInstallations
+)
+
+// SecondaryLimitDocURL is the documentation_url GitHub sends with a
+// secondary rate limit; go-github recognises it by its suffix.
+const SecondaryLimitDocURL = "https://docs.github.com/rest/overview/rate-limits-for-the-rest-api#about-secondary-rate-limits"
+
+// SecondaryLimitMessage is GitHub's message for a secondary rate limit.
+const SecondaryLimitMessage = "You have exceeded a secondary rate limit. Please wait a few minutes before you try again."
+
+type secondaryLimit struct {
+	times      int
+	retryAfter time.Duration
+}
+
 // MaxNodeIDs is GitHub's cap on nodes(ids:); more is ARGUMENT_LIMIT.
 const MaxNodeIDs = 100
 
@@ -132,6 +158,8 @@ type Server struct {
 	lookupLimit   int
 	timeoutShape  TimeoutShape
 	rateReads     int
+	secondary     map[SecondaryScope]secondaryLimit
+	probeTimes    []time.Time
 }
 
 // NewFake returns a fake GitHub with one installation (id 1) and
@@ -155,6 +183,7 @@ func NewFake() (*Server, error) {
 		tokenTTL:     time.Hour,
 		revokeStatus: http.StatusNoContent,
 		failPages:    make(map[int]int),
+		secondary:    make(map[SecondaryScope]secondaryLimit),
 	}, nil
 }
 
@@ -236,6 +265,33 @@ func (s *Server) SetGraphQLTimeoutShape(shape TimeoutShape) {
 	s.timeoutShape = shape
 }
 
+// SetSecondaryLimit makes the next times requests in scope answer 403
+// with GitHub's secondary-limit body and, when retryAfter is positive,
+// Retry-After in whole seconds.
+func (s *Server) SetSecondaryLimit(scope SecondaryScope, times int, retryAfter time.Duration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.secondary[scope] = secondaryLimit{times: times, retryAfter: retryAfter}
+}
+
+// secondaryLocked answers a request in scope with the secondary limit
+// if one is pending; true when it did. The caller holds s.mu.
+func (s *Server) secondaryLocked(w http.ResponseWriter, scope SecondaryScope) bool {
+	l := s.secondary[scope]
+	if l.times <= 0 {
+		return false
+	}
+	l.times--
+	s.secondary[scope] = l
+	if l.retryAfter > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(int(l.retryAfter.Seconds())))
+	}
+	body := message(SecondaryLimitMessage)
+	body["documentation_url"] = SecondaryLimitDocURL
+	writeJSON(w, http.StatusForbidden, body)
+	return true
+}
+
 // Mints returns the recorded mints.
 func (s *Server) Mints() []Mint {
 	s.mu.Lock()
@@ -278,6 +334,14 @@ func (s *Server) ProbeTimeouts() int {
 	return s.probeTimeouts
 }
 
+// ProbeTimes returns when each GraphQL probe request arrived, in order,
+// including those a secondary limit answered.
+func (s *Server) ProbeTimes() []time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]time.Time(nil), s.probeTimes...)
+}
+
 // RateReads returns how many /rate_limit reads arrived.
 func (s *Server) RateReads() int {
 	s.mu.Lock()
@@ -288,7 +352,9 @@ func (s *Server) RateReads() int {
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Date", time.Now().UTC().Format(http.TimeFormat))
 	if r.Method == http.MethodPost && r.URL.Path == "/api/graphql" {
-		s.probe(w, r)
+		if !s.probeArrived(w) {
+			s.probe(w, r)
+		}
 		return
 	}
 	path := strings.TrimPrefix(r.URL.Path, "/api/v3")
@@ -354,6 +420,9 @@ func notFound(w http.ResponseWriter) {
 func (s *Server) listInstallations(w http.ResponseWriter) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.secondaryLocked(w, SecondaryInstallations) {
+		return
+	}
 	out := make([]map[string]any, 0, len(s.installations))
 	for _, in := range s.installations {
 		m := map[string]any{"id": in.ID, "account": map[string]any{"login": in.Account}, "repository_selection": "all"}
@@ -415,6 +484,9 @@ func (s *Server) listRepos(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.pageRequests = append(s.pageRequests, page)
+	if s.secondaryLocked(w, SecondaryRepos) || (page > 1 && s.secondaryLocked(w, SecondaryLaterPages)) {
+		return
+	}
 	if s.failPages[page] > 0 {
 		s.failPages[page]--
 		writeJSON(w, http.StatusBadGateway, message("bad gateway"))
@@ -441,6 +513,15 @@ func (s *Server) rateLimit(w http.ResponseWriter) {
 		res[k] = map[string]any{"limit": v.Limit, "remaining": v.Remaining, "used": v.Limit - v.Remaining, "reset": v.Reset.Unix()}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"resources": res})
+}
+
+// probeArrived records a probe's arrival and answers it with a pending
+// secondary limit; true when it did.
+func (s *Server) probeArrived(w http.ResponseWriter) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.probeTimes = append(s.probeTimes, time.Now())
+	return s.secondaryLocked(w, SecondaryProbe)
 }
 
 func (s *Server) probe(w http.ResponseWriter, r *http.Request) {

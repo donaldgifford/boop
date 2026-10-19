@@ -214,6 +214,12 @@ They are not the cause of #14.
   `RateLimitedError` that wraps `ErrTransient`. The activity's fixed
   30 s × 2 back-off applies, and GitHub's `Retry-After` is ignored.
 
+  Fixed by [#16](https://github.com/donaldgifford/boop/issues/16): the
+  discovery activities return a `github-rate-limited` `ApplicationError`
+  whose `NextRetryDelay` is the wait (from `Retry-After`, or the reset for
+  a secondary limit without it), and `classifyErr` keeps a plain 429's
+  `Retry-After`. A secondary limit with no wait still takes the back-off.
+
 ## Conclusion
 
 **Answer:** Confirmed. The probe fails because one query carries 100

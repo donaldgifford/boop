@@ -89,7 +89,7 @@ func (a *Activities) DiscoverInstallation(ctx context.Context, in *workflows.Dis
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("discover installation %d: %w", in.InstallationID, err)
+		return nil, honourRetryAfter(fmt.Errorf("discover installation %d: %w", in.InstallationID, err))
 	}
 	sum.Seen, sum.Onboarded = prog.Seen, prog.Onboarded
 	return sum, nil

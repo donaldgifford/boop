@@ -18,8 +18,11 @@ package activities
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
+
+	"go.temporal.io/sdk/temporal"
 
 	"github.com/donaldgifford/boop/internal/config"
 	"github.com/donaldgifford/boop/internal/platform"
@@ -117,4 +120,21 @@ func baseURL(app *config.App) string {
 		return app.Endpoint
 	}
 	return app.Endpoint + "/"
+}
+
+// honourRetryAfter turns a GitHub rate limit that names its wait into an
+// ApplicationError whose NextRetryDelay is that wait, so Temporal's next
+// attempt waits as long as GitHub asked instead of the retry policy's
+// backoff. A retry inside a secondary limit's window fails again and can
+// extend it (#16). Any other error, and a rate limit without a wait, is
+// returned unchanged; the error stays retryable either way.
+func honourRetryAfter(err error) error {
+	rl, ok := errors.AsType[*platform.RateLimitedError](err)
+	if !ok || rl.RetryAfter <= 0 {
+		return err
+	}
+	// The message stays short: Error() appends the type and the cause,
+	// which already names the activity and the wait.
+	return temporal.NewApplicationErrorWithOptions("github rate limit", workflows.ErrTypeGitHubRateLimited,
+		temporal.ApplicationErrorOptions{NextRetryDelay: rl.RetryAfter, Cause: err})
 }

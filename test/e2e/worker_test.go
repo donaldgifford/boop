@@ -310,6 +310,36 @@ func TestWorker_DiscoveryFallsBackToREST(t *testing.T) {
 	}
 }
 
+// TestWorker_DiscoveryHonoursRetryAfter is issue #16 end to end: the
+// first config probe meets a secondary rate limit with Retry-After: 5.
+// The retried DiscoverInstallation probes again after GitHub's wait, not
+// the retry policy's 30s backoff, and the repository still runs.
+func TestWorker_DiscoveryHonoursRetryAfter(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
+	defer cancel()
+	const wait = 5 * time.Second
+	h := startWorker(t, "default", 10*time.Minute, activities.RunTimings{Heartbeat: time.Second},
+		func(_ *config.Config, gh *fakegithub.Server) {
+			gh.SetSecondaryLimit(fakegithub.SecondaryProbe, 1, wait)
+		})
+
+	h.triggerDiscovery(ctx, t)
+	eventually(t, 2*time.Minute, "the first run_complete", func() bool { return len(h.log.lines("run_complete")) == 1 })
+
+	probes := h.gh.ProbeTimes()
+	if len(probes) < 2 {
+		t.Fatalf("%d probes, want the limited one and its retry", len(probes))
+	}
+	if gap := probes[1].Sub(probes[0]); gap < wait || gap >= 20*time.Second {
+		t.Errorf("retried probe %v after the limited one, want Retry-After (%v), well under the 30s backoff", gap, wait)
+	}
+	s, ok := h.repoState(ctx, t, h.repoID)
+	if !ok || s.LastRun == nil || s.LastRun.Outcome != workflows.OutcomeSucceeded {
+		t.Fatalf("state = %+v (found %v), want a Succeeded run", s, ok)
+	}
+}
+
 // TestWorker_GracefulStop: SIGTERM (context cancel) with a run in flight
 // stops polling but keeps the activity to its soft deadline, which
 // deletes the Job and logs run_complete before the worker returns.

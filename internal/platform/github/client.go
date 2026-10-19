@@ -333,7 +333,9 @@ func classifyErr(resp *gogithub.Response, err error) error {
 		case http.StatusNotFound:
 			return fmt.Errorf("%w: %w", platform.ErrNotFound, err)
 		case http.StatusTooManyRequests:
-			return &platform.RateLimitedError{Cause: err}
+			// A 429 go-github did not type as a secondary limit still
+			// carries GitHub's wait (#16).
+			return &platform.RateLimitedError{RetryAfter: retryAfter(resp.Header), Cause: err}
 		}
 		if resp.StatusCode >= 500 {
 			return fmt.Errorf("%w: %w", platform.ErrTransient, err)

@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/donaldgifford/boop/test/fakegithub"
 )
@@ -185,4 +186,63 @@ func TestProbe_Sizes(t *testing.T) {
 	if got := s.ProbeTimeouts(); got != 1 {
 		t.Errorf("ProbeTimeouts() = %d, want 1", got)
 	}
+}
+
+func TestSecondaryLimit(t *testing.T) {
+	t.Parallel()
+	s := fakegithub.New(t)
+	s.SetSecondaryLimit(fakegithub.SecondaryProbe, 1, 7*time.Second)
+	s.SetSecondaryLimit(fakegithub.SecondaryRepos, 1, 0)
+
+	code, raw, _ := postProbe(t, s, 1, 1)
+	if code != http.StatusForbidden {
+		t.Fatalf("limited probe status = %d, want 403 (body %q)", code, raw)
+	}
+	var body struct {
+		Message          string `json:"message"`
+		DocumentationURL string `json:"documentation_url"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.DocumentationURL != fakegithub.SecondaryLimitDocURL || body.Message != fakegithub.SecondaryLimitMessage {
+		t.Errorf("limited body = %s, want GitHub's secondary-limit body", raw)
+	}
+	if code, _, _ := postProbe(t, s, 1, 1); code != http.StatusOK {
+		t.Errorf("second probe status = %d, want 200 (one limited request)", code)
+	}
+	if got := len(s.ProbeTimes()); got != 2 {
+		t.Errorf("ProbeTimes() has %d entries, want 2 (limited ones count)", got)
+	}
+
+	if code, h := get(t, s.URL+"/api/v3/installation/repositories"); code != http.StatusForbidden || h.Get("Retry-After") != "" {
+		t.Errorf("limited listing = %d, Retry-After %q; want 403 without Retry-After", code, h.Get("Retry-After"))
+	}
+	if code, _ := get(t, s.URL+"/api/v3/installation/repositories"); code != http.StatusOK {
+		t.Errorf("second listing = %d, want 200", code)
+	}
+}
+
+func TestSecondaryLimit_RetryAfterHeader(t *testing.T) {
+	t.Parallel()
+	s := fakegithub.New(t)
+	s.SetSecondaryLimit(fakegithub.SecondaryInstallations, 1, 7*time.Second)
+	if code, h := get(t, s.URL+"/api/v3/app/installations"); code != http.StatusForbidden || h.Get("Retry-After") != "7" {
+		t.Errorf("limited installations = %d, Retry-After %q; want 403 and 7", code, h.Get("Retry-After"))
+	}
+}
+
+// get sends a GET and returns the status and headers.
+func get(t *testing.T, url string) (int, http.Header) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode, resp.Header
 }
