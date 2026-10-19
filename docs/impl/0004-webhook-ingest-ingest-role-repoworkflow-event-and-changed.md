@@ -465,35 +465,35 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 10.1 `values.yaml` and `values.schema.json`: `ingest.*` as in
+- [x] 10.1 `values.yaml` and `values.schema.json`: `ingest.*` as in
   DESIGN-0003 § Chart (`enabled: false`, `replicaCount: 2`, `pdb`,
   `service`, `ingress`, `httpRoute`, `networkPolicy.from`, `resources`),
   and `boopd.ingest` / `boopd.apps[].webhook` rendered into `boopd.hcl`.
-- [ ] 10.2 `templates/ingest.yaml`:
+- [x] 10.2 `templates/ingest.yaml`:
   - a Deployment (`boopd ingest`) with the rendered config;
   - the webhook Secret mounts and Temporal credentials, but no App key;
   - its own ServiceAccount with no token mount;
   - a Service and a PDB;
   - the same security context as the worker.
-- [ ] 10.3 `templates/ingest-ingress.yaml` and
+- [x] 10.3 `templates/ingest-ingress.yaml` and
   `templates/ingest-httproute.yaml`, each routing only `ingest.path`.
   The `HTTPRoute` renders when `ingest.httpRoute.enabled` is set.
-- [ ] 10.4 `templates/networkpolicy.yaml`: ingest ingress from
+- [x] 10.4 `templates/networkpolicy.yaml`: ingest ingress from
   `ingest.networkPolicy.from` on the HTTP port and from Prometheus on
   metrics; egress to DNS and Temporal only.
-- [ ] 10.5 `templates/prometheusrule.yaml`: `BoopdIngestFailing` and
+- [x] 10.5 `templates/prometheusrule.yaml`: `BoopdIngestFailing` and
   `BoopdDeliveriesLost`.
-- [ ] 10.6 Guards: render fails if `ingest.enabled` is set without an
+- [x] 10.6 Guards: render fails if `ingest.enabled` is set without an
   App `webhook` block, or if both routes are enabled with the same
   host.
-- [ ] 10.7 helm-unittest suites `tests/ingest_test.yaml`:
+- [x] 10.7 helm-unittest suites `tests/ingest_test.yaml`:
   - no App key and no ServiceAccount token;
   - both routes limited to the path;
   - the NetworkPolicy has no GitHub egress;
   - the guards;
   - the PDB;
   - the schema rejects unknown keys.
-- [ ] 10.8 `just helm-docs`; `boopd config validate` on the rendered
+- [x] 10.8 `just helm-docs`; `boopd config validate` on the rendered
   config in `just helm-test`.
 
 #### Success Criteria
