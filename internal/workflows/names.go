@@ -113,6 +113,13 @@ func DiscoveryScheduleID(app string) string {
 	return "discovery/" + app
 }
 
+// TargetedDiscoveryID is discovery/<app>/installation/<id>: ingest's
+// targeted pass for one installation, started with UseExisting so a
+// burst of events for it shares one pass (DESIGN-0003).
+func TargetedDiscoveryID(app string, installationID int64) string {
+	return "discovery/" + app + "/installation/" + strconv.FormatInt(installationID, 10)
+}
+
 // DiscoveryWorkflowID is the workflow ID the Schedule's action starts.
 // The server appends the fire time, giving ADR-0002's
 // discovery/<platform>/<schedule time>.
