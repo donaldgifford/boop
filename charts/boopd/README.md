@@ -115,6 +115,28 @@ renders with an existing Secret are identical.
 | image.repository | string | `"ghcr.io/donaldgifford/boopd"` | Container image repository |
 | image.tag | string | `""` | Overrides the image tag, used verbatim (default: appVersion without a leading v) |
 | imagePullSecrets | list | `[]` | Image pull secrets |
+| ingest.enabled | bool | `false` | Render the ingest Deployment, ServiceAccount, Service and PDB. |
+| ingest.httpRoute.annotations | object | `{}` | HTTPRoute annotations. |
+| ingest.httpRoute.enabled | bool | `false` | Render a Gateway API HTTPRoute routing only `boopd.ingest.path`. |
+| ingest.httpRoute.hostnames | list | `[]` | HTTPRoute hostnames. |
+| ingest.httpRoute.parentRefs | list | `[]` | Gateways to attach to: `[{name: public-gateway, namespace: gateway-system, sectionName: https}]`. |
+| ingest.ingress.annotations | object | `{}` | Ingress annotations. |
+| ingest.ingress.className | string | `""` | Ingress class, e.g. tailscale. |
+| ingest.ingress.enabled | bool | `false` | Render an Ingress routing only `boopd.ingest.path`. |
+| ingest.ingress.hosts | list | `[]` | Hosts: `[{host: boop-hooks.example.com}]`. A host's `paths`, if listed, must be the ingest path. |
+| ingest.ingress.tls | list | `[]` | Ingress TLS entries. |
+| ingest.networkPolicy.from | list | `[]` | Peers (NetworkPolicyPeer list) allowed to the webhook port: the ingress controller or gateway. Empty admits none. |
+| ingest.networkPolicy.metricsFrom | list | `[]` | Peers allowed to the metrics port: Prometheus. Empty admits none. |
+| ingest.networkPolicy.temporal | list | TCP 7233 to anywhere | Egress rules (NetworkPolicyEgressRule list) reaching Temporal. |
+| ingest.pdb.enabled | bool | `true` | Render a PodDisruptionBudget for the ingest pods. |
+| ingest.pdb.maxUnavailable | int | `1` | PDB maxUnavailable. |
+| ingest.replicaCount | int | `2` | Ingest replicas; stateless, so two for a rollout without loss. |
+| ingest.resources | object | `{}` | Ingest container resources. |
+| ingest.service.port | int | `8080` | Ingest Service port, to the webhook port. |
+| ingest.service.type | string | `"ClusterIP"` | Ingest Service type. |
+| ingest.temporalOidc.clientId | string | `""` | OIDC client ID for ingest. |
+| ingest.temporalOidc.existingSecret | string | `""` | Secret with key `client-secret` for ingest's OIDC client. |
+| ingest.terminationGracePeriodSeconds | int | `30` | Above the 15s drain of deliveries in flight. |
 | livenessProbe.httpGet.path | string | `"/healthz"` |  |
 | livenessProbe.httpGet.port | string | `"http"` |  |
 | livenessProbe.initialDelaySeconds | int | `5` |  |

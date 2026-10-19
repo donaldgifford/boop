@@ -78,6 +78,10 @@ boopd:
     pendingTimeout: 10m
     # Cluster-capacity cap across installations; 0 means no cap.
     maxConcurrent: 20
+  # Webhook ingest timings (DESIGN-0003): `path`, `settle`,
+  # `minInterval`, `auditEvery`. Empty keeps the config's defaults
+  # (/webhooks/github, 30s, 5m, 15m).
+  ingest: {}
   # Profiles by name. `pod` and `renovate` follow the config file's
   # profile blocks.
   profiles:
@@ -121,6 +125,11 @@ boopd:
   #     privateKeySecretRef: {name: boop-bot-app, key: private-key.pem}
   #     discovery: {every: 6h, probe: graphql}
   #     budget: {reserveFraction: 0.10, maxConcurrentRuns: 10}
+  #     # Webhooks to `boopd ingest`; the Secret is mounted in the ingest
+  #     # pods only. bot defaults to "<name>[bot]".
+  #     webhook:
+  #       bot: boop-bot[bot]
+  #       secretRef: {name: boop-bot-webhook, key: secret}
   apps: {}
 
 # Renovate's datasource cache (IMPL-0001 OQ7): the local redis subchart,
@@ -234,6 +243,74 @@ networkPolicies:
     python:
       - ports:
           - {port: 443, protocol: TCP}
+
+# The webhook ingest role (DESIGN-0003): `boopd ingest` behind its own
+# Service, exposed to GitHub by an Ingress or a Gateway API HTTPRoute.
+# It needs an App with a `webhook` block. It mounts the webhook Secrets
+# and the Temporal credentials, never an App key, and runs with no
+# ServiceAccount token.
+ingest:
+  # -- Render the ingest Deployment, ServiceAccount, Service and PDB.
+  enabled: false
+  # -- Ingest replicas; stateless, so two for a rollout without loss.
+  replicaCount: 2
+  # -- Above the 15s drain of deliveries in flight.
+  terminationGracePeriodSeconds: 30
+  # -- Ingest container resources.
+  resources: {}
+  pdb:
+    # -- Render a PodDisruptionBudget for the ingest pods.
+    enabled: true
+    # -- PDB maxUnavailable.
+    maxUnavailable: 1
+  service:
+    # -- Ingest Service type.
+    type: ClusterIP
+    # -- Ingest Service port, to the webhook port.
+    port: 8080
+  # Temporal OIDC client for ingest (boopd-ingest); empty uses the
+  # worker's temporal.auth.oidc clientId and existingSecret.
+  temporalOidc:
+    # -- OIDC client ID for ingest.
+    clientId: ""
+    # -- Secret with key `client-secret` for ingest's OIDC client.
+    existingSecret: ""
+  ingress:
+    # -- Render an Ingress routing only `boopd.ingest.path`.
+    enabled: false
+    # -- Ingress class, e.g. tailscale.
+    className: ""
+    # -- Ingress annotations.
+    annotations: {}
+    # -- Hosts: `[{host: boop-hooks.example.com}]`. A host's `paths`, if
+    # listed, must be the ingest path.
+    hosts: []
+    # -- Ingress TLS entries.
+    tls: []
+  httpRoute:
+    # -- Render a Gateway API HTTPRoute routing only `boopd.ingest.path`.
+    enabled: false
+    # -- Gateways to attach to:
+    # `[{name: public-gateway, namespace: gateway-system, sectionName: https}]`.
+    parentRefs: []
+    # -- HTTPRoute hostnames.
+    hostnames: []
+    # -- HTTPRoute annotations.
+    annotations: {}
+  # With networkPolicies.enabled, the ingest pods take ingress on the
+  # webhook port from `from` and on the metrics port from `metricsFrom`
+  # only, and reach DNS and Temporal only.
+  networkPolicy:
+    # -- Peers (NetworkPolicyPeer list) allowed to the webhook port: the
+    # ingress controller or gateway. Empty admits none.
+    from: []
+    # -- Peers allowed to the metrics port: Prometheus. Empty admits none.
+    metricsFrom: []
+    # -- Egress rules (NetworkPolicyEgressRule list) reaching Temporal.
+    # @default -- TCP 7233 to anywhere
+    temporal:
+      - ports:
+          - {port: 7233, protocol: TCP}
 
 rbac:
   # -- Create the worker's Role and RoleBinding in the runs namespace:

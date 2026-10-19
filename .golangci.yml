@@ -125,6 +125,14 @@ linters:
               desc: the Temporal client is used only by activities and the worker
             - pkg: k8s.io/client-go
               desc: Kubernetes is reached only through activities
+        ingest:
+          files:
+            - "**/internal/ingest/*.go"
+          deny:
+            - pkg: github.com/donaldgifford/boop/internal/platform
+              desc: ingest never calls GitHub (DESIGN-0003 § The ingest role)
+            - pkg: github.com/donaldgifford/boop/internal/kube
+              desc: ingest has no ServiceAccount token
 
     errorlint:
       errorf: true

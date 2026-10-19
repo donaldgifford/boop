@@ -1,0 +1,331 @@
+---
+suite: webhook ingest
+templates:
+  - templates/ingest.yaml
+  - templates/ingest-ingress.yaml
+  - templates/ingest-httproute.yaml
+  - templates/networkpolicy.yaml
+  - templates/prometheusrule.yaml
+  - templates/servicemonitor.yaml
+  - templates/deployment.yaml
+  - templates/config.yaml
+# Each test loads values/ingest.yaml (an App with a webhook, ingest on)
+# except those about ingest without it.
+tests:
+  - it: renders nothing for ingest by default
+    templates:
+      - templates/ingest.yaml
+      - templates/ingest-ingress.yaml
+      - templates/ingest-httproute.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders the ServiceAccount, Deployment, Service and PDB
+    values: [values/ingest.yaml]
+    template: templates/ingest.yaml
+    asserts:
+      - hasDocuments:
+          count: 4
+      - isKind:
+          of: ServiceAccount
+        documentIndex: 0
+      - isKind:
+          of: Deployment
+        documentIndex: 1
+      - isKind:
+          of: Service
+        documentIndex: 2
+      - isKind:
+          of: PodDisruptionBudget
+        documentIndex: 3
+
+  - it: gives the ServiceAccount and the pods no token
+    values: [values/ingest.yaml]
+    template: templates/ingest.yaml
+    asserts:
+      - equal:
+          path: automountServiceAccountToken
+          value: false
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+        documentIndex: 1
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-boopd-ingest
+        documentIndex: 1
+
+  - it: runs boopd ingest with the rendered config
+    values: [values/ingest.yaml]
+    template: templates/ingest.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: [ingest, --config, /etc/boopd/boopd.hcl]
+      - equal:
+          path: spec.replicas
+          value: 2
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: config
+            mountPath: /etc/boopd/boopd.hcl
+            subPath: boopd.hcl
+            readOnly: true
+
+  - it: mounts the webhook Secret and never the App key
+    values: [values/ingest.yaml]
+    template: templates/ingest.yaml
+    documentIndex: 1
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: secret-4228400466
+            secret:
+              secretName: boop-bot-webhook
+              defaultMode: 0440
+              items:
+                - {key: secret, path: secret}
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: secret-2dcd826ef4
+            secret:
+              secretName: boop-bot-app
+              defaultMode: 0440
+              items:
+                - {key: private-key.pem, path: private-key.pem}
+      - notMatchRegex:
+          path: spec.template.spec.volumes[1].secret.secretName
+          pattern: boop-bot-app
+
+  - it: keeps the webhook Secret out of the worker
+    values: [values/ingest.yaml]
+    template: templates/deployment.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: secret-4228400466
+            secret:
+              secretName: boop-bot-webhook
+              defaultMode: 0440
+              items:
+                - {key: secret, path: secret}
+
+  - it: selects only ingest pods, apart from the worker
+    values: [values/ingest.yaml]
+    template: templates/ingest.yaml
+    documentIndex: 2
+    asserts:
+      - equal:
+          path: spec.selector["app.kubernetes.io/name"]
+          value: boopd-ingest
+
+  - it: uses ingest's own Temporal OIDC client when set
+    values: [values/ingest.yaml]
+    template: templates/ingest.yaml
+    documentIndex: 1
+    set:
+      temporal.tls.caSecret: temporal-ca
+      temporal.auth.oidc: {tokenUrl: "https://kc/token", clientId: boopd, existingSecret: boopd-oidc}
+      ingest.temporalOidc: {clientId: boopd-ingest, existingSecret: boopd-ingest-oidc}
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: TEMPORAL_OIDC_CLIENT_ID, value: boopd-ingest}
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: temporal-oidc
+            secret:
+              secretName: boopd-ingest-oidc
+              defaultMode: 0440
+              items:
+                - {key: client-secret, path: client-secret}
+
+  - it: renders the PDB from ingest.pdb
+    values: [values/ingest.yaml]
+    template: templates/ingest.yaml
+    documentIndex: 3
+    set:
+      ingest.pdb.maxUnavailable: 0
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 0
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: boopd-ingest
+
+  - it: drops the PDB when disabled
+    values: [values/ingest.yaml]
+    template: templates/ingest.yaml
+    set:
+      ingest.pdb.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 3
+
+  - it: renders the webhook block into boopd.hcl
+    values: [values/ingest.yaml]
+    template: templates/config.yaml
+    set:
+      boopd.ingest: {settle: 45s}
+    asserts:
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'ingest \{\n  settle = "45s"\n\}'
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'webhook \{\n    secret_ref \{\n      name = "boop-bot-webhook"'
+
+  - it: routes only the ingest path through the Ingress
+    values: [values/ingest.yaml]
+    template: templates/ingest-ingress.yaml
+    set:
+      boopd.ingest.path: /hooks
+      ingest.ingress: {enabled: true, className: tailscale, hosts: [{host: hooks.example.com}]}
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths
+          value:
+            - path: /hooks
+              pathType: Exact
+              backend: {service: {name: RELEASE-NAME-boopd-ingest, port: {name: http}}}
+      - equal:
+          path: spec.ingressClassName
+          value: tailscale
+
+  - it: routes only the ingest path through the HTTPRoute
+    values: [values/ingest.yaml]
+    template: templates/ingest-httproute.yaml
+    set:
+      ingest.httpRoute: {enabled: true, parentRefs: [{name: public, namespace: gateway-system}], hostnames: [hooks.example.com]}
+    asserts:
+      - isKind:
+          of: HTTPRoute
+      - equal:
+          path: spec.rules
+          value:
+            - matches: [{path: {type: Exact, value: /webhooks/github}}]
+              backendRefs: [{name: RELEASE-NAME-boopd-ingest, port: 8080}]
+
+  - it: gives the NetworkPolicy no GitHub egress
+    values: [values/ingest.yaml]
+    template: templates/networkpolicy.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-boopd-ingest
+    set:
+      networkPolicies.enabled: true
+      ingest.networkPolicy.from: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: tailscale}}}]
+    asserts:
+      - equal:
+          path: spec.egress
+          value:
+            - ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+            - ports: [{port: 7233, protocol: TCP}]
+      - equal:
+          path: spec.ingress
+          value:
+            - from: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: tailscale}}}]
+              ports: [{port: http, protocol: TCP}]
+
+  - it: admits nothing without peers
+    values: [values/ingest.yaml]
+    template: templates/networkpolicy.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-boopd-ingest
+    set:
+      networkPolicies.enabled: true
+    asserts:
+      - equal:
+          path: spec.ingress
+          value: []
+
+  - it: adds the delivery alerts with ingest on
+    values: [values/ingest.yaml]
+    template: templates/prometheusrule.yaml
+    set:
+      prometheusRule.enabled: true
+    asserts:
+      - contains:
+          path: spec.groups[0].rules
+          any: true
+          content:
+            alert: BoopdIngestFailing
+      - contains:
+          path: spec.groups[0].rules
+          any: true
+          content:
+            alert: BoopdDeliveriesLost
+
+  - it: leaves the delivery alerts out with ingest off
+    values: [values/ingest.yaml]
+    template: templates/prometheusrule.yaml
+    set:
+      prometheusRule.enabled: true
+      ingest.enabled: false
+    asserts:
+      - notContains:
+          path: spec.groups[0].rules
+          any: true
+          content:
+            alert: BoopdIngestFailing
+
+  - it: scrapes ingest with the ServiceMonitor
+    values: [values/ingest.yaml]
+    template: templates/servicemonitor.yaml
+    set:
+      serviceMonitor.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: boopd-ingest
+        documentIndex: 1
+
+  - it: fails when both routes claim a host
+    values: [values/ingest.yaml]
+    template: templates/ingest.yaml
+    set:
+      ingest.ingress: {enabled: true, hosts: [{host: hooks.example.com}]}
+      ingest.httpRoute: {enabled: true, parentRefs: [{name: public}], hostnames: [hooks.example.com]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "both route host hooks.example.com"
+
+  - it: fails on an Ingress path other than the ingest path
+    values: [values/ingest.yaml]
+    template: templates/ingest.yaml
+    set:
+      ingest.ingress: {enabled: true, hosts: [{host: hooks.example.com, paths: [/]}]}
+    asserts:
+      - failedTemplate:
+          errorPattern: "may only list the ingest path /webhooks/github, not /"
+
+  - it: rejects unknown ingest keys
+    values: [values/ingest.yaml]
+    template: templates/ingest.yaml
+    set:
+      ingest.ingres: {enabled: true}
+    asserts:
+      - failedTemplate:
+          errorPattern: "additional properties 'ingres' not allowed"
+
+  - it: fails without an App webhook block
+    template: templates/ingest.yaml
+    set:
+      temporal.address: temporal-frontend:7233
+      boopd.apps.boop-bot: {appId: 1, privateKeySecretRef: {name: boop-bot-app, key: private-key.pem}}
+      ingest.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "ingest.enabled needs an App with a webhook block"

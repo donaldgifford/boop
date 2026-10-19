@@ -1,0 +1,14 @@
+{
+  "hook": {
+    "app_id": 1,
+    "events": [
+      "issues",
+      "pull_request",
+      "push",
+      "repository"
+    ],
+    "type": "App"
+  },
+  "hook_id": 1,
+  "zen": "Design for failure."
+}

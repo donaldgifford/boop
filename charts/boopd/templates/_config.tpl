@@ -126,6 +126,12 @@ runs {
   namespace = {{ include "boopd.hclValue" ($c.runs.namespace | default .Release.Namespace) }}
 {{- include "boopd.hclAttrs" (list $c.runs (list "pendingTimeout:pending_timeout" "maxConcurrent:max_concurrent") 2) }}
 }
+{{- with $c.ingest }}
+
+ingest {
+{{- include "boopd.hclAttrs" (list . (list "path:path" "settle:settle" "minInterval:min_interval" "auditEvery:audit_every") 2) }}
+}
+{{- end }}
 {{- range $name, $p := $c.profiles }}
 {{- $p = $p | default dict }}
 
@@ -178,6 +184,13 @@ app {{ include "boopd.hclValue" $name }} {
 
   budget {
 {{- include "boopd.hclAttrs" (list . (list "reserveFraction:reserve_fraction" "maxConcurrentRuns:max_concurrent_runs" "defaultEstimate:default_estimate") 4) }}
+  }
+{{- end }}
+{{- with $a.webhook }}
+
+  webhook {
+{{- include "boopd.hclAttrs" (list . (list "bot:bot") 4) }}
+{{- include "boopd.hclSecretRef" (list "secret_ref" (required (printf "boopd.apps.%s.webhook.secretRef is required" $name) .secretRef) 4) }}
   }
 {{- end }}
 }

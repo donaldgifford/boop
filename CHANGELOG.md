@@ -3,6 +3,45 @@
 All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
+## [unreleased]
+
+### Features
+
+- *(ingest)* Verify a delivery's sha256 signature for its App
+- *(ingest)* Decode deliveries into go-github's typed events
+- *(ingest)* Route deliveries by DESIGN-0003's table
+- *(ingest)* Delivery records and the log sink
+- *(ingest)* The webhook handler runs routed actions against Temporal
+- *(observability)* Ingest delivery and Temporal-call metrics
+- *(cmd)* Boopd ingest serves deliveries with health and metrics
+- *(chart)* Ingest values and the ingest and webhook blocks in boopd.hcl
+- *(chart)* The ingest Deployment, ServiceAccount, Service and PDB
+- *(chart)* Ingress and HTTPRoute routing only the ingest path
+- *(chart)* Ingest NetworkPolicy with DNS and Temporal egress only
+- *(chart)* Ingest delivery alerts and ServiceMonitor
+
+### Bug Fixes
+
+- *(activities)* CheckRepo re-mints after a revoked installation token
+- *(chart)* Mount extraVolumes in the ingest pods
+
+### Documentation
+
+- Webhooks guide, config chart notes and the ingest layout
+- *(impl)* IMPL-0004 Phase 11 notes
+- *(impl)* IMPL-0004 PRs opened; merge and homelab tasks deferred
+
+### Testing
+
+- *(ingest)* Routing table, signature and handler tests
+- *(cmd)* Boopd ingest usage, config errors and a dev-server start and stop
+- *(chart)* Ingest suite for credentials, routes, policy, guards and schema
+- *(e2e)* Webhook ingest scenarios against the chart in k3d
+
+### Miscellaneous Tasks
+
+- *(chart)* Validate the ingest render and regenerate the chart README
+
 ## [0.4.0] - 2026-10-19
 
 ### Features

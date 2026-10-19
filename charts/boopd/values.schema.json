@@ -146,6 +146,12 @@
             },
             "containerRestarting": {
               "$ref": "#/$defs/alertOverride"
+            },
+            "ingestFailing": {
+              "$ref": "#/$defs/alertOverride"
+            },
+            "deliveriesLost": {
+              "$ref": "#/$defs/alertOverride"
             }
           }
         }
@@ -461,7 +467,62 @@
                     }
                   }
                 }
+              },
+              "webhook": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "secretRef"
+                ],
+                "description": "The App delivers webhooks to boopd ingest.",
+                "properties": {
+                  "bot": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "secretRef": {
+                    "type": "object",
+                    "required": [
+                      "name",
+                      "key"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "key": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  }
+                }
               }
+            }
+          }
+        },
+        "ingest": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The config's ingest block (DESIGN-0003).",
+          "properties": {
+            "path": {
+              "type": "string",
+              "pattern": "^/"
+            },
+            "settle": {
+              "type": "string",
+              "pattern": "^$|^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+            },
+            "minInterval": {
+              "type": "string",
+              "pattern": "^$|^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+            },
+            "auditEvery": {
+              "type": "string",
+              "pattern": "^$|^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
             }
           }
         }
@@ -572,6 +633,171 @@
             "type": "array",
             "items": {
               "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "ingest": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The webhook ingest role (DESIGN-0003).",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "replicaCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "terminationGracePeriodSeconds": {
+          "type": "integer",
+          "minimum": 16
+        },
+        "resources": {
+          "type": "object"
+        },
+        "pdb": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "maxUnavailable": {
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          }
+        },
+        "service": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "ClusterIP",
+                "NodePort",
+                "LoadBalancer"
+              ]
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            }
+          }
+        },
+        "temporalOidc": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "clientId": {
+              "type": "string"
+            },
+            "existingSecret": {
+              "type": "string"
+            }
+          }
+        },
+        "ingress": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "className": {
+              "type": "string"
+            },
+            "annotations": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "hosts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "host"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "host": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "tls": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "httpRoute": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "parentRefs": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "hostnames": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "annotations": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "networkPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "metricsFrom": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "temporal": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
             }
           }
         }

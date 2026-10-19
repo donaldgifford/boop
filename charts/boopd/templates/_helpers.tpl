@@ -297,6 +297,14 @@ Mounted into the worker only; files are 0440 under the pod's fsGroup.
         path: {{ . }}
       {{- end }}
 {{- end }}
+{{- include "boopd.temporalVolumes" . }}
+{{- end }}
+
+{{/*
+Temporal's credential volumes and mounts, shared by the worker and
+ingest.
+*/}}
+{{- define "boopd.temporalVolumes" -}}
 {{- with .Values.temporal.tls.existingSecret }}
 - name: temporal-tls
   secret:
@@ -327,6 +335,10 @@ Mounted into the worker only; files are 0440 under the pod's fsGroup.
   mountPath: {{ printf "%s/%s" $dir $name }}
   readOnly: true
 {{- end }}
+{{- include "boopd.temporalMounts" . }}
+{{- end }}
+
+{{- define "boopd.temporalMounts" -}}
 {{- if .Values.temporal.tls.existingSecret }}
 - name: temporal-tls
   mountPath: /etc/boopd/temporal-tls
@@ -352,4 +364,121 @@ pod-security.kubernetes.io/enforce: restricted
 pod-security.kubernetes.io/enforce-version: latest
 pod-security.kubernetes.io/audit: restricted
 pod-security.kubernetes.io/warn: restricted
+{{- end }}
+
+{{/*
+The ingest role's name, labels and selector (DESIGN-0003). Its pods
+carry their own app.kubernetes.io/name so the worker's Deployment and
+Service never select them.
+*/}}
+{{- define "boopd.ingest.fullname" -}}
+{{- printf "%s-ingest" (include "boopd.fullname" . | trunc 56 | trimSuffix "-") -}}
+{{- end }}
+
+{{- define "boopd.ingest.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "boopd.name" . }}-ingest
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{- define "boopd.ingest.labels" -}}
+helm.sh/chart: {{ include "boopd.chart" . }}
+{{ include "boopd.ingest.selectorLabels" . }}
+app.kubernetes.io/component: ingest
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ include "boopd.appVersion" . | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end }}
+
+{{/*
+The path ingest serves and the routes expose: boopd.ingest.path, else
+the config's default.
+*/}}
+{{- define "boopd.ingest.path" -}}
+{{- (.Values.boopd.ingest | default dict).path | default "/webhooks/github" -}}
+{{- end }}
+
+{{/*
+The webhook Secrets the config names, as configSecrets: mounted in the
+ingest pods only.
+*/}}
+{{- define "boopd.webhookSecrets" -}}
+{{- $out := dict -}}
+{{- range $name, $a := .Values.boopd.apps -}}
+{{- with ($a.webhook | default dict).secretRef -}}
+{{- $_ := set $out .name (append (get $out .name | default list) .key | uniq) -}}
+{{- end -}}
+{{- end -}}
+{{- toJson $out -}}
+{{- end }}
+
+{{/*
+A root context for ingest's Temporal env and credentials: the worker's,
+with ingest.temporalOidc's client when set.
+*/}}
+{{- define "boopd.ingest.temporalValues" -}}
+{{- $v := deepCopy .Values -}}
+{{- with .Values.ingest.temporalOidc.clientId -}}
+{{- $_ := set $v.temporal.auth.oidc "clientId" . -}}
+{{- end -}}
+{{- with .Values.ingest.temporalOidc.existingSecret -}}
+{{- $_ := set $v.temporal.auth.oidc "existingSecret" . -}}
+{{- end -}}
+{{- toJson $v -}}
+{{- end }}
+
+{{/*
+Ingest's credential volumes and mounts: the webhook Secrets and
+Temporal's, never an App key. Takes the root context.
+*/}}
+{{- define "boopd.ingest.credentialVolumes" -}}
+{{- range $name, $keys := include "boopd.webhookSecrets" . | fromJson }}
+- name: {{ include "boopd.secretVolumeName" $name }}
+  secret:
+    secretName: {{ $name }}
+    defaultMode: 0440
+    items:
+      {{- range $keys }}
+      - key: {{ . }}
+        path: {{ . }}
+      {{- end }}
+{{- end }}
+{{- include "boopd.temporalVolumes" (dict "Values" (include "boopd.ingest.temporalValues" . | fromJson)) }}
+{{- end }}
+
+{{- define "boopd.ingest.credentialMounts" -}}
+{{- $dir := .Values.boopd.secretsDir -}}
+{{- range $name, $_ := include "boopd.webhookSecrets" . | fromJson }}
+- name: {{ include "boopd.secretVolumeName" $name }}
+  mountPath: {{ printf "%s/%s" $dir $name }}
+  readOnly: true
+{{- end }}
+{{- include "boopd.temporalMounts" (dict "Values" (include "boopd.ingest.temporalValues" . | fromJson)) }}
+{{- end }}
+
+{{/*
+Ingest render guards: an App with a webhook block, and the Ingress and
+HTTPRoute never claiming the same host.
+*/}}
+{{- define "boopd.ingest.validate" -}}
+{{- if .Values.ingest.enabled -}}
+{{- if eq (include "boopd.webhookSecrets" . | fromJson | len) 0 -}}
+{{- fail "ingest.enabled needs an App with a webhook block: set boopd.apps.<name>.webhook.secretRef" -}}
+{{- end -}}
+{{- $path := include "boopd.ingest.path" . -}}
+{{- range .Values.ingest.ingress.hosts -}}
+{{- range .paths -}}
+{{- if ne . $path -}}
+{{- fail (printf "ingest.ingress.hosts[].paths may only list the ingest path %s, not %s" $path .) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if and .Values.ingest.ingress.enabled .Values.ingest.httpRoute.enabled -}}
+{{- range .Values.ingest.ingress.hosts -}}
+{{- if has .host $.Values.ingest.httpRoute.hostnames -}}
+{{- fail (printf "ingest.ingress and ingest.httpRoute both route host %s: pick one per host" .host) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
 {{- end }}

@@ -1,0 +1,20 @@
+{
+  "action": "added",
+  "installation": {
+    "id": 7
+  },
+  "repositories_added": [
+    {
+      "full_name": "acme/app",
+      "id": 101,
+      "name": "app",
+      "node_id": "R_101"
+    }
+  ],
+  "repositories_removed": [],
+  "repository_selection": "selected",
+  "sender": {
+    "login": "alice",
+    "type": "User"
+  }
+}

@@ -149,6 +149,13 @@ func (s *Server) RecordUndelivered(tb testing.TB, event, action string) Delivery
 	return s.record(event, body, newGUID(tb), 0)
 }
 
+// AddDelivery records a delivery made elsewhere, as GitHub would list
+// it: the stub-github image takes the e2e test's deliveries this way, so
+// the in-cluster audit reads what the test delivered.
+func (s *Server) AddDelivery(event, guid string, body []byte, status int) Delivery {
+	return s.record(event, body, guid, status)
+}
+
 // Deliveries returns the recorded deliveries, oldest first.
 func (s *Server) Deliveries() []Delivery {
 	s.mu.Lock()

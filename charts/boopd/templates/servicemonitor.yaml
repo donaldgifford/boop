@@ -16,4 +16,24 @@ spec:
   endpoints:
     - port: metrics
       interval: {{ .Values.serviceMonitor.interval }}
+{{- if .Values.ingest.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "boopd.ingest.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "boopd.ingest.labels" . | nindent 4 }}
+    {{- with .Values.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "boopd.ingest.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: metrics
+      interval: {{ .Values.serviceMonitor.interval }}
+{{- end }}
 {{- end }}

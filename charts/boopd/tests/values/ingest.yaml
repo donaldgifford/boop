@@ -1,0 +1,13 @@
+---
+# One App with a webhook and ingest on, for tests/ingest_test.yaml.
+temporal:
+  address: temporal-frontend:7233
+boopd:
+  apps:
+    boop-bot:
+      appId: 123456
+      privateKeySecretRef: {name: boop-bot-app, key: private-key.pem}
+      webhook:
+        secretRef: {name: boop-bot-webhook, key: secret}
+ingest:
+  enabled: true

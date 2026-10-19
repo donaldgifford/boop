@@ -1,0 +1,37 @@
+{{- if and .Values.ingest.enabled .Values.ingest.ingress.enabled -}}
+{{- $path := include "boopd.ingest.path" . -}}
+# Routes only the ingest path, never /healthz, /readyz or metrics
+# (DESIGN-0003 OQ2).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "boopd.ingest.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "boopd.ingest.labels" . | nindent 4 }}
+  {{- with .Values.ingest.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingest.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ingest.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingest.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          - path: {{ $path }}
+            pathType: Exact
+            backend:
+              service:
+                name: {{ include "boopd.ingest.fullname" $ }}
+                port:
+                  name: http
+    {{- end }}
+{{- end }}

@@ -385,18 +385,18 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 8.1 `internal/ingest/verify.go`: select the App by
+- [x] 8.1 `internal/ingest/verify.go`: select the App by
   `X-GitHub-Hook-Installation-Target-ID`, require `X-Hub-Signature-256`
   with a `sha256=` prefix (so a `sha1`-only delivery is rejected), and
   call go-github's `ValidatePayloadFromBody` on the size-limited body
   with that header only. Missing, malformed and wrong signatures are
   rejected.
-- [ ] 8.2 `internal/ingest/payload.go`: `github.ParseWebHook(event,
+- [x] 8.2 `internal/ingest/payload.go`: `github.ParseWebHook(event,
   body)` into go-github's typed events (OQ4). `Route` takes the typed
   event, and a small adapter reads the shared fields (sender,
   installation, repository) across event types. An event type go-github
   does not know is recorded and ignored.
-- [ ] 8.3 `internal/ingest/route.go`: `Route(event string, p *Payload,
+- [x] 8.3 `internal/ingest/route.go`: `Route(event string, p *Payload,
   app *config.App, paths []string) []Action`, a pure function
   implementing DESIGN-0003's table top to bottom:
   - the own-bot filter;
@@ -407,10 +407,10 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
   `Action` is `{Kind: signal|signalWithStart|startDiscovery; WorkflowID;
   Signal; Arg; Start *workflows.RepoState}`.
-- [ ] 8.4 `internal/ingest/record.go`: the `Record` type (DESIGN-0003
+- [x] 8.4 `internal/ingest/record.go`: the `Record` type (DESIGN-0003
   § Recording deliveries) and `Sink` interface. `LogSink` writes one info
   line per delivery (headers only for a rejected one).
-- [ ] 8.5 `internal/ingest/handler.go`: the handler.
+- [x] 8.5 `internal/ingest/handler.go`: the handler.
   - It enforces `POST` on `ingest.path`, reads at most 25 MiB (413
     above), verifies, answers `ping` with 200, routes, and runs the
     actions with a 5 s deadline.
@@ -421,10 +421,10 @@ green, and one commit per numbered task. The PR split is in OQ1.
   - It takes a `Temporal` interface (`SignalWorkflow`,
     `SignalWithStartWorkflow`, `ExecuteWorkflow` with
     `WorkflowIDConflictPolicy: USE_EXISTING`).
-- [ ] 8.6 Metrics: `boopd_ingest_deliveries_total{app,event,outcome}`
+- [x] 8.6 Metrics: `boopd_ingest_deliveries_total{app,event,outcome}`
   and `boopd_ingest_temporal_seconds{action}` in
   `internal/observability`.
-- [ ] 8.7 Tests:
+- [x] 8.7 Tests:
   - `route_test.go`: a table over testdata payloads, one case per
     DESIGN-0003 row plus own-bot, unknown App, commit cap and non-default
     branch;
@@ -444,16 +444,16 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 9.1 `cmd/boopd`: `boopd ingest --config <file>`, with the usage
+- [x] 9.1 `cmd/boopd`: `boopd ingest --config <file>`, with the usage
   text updated. It loads the config and reads only the webhook secrets
   (never the App key). It dials Temporal with the shared `TEMPORAL_*`
   settings and serves the handler on `LISTEN_ADDR`, with `/healthz`,
   `/readyz` (Temporal dial succeeded) and metrics on `METRICS_ADDR`.
-- [ ] 9.2 Graceful stop: on SIGTERM, `/readyz` fails, then the server
+- [x] 9.2 Graceful stop: on SIGTERM, `/readyz` fails, then the server
   drains in-flight requests (`Shutdown` with a timeout below the pod's
   grace period).
-- [ ] 9.3 Fail at start if no App has a `webhook` block.
-- [ ] 9.4 `main_test.go`: usage, a missing config, no webhook App, and a
+- [x] 9.3 Fail at start if no App has a `webhook` block.
+- [x] 9.4 `main_test.go`: usage, a missing config, no webhook App, and a
   start and stop against the dev server (integration tag).
 
 #### Success Criteria
@@ -465,35 +465,35 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 10.1 `values.yaml` and `values.schema.json`: `ingest.*` as in
+- [x] 10.1 `values.yaml` and `values.schema.json`: `ingest.*` as in
   DESIGN-0003 § Chart (`enabled: false`, `replicaCount: 2`, `pdb`,
   `service`, `ingress`, `httpRoute`, `networkPolicy.from`, `resources`),
   and `boopd.ingest` / `boopd.apps[].webhook` rendered into `boopd.hcl`.
-- [ ] 10.2 `templates/ingest.yaml`:
+- [x] 10.2 `templates/ingest.yaml`:
   - a Deployment (`boopd ingest`) with the rendered config;
   - the webhook Secret mounts and Temporal credentials, but no App key;
   - its own ServiceAccount with no token mount;
   - a Service and a PDB;
   - the same security context as the worker.
-- [ ] 10.3 `templates/ingest-ingress.yaml` and
+- [x] 10.3 `templates/ingest-ingress.yaml` and
   `templates/ingest-httproute.yaml`, each routing only `ingest.path`.
   The `HTTPRoute` renders when `ingest.httpRoute.enabled` is set.
-- [ ] 10.4 `templates/networkpolicy.yaml`: ingest ingress from
+- [x] 10.4 `templates/networkpolicy.yaml`: ingest ingress from
   `ingest.networkPolicy.from` on the HTTP port and from Prometheus on
   metrics; egress to DNS and Temporal only.
-- [ ] 10.5 `templates/prometheusrule.yaml`: `BoopdIngestFailing` and
+- [x] 10.5 `templates/prometheusrule.yaml`: `BoopdIngestFailing` and
   `BoopdDeliveriesLost`.
-- [ ] 10.6 Guards: render fails if `ingest.enabled` is set without an
+- [x] 10.6 Guards: render fails if `ingest.enabled` is set without an
   App `webhook` block, or if both routes are enabled with the same
   host.
-- [ ] 10.7 helm-unittest suites `tests/ingest_test.yaml`:
+- [x] 10.7 helm-unittest suites `tests/ingest_test.yaml`:
   - no App key and no ServiceAccount token;
   - both routes limited to the path;
   - the NetworkPolicy has no GitHub egress;
   - the guards;
   - the PDB;
   - the schema rejects unknown keys.
-- [ ] 10.8 `just helm-docs`; `boopd config validate` on the rendered
+- [x] 10.8 `just helm-docs`; `boopd config validate` on the rendered
   config in `just helm-test`.
 
 #### Success Criteria
@@ -506,10 +506,10 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 11.1 Harness: the chart e2e installs with `ingest.enabled=true`
+- [x] 11.1 Harness: the chart e2e installs with `ingest.enabled=true`
   and a webhook secret. The test reaches the ingest Service through a
   port-forward and sends deliveries with `fakegithub.Deliver` (OQ7).
-- [ ] 11.2 Scenarios (`test/e2e/ingest_test.go`):
+- [x] 11.2 Scenarios (`test/e2e/ingest_test.go`):
   - `TestIngest_DashboardTickRuns`: a user `issues.edited` on the
     bot's issue runs within settle plus margin;
   - `TestIngest_OwnBotIgnored`: the same edit with the bot as sender
@@ -527,8 +527,20 @@ green, and one commit per numbered task. The PR split is in OQ1.
     get 503;
   - `TestDeliveryAudit_RecordsFailures`: the audit Schedule counts the
     failed delivery from the previous case.
-- [ ] 11.3 CI's "E2E Tests" job runs the new scenarios (no workflow file
+- [x] 11.3 CI's "E2E Tests" job runs the new scenarios (no workflow file
   change if they sit under `./test/e2e/...`).
+
+Notes from the build:
+
+- The scenarios are ordered subtests of one `TestIngest` (for example
+  `TestIngest/DashboardTickRuns`) on one install, since later cases build
+  on earlier ones and the audit counts TemporalDown's 503. The
+  forwarder is the stub-github image in a TCP-forward mode.
+- `InstallationDeleted` found a gap: the cached installation client
+  kept its token, so `CheckRepo` never minted and saw the repository
+  present. GitHub revokes a deleted installation's tokens, so
+  `CheckRepo` now forgets the client on 401 and checks again with a
+  fresh mint (also on PR A).
 
 #### Success Criteria
 
@@ -540,7 +552,7 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 12.1 `docs/webhooks.md` (OQ10), a usage guide:
+- [x] 12.1 `docs/webhooks.md` (OQ10), a usage guide:
   - App settings and the events to subscribe;
   - creating the secret;
   - exposure with an Ingress or `HTTPRoute` (and Tailscale Funnel);
@@ -548,10 +560,11 @@ green, and one commit per numbered task. The PR split is in OQ1.
   - what is routed and what is recorded;
   - reading the audit metrics;
   - rollback.
-- [ ] 12.2 `docs/config.md`: final rows checked against the code.
-- [ ] 12.3 Chart README regenerated; CLAUDE.md's layout gains
+- [x] 12.2 `docs/config.md`: final rows checked against the code.
+- [x] 12.3 Chart README regenerated; CLAUDE.md's layout gains
   `internal/ingest/` and the role list `boopd ingest`.
 - [ ] 12.4 DESIGN-0003 status → Implemented once Phase 13.2 ships.
+  `deferred - human required`: waits on merging #24.
 
 #### Success Criteria
 
@@ -562,10 +575,11 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 13.1 PR A (worker side, phases 1–7), label `minor`. Merging
+- [x] 13.1 #23: PR A (worker side, phases 1–7), label `minor`. Merging
   releases it. With no ingest the signals are inert; the audit reads
   only.
-- [ ] 13.2 PR B (ingest, chart, e2e, docs; phases 8–12), label `minor`.
+- [x] 13.2 PR B (ingest, chart, e2e, docs; phases 8–12), label `minor`.
+  #24 (PR A is #23).
 - [ ] 13.3 **Deferred, human required.** Homelab setup:
   - create the Keycloak client `boopd-ingest` (client credentials, the
     Temporal audience, the namespace writer role);
@@ -579,6 +593,7 @@ green, and one commit per numbered task. The PR split is in OQ1.
   proxmox-go-sdk dashboard and time it to the run. Push a config to a
   scratch repository and time the onboarding. Record both here.
 - [ ] 13.5 IMPL status → Completed, with the evidence.
+  `deferred - human required`: waits on 13.3 and 13.4.
 
 #### Success Criteria
 

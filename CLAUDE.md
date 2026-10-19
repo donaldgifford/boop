@@ -128,7 +128,7 @@ artifacts on every release.
 ## Layout
 
 ```text
-cmd/boopd/                # main package: `boopd worker`, `boopd config validate`
+cmd/boopd/                # main package: `boopd worker`, `boopd ingest`, `boopd config validate`
 internal/                 # library code; not importable outside this module
 internal/platform/        # GitHub discovery, config probe, token minting
 internal/temporal/        # Temporal client config, worker, versioning, schedules
@@ -136,6 +136,7 @@ internal/workflows/       # deterministic workflow code; InstallationWorkflow bu
 internal/activities/      # side effects, registered by name: discovery, CheckRepo, ReadRateLimit, AcquireBudget, AcquireCapacity, RunRenovate
 internal/observability/   # slog logger, OTel meter provider + Prometheus exporter, boopd metric set, /healthz and /readyz
 internal/worker/          # worker role: search attributes, register, start, promote, schedules, readiness, graceful stop
+internal/ingest/          # ingest role (DESIGN-0003): signature check, typed payloads, routing table, delivery records, handler, Run
 internal/jobspec/         # Job + env builder for one Renovate run (ported from renovate-operator)
 internal/config/          # HCL config file via hclkit: decode, defaults, validation, secrets, BuildInput
 internal/profiles/        # pure profile resolver: extends + managers -> strictest profile
@@ -146,6 +147,7 @@ test/stub-github/         # test/fakegithub over TLS as an image for the chart e
 test/e2e/                 # k3d e2e suite, build tag e2e; `just e2e`
 test/fakegithub/          # in-process GitHub (App, mint/revoke, paging, probes, /rate_limit) for tests
 examples/boopd.hcl        # the design's example config; `boopd config validate` keeps it loadable
+docs/webhooks.md          # enabling webhook ingest: App settings, secret, exposure, verification, audit, rollback
 docs/config.md            # boopd.hcl reference: every setting, default, chart key; a test keeps it complete
 docs/investigation/       # INV-0001 is the founding document
 charts/boopd/             # Helm chart + unittest suites + values.schema.json; charts/redis is the cache subchart
