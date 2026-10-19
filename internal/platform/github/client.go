@@ -304,9 +304,19 @@ func (c *Client) wait(ctx context.Context) error {
 // classifyErr converts a go-github response/error pair into our error
 // sentinels so the reconciler can distinguish transient from permanent
 // without importing go-github types.
+// mintGone reports whether err is the installation transport's token
+// mint answered 404: GitHub no longer has the installation.
+func mintGone(err error) bool {
+	he, ok := errors.AsType[*ghinstallation.HTTPError](err)
+	return ok && he.Response != nil && he.Response.StatusCode == http.StatusNotFound
+}
+
 func classifyErr(resp *gogithub.Response, err error) error {
 	if err == nil {
 		return nil
+	}
+	if mintGone(err) {
+		return fmt.Errorf("%w: %w", platform.ErrInstallationGone, err)
 	}
 	var rateErr *gogithub.RateLimitError
 	var abuseErr *gogithub.AbuseRateLimitError

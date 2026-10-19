@@ -121,6 +121,9 @@ func (c *AppClient) Mint(ctx context.Context, installationID int64, repoIDs []in
 		RepositoryIDs: repoIDs,
 	})
 	if err != nil {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			return "", time.Time{}, fmt.Errorf("github: mint installation token: %w: %w", platform.ErrInstallationGone, err)
+		}
 		return "", time.Time{}, fmt.Errorf("github: mint installation token: %w", classifyErr(resp, err))
 	}
 	if tok.GetToken() == "" {

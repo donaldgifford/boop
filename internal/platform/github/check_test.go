@@ -2,11 +2,18 @@ package github_test
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/http"
+	"slices"
 	"testing"
 
+	"golang.org/x/time/rate"
+
 	"github.com/donaldgifford/boop/internal/platform"
+	ghclient "github.com/donaldgifford/boop/internal/platform/github"
+	"github.com/donaldgifford/boop/test/fakegithub"
 )
 
 func TestCheckRepo(t *testing.T) {
@@ -30,9 +37,15 @@ func TestCheckRepo(t *testing.T) {
 		// The root listing; renovate.json5 is one of the default paths.
 		_, _ = w.Write([]byte(`[{"type":"file","name":"README.md"},{"type":"file","name":"renovate.json5"}]`))
 	}
+	file := func(w http.ResponseWriter, _ *http.Request) {
+		body := "{extends: ['config:recommended']}"
+		_, _ = fmt.Fprintf(w, `{"type":"file","encoding":"base64","size":%d,"name":"renovate.json5","path":"renovate.json5","content":%q}`,
+			len(body), base64.StdEncoding.EncodeToString([]byte(body)))
+	}
 	const (
 		repoRoute   = "GET /api/v3/repositories/5"
 		configRoute = "GET /api/v3/repos/o/r/contents/"
+		fileRoute   = "GET /api/v3/repos/o/r/contents/renovate.json5"
 	)
 
 	tests := []struct {
@@ -44,7 +57,7 @@ func TestCheckRepo(t *testing.T) {
 	}{
 		{
 			name:     "present",
-			handlers: map[string]http.HandlerFunc{repoRoute: repo(false), configRoute: config},
+			handlers: map[string]http.HandlerFunc{repoRoute: repo(false), configRoute: config, fileRoute: file},
 			want:     platform.RepoPresent,
 			wantRepo: true,
 		},
@@ -78,9 +91,13 @@ func TestCheckRepo(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			c := newFakeClient(t, tt.handlers)
-			got, r, err := c.CheckRepo(context.Background(), 5)
+			check, err := c.CheckRepo(context.Background(), 5)
+			got, r := check.State, check.Repo
 			if got != tt.want {
 				t.Errorf("CheckRepo(5) = %v, want %v", got, tt.want)
+			}
+			if wantExtends := tt.want == platform.RepoPresent; wantExtends != slices.Equal(check.Config.Extends, []string{"config:recommended"}) {
+				t.Errorf("CheckRepo(5) config = %+v", check.Config)
 			}
 			switch {
 			case tt.wantErr == nil && err != nil:
@@ -97,7 +114,7 @@ func TestCheckRepo(t *testing.T) {
 
 func TestCheckRepo_InvalidID(t *testing.T) {
 	t.Parallel()
-	if _, _, err := newFakeClient(t, nil).CheckRepo(context.Background(), 0); err == nil {
+	if _, err := newFakeClient(t, nil).CheckRepo(context.Background(), 0); err == nil {
 		t.Error("CheckRepo(0) err = nil, want error")
 	}
 }
@@ -130,5 +147,85 @@ func TestRepoIDBySlug(t *testing.T) {
 	}
 	if _, err := c.RepoIDBySlug(context.Background(), "noslash"); err == nil {
 		t.Error("RepoIDBySlug(noslash) err = nil")
+	}
+}
+
+// appClient is an installation client of fake installation 1 that mints
+// its token from the fake, as the worker's are.
+func appClient(t *testing.T, gh *fakegithub.Server) *ghclient.Client {
+	t.Helper()
+	c, err := ghclient.NewWithApp(ghclient.AppAuth{AppID: 1, InstallationID: 1, PEM: gh.PEM, BaseURL: gh.BaseURL()},
+		ghclient.WithRateLimit(rate.Inf, 1))
+	if err != nil {
+		t.Fatalf("NewWithApp: %v", err)
+	}
+	return c
+}
+
+// CheckRepo against the fake GitHub: present with its extends, no
+// config, archived, deleted, and a deleted installation.
+func TestCheckRepo_AgainstFake(t *testing.T) {
+	t.Parallel()
+	gh := fakegithub.New(t)
+	gh.SetRepos(
+		fakegithub.Repo{
+			ID: 1, NodeID: "R_1", Slug: "acme/on", DefaultBranch: "main", HasConfig: true,
+			ConfigPath: "renovate.json5", Config: "{\n  // shared\n  extends: ['config:recommended', 'local>acme/preset'],\n}\n",
+		},
+		fakegithub.Repo{ID: 2, NodeID: "R_2", Slug: "acme/off", DefaultBranch: "main"},
+		fakegithub.Repo{ID: 3, NodeID: "R_3", Slug: "acme/old", DefaultBranch: "main", Archived: true, HasConfig: true},
+	)
+	c := appClient(t, gh)
+	for _, tt := range []struct {
+		name    string
+		id      int64
+		want    platform.RepoState
+		extends []string
+	}{
+		{"present", 1, platform.RepoPresent, []string{"config:recommended", "local>acme/preset"}},
+		{"no config", 2, platform.RepoNoConfig, nil},
+		{"archived", 3, platform.RepoGone, nil},
+		{"deleted", 4, platform.RepoGone, nil},
+	} {
+		check, err := c.CheckRepo(context.Background(), tt.id)
+		if err != nil {
+			t.Errorf("%s: CheckRepo(%d) err = %v", tt.name, tt.id, err)
+			continue
+		}
+		if check.State != tt.want || !slices.Equal(check.Config.Extends, tt.extends) {
+			t.Errorf("%s: CheckRepo(%d) = %v %+v, want %v with extends %q", tt.name, tt.id, check.State, check.Config, tt.want, tt.extends)
+		}
+	}
+}
+
+func TestCheckRepo_InstallationDeleted(t *testing.T) {
+	t.Parallel()
+	gh := fakegithub.New(t)
+	gh.SetRepos(fakegithub.Repo{ID: 1, NodeID: "R_1", Slug: "acme/on", DefaultBranch: "main", HasConfig: true})
+	gh.DeleteInstallation(1)
+	check, err := appClient(t, gh).CheckRepo(context.Background(), 1)
+	if !errors.Is(err, platform.ErrInstallationGone) {
+		t.Fatalf("CheckRepo() err = %v, want ErrInstallationGone", err)
+	}
+	if check.State != platform.RepoUnknown {
+		t.Errorf("state = %v, want unknown with the error", check.State)
+	}
+}
+
+// A run's scoped mint for a deleted installation is ErrInstallationGone;
+// any other mint failure is not.
+func TestMint_InstallationDeleted(t *testing.T) {
+	t.Parallel()
+	gh := fakegithub.New(t)
+	gh.DeleteInstallation(1)
+	app, err := ghclient.NewAppClient(1, gh.PEM, gh.BaseURL())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Mint(context.Background(), 1, []int64{5}); !errors.Is(err, platform.ErrInstallationGone) {
+		t.Errorf("Mint() err = %v, want ErrInstallationGone", err)
+	}
+	if _, _, err := app.Mint(context.Background(), 2, []int64{5}); err != nil {
+		t.Errorf("Mint() for a live installation err = %v", err)
 	}
 }

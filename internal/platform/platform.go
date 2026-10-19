@@ -218,6 +218,12 @@ var (
 	// ErrNotFound is a refinement of ErrPermanent for 404 responses on
 	// known-good URL shapes (e.g., /orgs/{org}/repos for an org that doesn't exist).
 	ErrNotFound = errors.New("platform: not found")
+
+	// ErrInstallationGone means minting the installation's token answered
+	// 404, or the installation is in no configured App's fresh listing:
+	// the installation was deleted, so every repository it held is gone
+	// (DESIGN-0003 § CheckRepo returns extends).
+	ErrInstallationGone = errors.New("platform: installation gone")
 )
 
 // RateLimitedError is returned when the upstream platform asked us to slow
