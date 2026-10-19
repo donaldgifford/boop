@@ -3,6 +3,68 @@
 All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
+## [unreleased]
+
+### Features
+
+- *(config)* Ingest block and per-App webhook block
+- *(config)* Read webhook secrets for ingest, apart from the App key
+- *(activities)* PlanRun returns the ingest settle and min_interval
+- *(github)* CheckRepo returns the config probe; a mint 404 is ErrInstallationGone
+- *(activities)* CheckRepo offboards deleted installations and refreshes extends
+- *(workflows)* Event and changed signal types and RepoState's pending event
+- *(workflows)* RepoWorkflow handles event and changed signals
+- *(workflows)* Targeted discovery of named installations
+- *(workflows)* TargetedDiscoveryID
+- *(github)* List the App's hook deliveries with the App JWT
+- *(activities)* ListHookDeliveries audits the App's webhook deliveries
+- *(workflows)* DeliveryAuditWorkflow counts failed deliveries per pass
+- *(worker)* A delivery-audit Schedule per App with a webhook
+- *(ingest)* Verify a delivery's sha256 signature for its App
+- *(ingest)* Decode deliveries into go-github's typed events
+- *(ingest)* Route deliveries by DESIGN-0003's table
+- *(ingest)* Delivery records and the log sink
+- *(ingest)* The webhook handler runs routed actions against Temporal
+- *(observability)* Ingest delivery and Temporal-call metrics
+- *(cmd)* Boopd ingest serves deliveries with health and metrics
+- *(chart)* Ingest values and the ingest and webhook blocks in boopd.hcl
+- *(chart)* The ingest Deployment, ServiceAccount, Service and PDB
+- *(chart)* Ingress and HTTPRoute routing only the ingest path
+- *(chart)* Ingest NetworkPolicy with DNS and Temporal egress only
+- *(chart)* Ingest delivery alerts and ServiceMonitor
+
+### Bug Fixes
+
+- *(activities)* CheckRepo re-mints after a revoked installation token
+- *(chart)* Mount extraVolumes in the ingest pods
+
+### Documentation
+
+- Approve DESIGN-0003 and note it in DESIGN-0001 and INV-0001
+- *(design-0003)* Fix a line read as a heading
+- *(examples)* Ingest block and boop-bot's webhook block
+- *(config)* Ingest and webhook settings
+- Webhooks guide, config chart notes and the ingest layout
+- *(impl)* IMPL-0004 Phase 11 notes
+
+### Testing
+
+- *(workflows)* Record replay baselines from the current code
+- *(workflows)* Replay the recorded histories in just test
+- *(fakegithub)* Signed deliveries, hook deliveries and deleted installations
+- *(fakegithub)* Payload builders for the routed webhook events
+- *(fakegithub)* Cover deliveries, hook-delivery paging, deleted installations and payloads
+- *(workflows)* Event and changed timings on the test clock
+- *(workflows)* Targeted discovery passes and the untargeted replay
+- *(ingest)* Routing table, signature and handler tests
+- *(cmd)* Boopd ingest usage, config errors and a dev-server start and stop
+- *(chart)* Ingest suite for credentials, routes, policy, guards and schema
+- *(e2e)* Webhook ingest scenarios against the chart in k3d
+
+### Miscellaneous Tasks
+
+- *(chart)* Validate the ingest render and regenerate the chart README
+
 ## [0.3.2] - 2026-10-19
 
 ### Features
