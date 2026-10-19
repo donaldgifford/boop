@@ -352,11 +352,11 @@ green, and one commit per numbered task. The PR split is in OQ1.
   `Apps.ListHookDeliveries` with the App JWT. It returns the deliveries
   and the next cursor, classifies errors through `classifyErr`, and
   passes primary-limit errors through as `RateLimitedError`.
-- [ ] 7.2 `ListHookDeliveries` activity: pages newest first until it
+- [x] 7.2 `ListHookDeliveries` activity: pages newest first until it
   reaches the previous cursor (the newest GUID seen) or GitHub's 3-day
   window ends. It classifies each delivery as `failed` (non-2xx),
   `redelivered` (a later 2xx for the same GUID) or `ok`.
-- [ ] 7.3 Missed deliveries. Until the store exists, ingest's record of
+- [x] 7.3 Missed deliveries. Until the store exists, ingest's record of
   a GUID is not queryable, so `missed` is detected only through GitHub's
   own status: a connection failure or timeout reports a non-2xx or
   empty status. The activity counts those as `failed`, and true `missed`

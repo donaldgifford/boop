@@ -46,6 +46,10 @@ func (f *fakeApp) ListInstallations(context.Context) ([]platform.Installation, e
 	return f.installs, f.listErr
 }
 
+func (*fakeApp) ListHookDeliveries(context.Context, string, int) ([]github.HookDelivery, string, error) {
+	return nil, "", nil
+}
+
 func (f *fakeApp) Mint(_ context.Context, _ int64, ids []int64) (string, time.Time, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

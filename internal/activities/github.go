@@ -33,6 +33,7 @@ import (
 // AppAPI is what the activities need from the App-level client.
 type AppAPI interface {
 	ListInstallations(ctx context.Context) ([]platform.Installation, error)
+	ListHookDeliveries(ctx context.Context, cursor string, perPage int) ([]github.HookDelivery, string, error)
 	platform.Minter
 }
 

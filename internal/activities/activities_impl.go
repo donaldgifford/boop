@@ -210,6 +210,7 @@ func (a *Activities) Register(r Registry) {
 		workflows.ReadRateLimitActivity:        a.ReadRateLimit,
 		workflows.RunRenovateActivity:          a.RunRenovate,
 		workflows.PlanRunActivity:              a.PlanRun,
+		workflows.ListHookDeliveriesActivity:   a.ListHookDeliveries,
 	} {
 		r.RegisterActivityWithOptions(fn, activity.RegisterOptions{Name: name})
 	}

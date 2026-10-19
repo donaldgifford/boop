@@ -317,3 +317,42 @@ type DiscoveryResult struct {
 // OffboardResults are the repository results that end a RepoWorkflow
 // (DESIGN-0001 § RunRenovate activity, Classification, first row).
 var OffboardResults = []string{"disabled-no-config", "archived", "not-found", "renamed", "pending-deletion", "mirror"}
+
+// ListHookDeliveriesInput is the ListHookDeliveries activity input.
+type ListHookDeliveriesInput struct {
+	App string
+	// After is the newest delivery id the last pass read; the activity
+	// reads only newer ones. Zero reads GitHub's whole 3-day window.
+	After int64
+}
+
+// DeliveryCounts is one event's deliveries in one audit pass, by
+// outcome: Failed (the last attempt was not 2xx), Redelivered (a later
+// attempt was 2xx) or OK.
+type DeliveryCounts struct {
+	Event       string
+	Failed      int
+	Redelivered int
+	OK          int
+}
+
+// DeliveryAudit is ListHookDeliveries' answer.
+type DeliveryAudit struct {
+	// Newest is the newest delivery id read, the next pass's After.
+	Newest int64
+	// Read is how many delivery attempts the pass read, in Pages pages.
+	Read  int
+	Pages int
+	// Counts are by event, sorted by event name.
+	Counts []DeliveryCounts
+}
+
+// DeliveryAuditInput is DeliveryAuditWorkflow's input and its
+// ContinueAsNew state.
+type DeliveryAuditInput struct {
+	App string
+	// Every is the wait between passes (ingest.audit_every).
+	Every time.Duration
+	// Cursor is the newest delivery id read so far.
+	Cursor int64
+}

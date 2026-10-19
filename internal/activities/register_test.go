@@ -32,6 +32,7 @@ func TestRegister(t *testing.T) {
 		workflows.ReadRateLimitActivity,
 		workflows.RunRenovateActivity,
 		workflows.PlanRunActivity,
+		workflows.ListHookDeliveriesActivity,
 	}
 	slices.Sort(want)
 	if !slices.Equal(r.names, want) {
