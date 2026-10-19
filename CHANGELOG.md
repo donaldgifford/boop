@@ -21,6 +21,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(workflows)* DeliveryAuditWorkflow counts failed deliveries per pass
 - *(worker)* A delivery-audit Schedule per App with a webhook
 
+### Bug Fixes
+
+- *(activities)* CheckRepo re-mints after a revoked installation token
+
 ### Documentation
 
 - Approve DESIGN-0003 and note it in DESIGN-0001 and INV-0001
