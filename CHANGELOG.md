@@ -9,6 +9,11 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 - *(just)* Temporal recipe through temporal-oidc
 
+### Bug Fixes
+
+- *(github)* Keep a 429's Retry-After in RateLimitedError
+- *(discovery)* Retry after GitHub's Retry-After, not the fixed backoff
+
 ### Documentation
 
 - Close IMPL-0003 (v0.3.1 shipped, fartlab discovery on GraphQL)
@@ -16,6 +21,14 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(design)* DESIGN-0004 event store, API and management UI
 - *(impl)* IMPL-0004 webhook ingest
 - *(impl)* IMPL-0005 event store, API and management UI
+- Note the #16 fix in INV-0002 and DESIGN-0003
+
+### Testing
+
+- *(fakegithub)* Secondary rate limits and probe arrival times
+- *(activities)* Discovery honours a secondary limit's Retry-After
+- *(workflows)* DiscoveryWorkflow retries after NextRetryDelay
+- *(e2e)* Discovery retries after a secondary limit's Retry-After
 
 ## [0.3.1] - 2026-10-16
 
