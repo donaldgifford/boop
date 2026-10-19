@@ -165,7 +165,7 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
   A `go:generate`-style recorder test (`TestRecordReplayHistories`,
   skipped unless `BOOPD_RECORD_HISTORIES=1`) writes the JSON histories.
-- [ ] 1.3 `TestReplay_Histories` replays every file through
+- [x] 1.3 `TestReplay_Histories` replays every file through
   `worker.NewWorkflowReplayer` with the registered workflows. It runs in
   `just test` (no dev server needed).
 
