@@ -42,6 +42,9 @@ const (
 	InstallationWorkflowName = "InstallationWorkflow"
 	DiscoveryWorkflowName    = "DiscoveryWorkflow"
 	CapacityWorkflowName     = "CapacityWorkflow"
+	// DeliveryAuditWorkflowName audits the App's webhook deliveries
+	// (DESIGN-0003 § Delivery audit).
+	DeliveryAuditWorkflowName = "DeliveryAuditWorkflow"
 )
 
 // Activity names (DESIGN-0001 § Topology and packages). The activities
@@ -56,6 +59,7 @@ const (
 	AcquireCapacityActivity      = "AcquireCapacity"
 	PlanRunActivity              = "PlanRun"
 	RunRenovateActivity          = "RunRenovate"
+	ListHookDeliveriesActivity   = "ListHookDeliveries"
 )
 
 // Signal names accepted by RepoWorkflow (DESIGN-0001 § RepoWorkflow,
@@ -120,6 +124,12 @@ func TargetedDiscoveryID(app string, installationID int64) string {
 	return "discovery/" + app + "/installation/" + strconv.FormatInt(installationID, 10)
 }
 
+// DeliveryAuditScheduleID is delivery-audit/<app name>: one Schedule per
+// App with a webhook block.
+func DeliveryAuditScheduleID(app string) string {
+	return "delivery-audit/" + app
+}
+
 // DiscoveryWorkflowID is the workflow ID the Schedule's action starts.
 // The server appends the fire time, giving ADR-0002's
 // discovery/<platform>/<schedule time>.
@@ -144,4 +154,11 @@ const (
 	// MetricRepoEventRuns counts runs a webhook event scheduled, by the
 	// event's reason (DESIGN-0003).
 	MetricRepoEventRuns = "boopd_repo_event_runs_total"
+	// MetricDeliveriesFailed counts webhook deliveries GitHub reports
+	// failed, by app and event (the delivery audit).
+	MetricDeliveriesFailed = "boopd_ingest_deliveries_failed_total"
+	// MetricDeliveriesMissed counts deliveries GitHub sent that ingest
+	// never recorded. It needs the store (IMPL-0005); until then the
+	// audit registers it at zero.
+	MetricDeliveriesMissed = "boopd_ingest_deliveries_missed_total"
 )
