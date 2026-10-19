@@ -225,7 +225,7 @@ green, and one commit per numbered task. The PR split is in OQ1.
   - the secret must be non-empty when read.
 
   Each has diagnostics with ranges, as for the existing blocks.
-- [ ] 3.3 `secrets.go`: read each webhook secret the same way as the
+- [x] 3.3 `secrets.go`: read each webhook secret the same way as the
   App key.
 - [ ] 3.4 `PlanRun` returns `Settle` and `MinInterval` from the config;
   `RunPlan` gains the fields.
