@@ -30,3 +30,29 @@ func TestDiscoverySchedules(t *testing.T) {
 		t.Errorf("second schedule = %+v", got[1])
 	}
 }
+
+// Only Apps with a webhook block get a delivery-audit Schedule.
+func TestDeliveryAuditSchedules(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{
+		Ingest: config.Ingest{AuditEvery: 15 * time.Minute},
+		Apps: []*config.App{
+			{Name: "boop-bot", Webhook: &config.Webhook{Bot: "boop-bot[bot]"}},
+			{Name: "quiet"},
+		},
+	}
+	got := worker.DeliveryAuditSchedules(cfg, "boopd")
+	if len(got) != 1 {
+		t.Fatalf("schedules = %d, want one for the webhook app", len(got))
+	}
+	s := got[0]
+	if s.ID != "delivery-audit/boop-bot" || s.Every != 15*time.Minute || s.Workflow != workflows.DeliveryAuditWorkflowName || s.TaskQueue != "boopd" {
+		t.Errorf("schedule = %+v", s)
+	}
+	if in, ok := s.Args[0].(*workflows.DeliveryAuditInput); !ok || *in != (workflows.DeliveryAuditInput{App: "boop-bot", Every: 15 * time.Minute}) {
+		t.Errorf("args = %+v, want the app's DeliveryAuditInput with the interval", s.Args)
+	}
+	if none := worker.DeliveryAuditSchedules(&config.Config{Apps: []*config.App{{Name: "quiet"}}}, "boopd"); len(none) != 0 {
+		t.Errorf("schedules without a webhook app = %v", none)
+	}
+}

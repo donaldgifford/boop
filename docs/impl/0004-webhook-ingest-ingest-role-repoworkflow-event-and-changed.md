@@ -365,13 +365,13 @@ green, and one commit per numbered task. The PR split is in OQ1.
 - [x] 7.4 `DeliveryAuditWorkflow(app)`: one activity call, records the
   counts, and continues as new with the cursor. The cursor bounds the
   next pass.
-- [ ] 7.5 `internal/worker/schedules.go`: one Schedule per App with a
+- [x] 7.5 `internal/worker/schedules.go`: one Schedule per App with a
   `webhook` block, every `ingest.audit_every`, overlap `SKIP`, ID
   `delivery-audit/<app>`.
 - [x] 7.6 Metrics `boopd_ingest_deliveries_failed_total{app,event}` and
   `boopd_ingest_deliveries_missed_total{app,event}` (the latter
   registered now, incremented from IMPL-0005).
-- [ ] 7.7 Tests: activity against fakegithub (failed, redelivered,
+- [x] 7.7 Tests: activity against fakegithub (failed, redelivered,
   cursor stop, lost cursor re-reads idempotently), workflow testsuite,
   and `schedules_test.go` for the per-App Schedule.
 
