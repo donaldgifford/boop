@@ -54,6 +54,8 @@ func TestMetrics_Names(t *testing.T) {
 	m.ProbeFallbacks(1, 1)
 	m.ConfigProbed(1, "absent")
 	m.RecordRequest("create", "jobs", "201")
+	m.Delivery("boop-bot", "issues", "routed")
+	m.TemporalCall("signal", 20*time.Millisecond)
 
 	got := collect(t, reader)
 	names := make([]string, 0, len(got))
@@ -66,6 +68,8 @@ func TestMetrics_Names(t *testing.T) {
 		"boopd_discovery_probe_fallbacks_total",
 		"boopd_discovery_probe_splits_total",
 		"boopd_discovery_repos_total",
+		"boopd_ingest_deliveries_total",
+		"boopd_ingest_temporal_seconds",
 		"boopd_kube_requests_total",
 		"boopd_run_duration_seconds",
 		"boopd_run_overhead_seconds",
