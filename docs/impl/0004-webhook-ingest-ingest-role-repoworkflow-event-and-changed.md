@@ -530,6 +530,18 @@ green, and one commit per numbered task. The PR split is in OQ1.
 - [x] 11.3 CI's "E2E Tests" job runs the new scenarios (no workflow file
   change if they sit under `./test/e2e/...`).
 
+Notes from the build:
+
+- The scenarios are ordered subtests of one `TestIngest` (for example
+  `TestIngest/DashboardTickRuns`) on one install, since later cases build
+  on earlier ones and the audit counts TemporalDown's 503. The
+  forwarder is the stub-github image in a TCP-forward mode.
+- `InstallationDeleted` found a gap: the cached installation client
+  kept its token, so `CheckRepo` never minted and saw the repository
+  present. GitHub revokes a deleted installation's tokens, so
+  `CheckRepo` now forgets the client on 401 and checks again with a
+  fresh mint (also on PR A).
+
 #### Success Criteria
 
 - `just e2e` passes locally and in CI.
