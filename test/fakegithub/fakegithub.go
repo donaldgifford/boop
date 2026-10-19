@@ -368,6 +368,16 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.serveApp(w, r, path)
 		return
 	}
+	if s.revokedToken(r) {
+		// GitHub revokes a deleted installation's tokens.
+		writeJSON(w, http.StatusUnauthorized, message("Bad credentials"))
+		return
+	}
+	s.serveInstallation(w, r, path)
+}
+
+// serveInstallation serves the installation-token REST endpoints.
+func (s *Server) serveInstallation(w http.ResponseWriter, r *http.Request, path string) {
 	switch {
 	case r.Method == http.MethodDelete && path == "/installation/token":
 		s.revoke(w, r)
@@ -419,6 +429,20 @@ func queryInt(r *http.Request, name string, def int) int {
 		return def
 	}
 	return n
+}
+
+// revokedToken reports whether r carries a token minted for an
+// installation that has since been deleted.
+func (s *Server) revokedToken(r *http.Request) bool {
+	tok := strings.TrimPrefix(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), "token ")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, m := range s.mints {
+		if m.Token == tok {
+			return s.deleted[m.InstallationID]
+		}
+	}
+	return false
 }
 
 func notFound(w http.ResponseWriter) {

@@ -3,6 +3,7 @@ package activities_test
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -143,6 +144,29 @@ func TestCheckRepo_MintErrors(t *testing.T) {
 	flaky := &fakeInstall{checkErr: fmt.Errorf("github: mint installation token: %w", platform.ErrTransient)}
 	if got, err := checkRepo(t, newEnv(t, &fakeGitHub{installs: map[int64]*fakeInstall{1: flaky}}), 1); err == nil {
 		t.Errorf("transient mint error: got %+v, want an error", got)
+	}
+}
+
+// A 401 on the cached client's token is a deleted installation's revoked
+// token: CheckRepo forgets the client and asks again with a fresh one,
+// whose mint answers 404.
+func TestCheckRepo_RevokedTokenRemints(t *testing.T) {
+	t.Parallel()
+	revoked := &fakeInstall{checkErr: fmt.Errorf("github: get repository: %w", platform.ErrUnauthorized)}
+	gone := &fakeInstall{checkErr: fmt.Errorf("github: mint installation token: %w", platform.ErrInstallationGone)}
+	gh := &fakeGitHub{installs: map[int64]*fakeInstall{1: revoked}, fresh: map[int64]*fakeInstall{1: gone}}
+	got, err := checkRepo(t, newEnv(t, gh), 1)
+	if err != nil || got.State != workflows.RepoGone {
+		t.Errorf("revoked token: got %+v, err %v; want gone", got, err)
+	}
+	if len(gh.forgot) != 1 || gh.forgot[0] != 1 {
+		t.Errorf("forgot %v, want [1]", gh.forgot)
+	}
+
+	// A fresh client that still gets 401 is an error, not gone.
+	gh = &fakeGitHub{installs: map[int64]*fakeInstall{1: revoked}, fresh: map[int64]*fakeInstall{1: revoked}}
+	if got, err := checkRepo(t, newEnv(t, gh), 1); err == nil || !strings.Contains(err.Error(), "unauthorized") {
+		t.Errorf("401 after a fresh mint: got %+v, err %v; want ErrUnauthorized", got, err)
 	}
 }
 

@@ -58,6 +58,9 @@ type RateReader interface {
 type GitHub interface {
 	App(app *config.App) (AppAPI, error)
 	Installation(app *config.App, installationID int64, configPaths []string) (InstallationAPI, error)
+	// Forget drops the cached installation client, so the next call
+	// mints a fresh token.
+	Forget(installationID int64)
 	Token(app *config.App, token string) (RateReader, error)
 }
 
@@ -105,6 +108,12 @@ func (g *ghClients) Installation(app *config.App, installationID int64, configPa
 	}
 	g.installs[installationID] = c
 	return c, nil
+}
+
+func (g *ghClients) Forget(installationID int64) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	delete(g.installs, installationID)
 }
 
 func (*ghClients) Token(app *config.App, token string) (RateReader, error) {

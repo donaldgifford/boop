@@ -42,6 +42,16 @@ func (a *Activities) CheckRepo(ctx context.Context, in *workflows.CheckRepoInput
 		return nil, err
 	}
 	check, err := api.CheckRepo(ctx, in.RepoID)
+	if errors.Is(err, platform.ErrUnauthorized) {
+		// GitHub revokes a deleted installation's tokens, and the cached
+		// client would keep using its token until it nears expiry. Check
+		// once more with a fresh client: its mint answers 404 when the
+		// installation is gone.
+		a.gh.Forget(in.InstallationID)
+		if api, err = a.installation(ctx, in.InstallationID); err == nil {
+			check, err = api.CheckRepo(ctx, in.RepoID)
+		}
+	}
 	if errors.Is(err, platform.ErrInstallationGone) {
 		a.log.Info("installation gone", "installation", in.InstallationID, "repo_id", in.RepoID, "error", err)
 		return gone, nil
