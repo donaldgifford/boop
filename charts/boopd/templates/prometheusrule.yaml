@@ -1,6 +1,7 @@
 {{/*
 Alerts: the two generic starter alerts (kube-state-metrics), then the
-run and budget alerts (DESIGN-0001 § Classification, § Observability). Per-alert overrides live under
+run and budget alerts (DESIGN-0001 § Classification, § Observability),
+and with ingest on the delivery alerts (DESIGN-0003 § Metrics). Per-alert overrides live under
 prometheusRule.alerts.<name> and accept `enabled`, `for`, `severity`,
 and `threshold`. `hasKey` guards (not `default`) so explicit falsy
 overrides like enabled=false or threshold=0 are honored.
@@ -81,6 +82,18 @@ spec:
             "summary" "boopd installation budget is low"
             "description" "Installation {{ $labels.installation }} has had under the threshold of its {{ $labels.resource }} rate limit left for 30m.")
         }}
+        {{- if .Values.ingest.enabled }}
+        {{- $defs = concat $defs (list
+          (dict "key" "ingestFailing" "alert" "BoopdIngestFailing" "for" "0m" "threshold" 0
+            "expr" (printf "sum by (app, event) (rate(boopd_ingest_deliveries_total{namespace=\"%s\",outcome=\"failed\"}[15m])) > %%v" $ns)
+            "summary" "boopd ingest is failing deliveries"
+            "description" "Ingest answered 503 to {{ $labels.event }} deliveries for {{ $labels.app }}: Temporal calls are failing, and GitHub will not retry.")
+          (dict "key" "deliveriesLost" "alert" "BoopdDeliveriesLost" "for" "0m" "threshold" 0
+            "expr" (printf "(sum by (app, event) (increase(boopd_ingest_deliveries_missed_total{namespace=\"%s\"}[1h])) + sum by (app, event) (increase(boopd_ingest_deliveries_failed_total{namespace=\"%s\"}[1h]))) > %%v" $ns $ns)
+            "summary" "GitHub webhook deliveries were lost"
+            "description" "The delivery audit found failed or missed {{ $labels.event }} deliveries for {{ $labels.app }}: redeliver them from the App's settings, or wait for the next discovery pass.")
+        ) }}
+        {{- end }}
         {{- range $defs }}
         {{- $o := get $alerts .key | default dict }}
         {{- $on := true }}{{- if hasKey $o "enabled" }}{{- $on = $o.enabled }}{{- end }}
