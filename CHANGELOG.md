@@ -7,19 +7,6 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Features
 
-- *(config)* Ingest block and per-App webhook block
-- *(config)* Read webhook secrets for ingest, apart from the App key
-- *(activities)* PlanRun returns the ingest settle and min_interval
-- *(github)* CheckRepo returns the config probe; a mint 404 is ErrInstallationGone
-- *(activities)* CheckRepo offboards deleted installations and refreshes extends
-- *(workflows)* Event and changed signal types and RepoState's pending event
-- *(workflows)* RepoWorkflow handles event and changed signals
-- *(workflows)* Targeted discovery of named installations
-- *(workflows)* TargetedDiscoveryID
-- *(github)* List the App's hook deliveries with the App JWT
-- *(activities)* ListHookDeliveries audits the App's webhook deliveries
-- *(workflows)* DeliveryAuditWorkflow counts failed deliveries per pass
-- *(worker)* A delivery-audit Schedule per App with a webhook
 - *(ingest)* Verify a delivery's sha256 signature for its App
 - *(ingest)* Decode deliveries into go-github's typed events
 - *(ingest)* Route deliveries by DESIGN-0003's table
@@ -40,13 +27,49 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 
+- Webhooks guide, config chart notes and the ingest layout
+- *(impl)* IMPL-0004 Phase 11 notes
+- *(impl)* IMPL-0004 PRs opened; merge and homelab tasks deferred
+
+### Testing
+
+- *(ingest)* Routing table, signature and handler tests
+- *(cmd)* Boopd ingest usage, config errors and a dev-server start and stop
+- *(chart)* Ingest suite for credentials, routes, policy, guards and schema
+- *(e2e)* Webhook ingest scenarios against the chart in k3d
+
+### Miscellaneous Tasks
+
+- *(chart)* Validate the ingest render and regenerate the chart README
+
+## [0.4.0] - 2026-10-19
+
+### Features
+
+- *(config)* Ingest block and per-App webhook block
+- *(config)* Read webhook secrets for ingest, apart from the App key
+- *(activities)* PlanRun returns the ingest settle and min_interval
+- *(github)* CheckRepo returns the config probe; a mint 404 is ErrInstallationGone
+- *(activities)* CheckRepo offboards deleted installations and refreshes extends
+- *(workflows)* Event and changed signal types and RepoState's pending event
+- *(workflows)* RepoWorkflow handles event and changed signals
+- *(workflows)* Targeted discovery of named installations
+- *(workflows)* TargetedDiscoveryID
+- *(github)* List the App's hook deliveries with the App JWT
+- *(activities)* ListHookDeliveries audits the App's webhook deliveries
+- *(workflows)* DeliveryAuditWorkflow counts failed deliveries per pass
+- *(worker)* A delivery-audit Schedule per App with a webhook
+
+### Bug Fixes
+
+- *(activities)* CheckRepo re-mints after a revoked installation token
+
+### Documentation
+
 - Approve DESIGN-0003 and note it in DESIGN-0001 and INV-0001
 - *(design-0003)* Fix a line read as a heading
 - *(examples)* Ingest block and boop-bot's webhook block
 - *(config)* Ingest and webhook settings
-- Webhooks guide, config chart notes and the ingest layout
-- *(impl)* IMPL-0004 Phase 11 notes
-- *(impl)* IMPL-0004 PRs opened; merge and homelab tasks deferred
 
 ### Testing
 
@@ -57,14 +80,6 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(fakegithub)* Cover deliveries, hook-delivery paging, deleted installations and payloads
 - *(workflows)* Event and changed timings on the test clock
 - *(workflows)* Targeted discovery passes and the untargeted replay
-- *(ingest)* Routing table, signature and handler tests
-- *(cmd)* Boopd ingest usage, config errors and a dev-server start and stop
-- *(chart)* Ingest suite for credentials, routes, policy, guards and schema
-- *(e2e)* Webhook ingest scenarios against the chart in k3d
-
-### Miscellaneous Tasks
-
-- *(chart)* Validate the ingest render and regenerate the chart README
 
 ## [0.3.2] - 2026-10-19
 
