@@ -160,6 +160,10 @@ type Server struct {
 	rateReads     int
 	secondary     map[SecondaryScope]secondaryLimit
 	probeTimes    []time.Time
+	appID         int64
+	webhookSecret string
+	deliveries    []Delivery
+	deleted       map[int64]bool
 }
 
 // NewFake returns a fake GitHub with one installation (id 1) and
@@ -184,6 +188,8 @@ func NewFake() (*Server, error) {
 		revokeStatus: http.StatusNoContent,
 		failPages:    make(map[int]int),
 		secondary:    make(map[SecondaryScope]secondaryLimit),
+		appID:        1,
+		deleted:      make(map[int64]bool),
 	}, nil
 }
 
@@ -388,6 +394,8 @@ func (s *Server) serveApp(w http.ResponseWriter, r *http.Request, path string) {
 		s.listInstallations(w)
 	case r.Method == http.MethodPost && isMint:
 		s.mint(w, r, id)
+	case r.Method == http.MethodGet && path == "/app/hook/deliveries":
+		s.listDeliveries(w, r)
 	default:
 		notFound(w)
 	}
@@ -449,6 +457,10 @@ func (s *Server) mint(w http.ResponseWriter, r *http.Request, id string) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.deleted[instID] {
+		notFound(w)
+		return
+	}
 	tok := fmt.Sprintf("ghs_fake_%d_%d", instID, len(s.mints)+1)
 	s.mints = append(s.mints, Mint{InstallationID: instID, RepoIDs: body.RepositoryIDs, Token: tok})
 	writeJSON(w, http.StatusCreated, map[string]any{
