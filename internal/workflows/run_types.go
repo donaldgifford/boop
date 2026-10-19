@@ -125,12 +125,62 @@ type Discovered struct {
 	Extends           []string
 }
 
+// Event is the event signal: something on GitHub wants a run
+// (DESIGN-0003 § RepoWorkflow: event and changed). It never runs at once:
+// it schedules a run after the settle time, and later events merge into
+// that schedule.
+type Event struct {
+	// Reason is why, one of the EventReason values.
+	Reason string
+	// Priority is PriorityHigh for a person's checkbox click, which skips
+	// min_interval; PriorityNormal otherwise. Zero means normal.
+	Priority Priority
+	// DeliveryID is the X-GitHub-Delivery that caused it, for the
+	// decision log.
+	DeliveryID string
+}
+
+// Event reasons ingest sends.
+const (
+	EventReasonDashboard  = "dashboard"
+	EventReasonPRCheckbox = "pr-checkbox"
+	EventReasonPRClosed   = "pr-closed"
+	EventReasonChanged    = "changed"
+)
+
+// Changed is the changed signal: the repository itself may have changed
+// (config, slug, branch, lifecycle). The workflow runs CheckRepo first;
+// ingest also starts a workflow with it (SignalWithStart) for a push
+// that adds a config file.
+type Changed struct {
+	// Reason is why, one of the ChangedReason values.
+	Reason string
+	// Slug, DefaultBranch and InstallationID are the payload's; zero
+	// values leave the state's.
+	Slug           string
+	DefaultBranch  string
+	InstallationID int64
+	// DeliveryID is the X-GitHub-Delivery that caused it.
+	DeliveryID string
+}
+
+// Changed reasons ingest sends.
+const (
+	ChangedReasonConfig              = "config"
+	ChangedReasonRepository          = "repository"
+	ChangedReasonRemoved             = "removed"
+	ChangedReasonInstallationDeleted = "installation-deleted"
+)
+
 // RunSummary is the last run as RepoWorkflow keeps it.
 type RunSummary struct {
 	Outcome          Outcome
 	RepositoryResult string
-	FinishedAt       time.Time
-	Progress         Progress
+	// StartedAt is the run's start, which min_interval is measured from;
+	// zero in state from before webhooks.
+	StartedAt  time.Time
+	FinishedAt time.Time
+	Progress   Progress
 }
 
 // RepoState is RepoWorkflow's input and its ContinueAsNew state
@@ -151,6 +201,13 @@ type RepoState struct {
 	StallCount        int
 	ConsecutiveReruns int
 	Iterations        int
+	// EventDue is when a pending webhook event's run is due; zero when
+	// none is pending. The run happens at min(NextDue, EventDue).
+	EventDue time.Time
+	// EventPriority is the highest priority among the pending events.
+	EventPriority Priority
+	// EventReason is the reason of the event EventDue came from.
+	EventReason string
 }
 
 // ListInstallationsInput is the ListInstallations activity input.

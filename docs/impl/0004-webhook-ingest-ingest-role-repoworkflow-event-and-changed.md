@@ -275,11 +275,11 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 5.1 `names.go`: `EventSignal = "event"`, `ChangedSignal =
+- [x] 5.1 `names.go`: `EventSignal = "event"`, `ChangedSignal =
   "changed"`; `run_types.go`: `Event{Reason string; Priority Priority}`,
   `Changed{Reason string; Slug, DefaultBranch string; InstallationID
   int64}`.
-- [ ] 5.2 `RepoState` gains `EventDue time.Time`, `EventPriority
+- [x] 5.2 `RepoState` gains `EventDue time.Time`, `EventPriority
   Priority`, `EventReason string`.
 - [ ] 5.3 `wait()` changes:
   - a pending `changed` is drained before the due check and runs

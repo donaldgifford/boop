@@ -58,10 +58,16 @@ const (
 	RunRenovateActivity          = "RunRenovate"
 )
 
-// Signal names accepted by RepoWorkflow (DESIGN-0001 § RepoWorkflow).
+// Signal names accepted by RepoWorkflow (DESIGN-0001 § RepoWorkflow,
+// DESIGN-0003 § RepoWorkflow: event and changed).
 const (
 	DiscoveredSignal = "discovered"
 	RecheckSignal    = "recheck"
+	// EventSignal asks for a run after the settle time (Event).
+	EventSignal = "event"
+	// ChangedSignal asks the workflow to CheckRepo, then refresh or
+	// offboard (Changed).
+	ChangedSignal = "changed"
 )
 
 // InstallationWorkflow's handlers: acquire is an Update, so the caller
@@ -128,4 +134,7 @@ const (
 	MetricCapacityLeases     = "boopd_capacity_leases"
 	MetricCapacityLimit      = "boopd_capacity_limit"
 	MetricCapacityDenied     = "boopd_capacity_denied_total"
+	// MetricRepoEventRuns counts runs a webhook event scheduled, by the
+	// event's reason (DESIGN-0003).
+	MetricRepoEventRuns = "boopd_repo_event_runs_total"
 )
