@@ -328,13 +328,13 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 6.1 `DiscoveryInput.Installations []int64`. When it is set,
+- [x] 6.1 `DiscoveryInput.Installations []int64`. When it is set,
   `DiscoveryWorkflow` filters `ListInstallations`' result to those IDs and
   ignores the App's allowlist only if an ID is in it. An ID outside the
   allowlist is skipped with a warn.
-- [ ] 6.2 `workflows.TargetedDiscoveryID(app, installationID)` →
+- [x] 6.2 `workflows.TargetedDiscoveryID(app, installationID)` →
   `discovery/<app>/installation/<id>`.
-- [ ] 6.3 Tests: a targeted pass probes one installation only; an
+- [x] 6.3 Tests: a targeted pass probes one installation only; an
   allowlisted-out ID is skipped; the Schedule's untargeted pass is
   unchanged (replay).
 
