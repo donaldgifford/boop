@@ -563,8 +563,8 @@ Notes from the build:
 - [x] 12.2 `docs/config.md`: final rows checked against the code.
 - [x] 12.3 Chart README regenerated; CLAUDE.md's layout gains
   `internal/ingest/` and the role list `boopd ingest`.
-- [ ] 12.4 DESIGN-0003 status → Implemented once Phase 13.2 ships.
-  `deferred - human required`: waits on merging #24.
+- [x] 12.4 DESIGN-0003 status → Implemented once Phase 13.2 ships.
+  #24 shipped in v0.5.0 (#23 in v0.4.0).
 
 #### Success Criteria
 
