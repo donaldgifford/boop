@@ -506,10 +506,10 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 11.1 Harness: the chart e2e installs with `ingest.enabled=true`
+- [x] 11.1 Harness: the chart e2e installs with `ingest.enabled=true`
   and a webhook secret. The test reaches the ingest Service through a
   port-forward and sends deliveries with `fakegithub.Deliver` (OQ7).
-- [ ] 11.2 Scenarios (`test/e2e/ingest_test.go`):
+- [x] 11.2 Scenarios (`test/e2e/ingest_test.go`):
   - `TestIngest_DashboardTickRuns`: a user `issues.edited` on the
     bot's issue runs within settle plus margin;
   - `TestIngest_OwnBotIgnored`: the same edit with the bot as sender
@@ -527,7 +527,7 @@ green, and one commit per numbered task. The PR split is in OQ1.
     get 503;
   - `TestDeliveryAudit_RecordsFailures`: the audit Schedule counts the
     failed delivery from the previous case.
-- [ ] 11.3 CI's "E2E Tests" job runs the new scenarios (no workflow file
+- [x] 11.3 CI's "E2E Tests" job runs the new scenarios (no workflow file
   change if they sit under `./test/e2e/...`).
 
 #### Success Criteria
@@ -540,7 +540,7 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 12.1 `docs/webhooks.md` (OQ10), a usage guide:
+- [x] 12.1 `docs/webhooks.md` (OQ10), a usage guide:
   - App settings and the events to subscribe;
   - creating the secret;
   - exposure with an Ingress or `HTTPRoute` (and Tailscale Funnel);
@@ -548,8 +548,8 @@ green, and one commit per numbered task. The PR split is in OQ1.
   - what is routed and what is recorded;
   - reading the audit metrics;
   - rollback.
-- [ ] 12.2 `docs/config.md`: final rows checked against the code.
-- [ ] 12.3 Chart README regenerated; CLAUDE.md's layout gains
+- [x] 12.2 `docs/config.md`: final rows checked against the code.
+- [x] 12.3 Chart README regenerated; CLAUDE.md's layout gains
   `internal/ingest/` and the role list `boopd ingest`.
 - [ ] 12.4 DESIGN-0003 status → Implemented once Phase 13.2 ships.
 
@@ -562,7 +562,7 @@ green, and one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 13.1 PR A (worker side, phases 1–7), label `minor`. Merging
+- [x] 13.1 PR A (worker side, phases 1–7), label `minor`. Merging
   releases it. With no ingest the signals are inert; the audit reads
   only.
 - [ ] 13.2 PR B (ingest, chart, e2e, docs; phases 8–12), label `minor`.

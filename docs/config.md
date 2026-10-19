@@ -430,6 +430,11 @@ What the chart adds:
   instead. `boopd.renovate.configPath` became `configPaths` after v0.1.0.
   `resourceQuota.enabled` went after v0.2.1: the runs quota renders
   whenever `runs.maxConcurrent > 0`.
+- **The ingest role:** the top-level `ingest.*` values (not in the file)
+  run `boopd ingest` and expose `boopd.ingest.path`. `ingest.enabled`
+  fails the render without an App `webhook` block, and only the ingest
+  pods mount the webhook Secrets. [webhooks.md](webhooks.md) walks
+  through it.
 
 ## Validation
 
