@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"go.temporal.io/sdk/activity"
@@ -84,5 +85,41 @@ func TestDiscoveryWorkflow(t *testing.T) {
 		if v, ok := suspends[id]; !ok || v != s {
 			t.Errorf("suspend signal to %s = %v (sent %v), want %v", id, v, ok, s)
 		}
+	}
+}
+
+// A github-rate-limited error's NextRetryDelay, not the policy's 30s
+// initial interval, spaces DiscoverInstallation's retry (#16).
+func TestDiscoveryWorkflow_RetryAfter(t *testing.T) {
+	t.Parallel()
+	var suite testsuite.WorkflowTestSuite
+	suite.SetLogger(log.NewStructuredLogger(slog.New(slog.DiscardHandler)))
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterWorkflowWithOptions(DiscoveryWorkflow, workflow.RegisterOptions{Name: DiscoveryWorkflowName})
+	env.RegisterActivityWithOptions(func(context.Context, *ListInstallationsInput) ([]InstallationInfo, error) {
+		return []InstallationInfo{{ID: 1}}, nil
+	}, activity.RegisterOptions{Name: ListInstallationsActivity})
+
+	const wait = 7 * time.Second
+	var starts []time.Time
+	env.RegisterActivityWithOptions(func(context.Context, *DiscoverInput) (*DiscoverSummary, error) {
+		starts = append(starts, env.Now())
+		if len(starts) == 1 {
+			return nil, temporal.NewApplicationErrorWithOptions("github rate limit", ErrTypeGitHubRateLimited,
+				temporal.ApplicationErrorOptions{NextRetryDelay: wait})
+		}
+		return &DiscoverSummary{InstallationID: 1, Seen: 1}, nil
+	}, activity.RegisterOptions{Name: DiscoverInstallationActivity})
+	env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, "", SuspendSignal, mock.Anything).Return(nil)
+
+	env.ExecuteWorkflow(DiscoveryWorkflowName, &DiscoveryInput{App: "main"})
+	if err := env.GetWorkflowError(); err != nil {
+		t.Fatalf("workflow: %v", err)
+	}
+	if len(starts) != 2 {
+		t.Fatalf("DiscoverInstallation ran %d times, want 2", len(starts))
+	}
+	if gap := starts[1].Sub(starts[0]); gap < wait || gap >= 30*time.Second {
+		t.Errorf("retry %v after the first attempt, want %v, not the 30s backoff", gap, wait)
 	}
 }
