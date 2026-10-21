@@ -589,11 +589,45 @@ Notes from the build:
   - set the App webhook URL, secret and subscriptions (Issues, Pull
     request, Push, Repository);
   - see `ping` succeed in Recent deliveries.
-- [ ] 13.4 **Deferred, human required.** Tick a box on the
-  proxmox-go-sdk dashboard and time it to the run. Push a config to a
-  scratch repository and time the onboarding. Record both here.
+
+  Done on 2026-10-21 (homelab #220–#222, boopd 0.5.0) except the
+  `ping`, which is still to redeliver:
+  - The Keycloak client `boopd-ingest` uses client credentials; its
+    secret is the `boopd-ingest-oidc` Secret. The `boop-bot-webhook`
+    Secret comes from 1Password.
+  - Two ingest replicas run behind a Tailscale Funnel Ingress, and
+    `ingest.networkPolicy.from` admits the Tailscale proxy pods.
+  - The ingest pods also needed egress to Keycloak's token endpoint
+    (8080), or Temporal calls got 403s. The chart now documents this
+    under `ingest.networkPolicy.temporal`.
+  - The runs quota did not count the ingest pods; fixed in the chart.
+  - First 48 hours: 819 deliveries. Every real GitHub delivery got 202
+    for boop-bot (App 5285106): 556 ignored, 245 own, the rest routed.
+    The only rejections were two hand-made requests on 10-19.
+- [x] 13.4 Tick a box on the proxmox-go-sdk dashboard and time it to
+  the run. Push a config to a scratch repository and time the
+  onboarding. Record both here.
+
+  Measured on 2026-10-21, from the delivery reaching ingest:
+
+  | Step | Dashboard tick (proxmox-go-sdk) | Config push (scratch2) |
+  | --- | --- | --- |
+  | Delivery routed, 202 | 0 s | 0 s |
+  | `run-scheduled` (`dashboard` / `changed`, after onboarding) | +0.07 s | +1.0 s |
+  | Renovate starts in the run pod | +32.5 s | +33.3 s |
+  | `run_complete`, Succeeded | +2 m 57 s (143 s run) | +64.6 s (29 s run) |
+
+  - **Target:** a tick runs Renovate in under 2 minutes. Met: the run
+    starts at +32.5 s. Completion depends on the repository's own run
+    time.
+  - **Where the time goes:** about 32 s is the run pod being scheduled
+    and started; the webhook path takes under a second.
+  - **scratch2's ignored first push:** its initial commit added only
+    `README.md`, so ignoring it was correct. The next push added
+    `renovate.json5` and onboarded the repository.
 - [ ] 13.5 IMPL status → Completed, with the evidence.
-  `deferred - human required`: waits on 13.3 and 13.4.
+  `deferred - human required`: waits on the redelivered `ping` (13.3)
+  and a week with no `BoopdDeliveriesLost` alert (to 2026-10-28).
 
 #### Success Criteria
 
