@@ -1,10 +1,11 @@
 module github.com/donaldgifford/boop
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/bradleyfalzon/ghinstallation/v2 v2.18.0
 	github.com/donaldgifford/hclkit v0.2.0
+	github.com/google/go-cmp v0.7.0
 	github.com/google/go-github/v62 v62.0.0
 	github.com/hashicorp/hcl/v2 v2.24.0
 	github.com/prometheus/client_golang v1.25.0
@@ -55,7 +56,6 @@ require (
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang/mock v1.6.0 // indirect
 	github.com/google/gnostic-models v0.7.0 // indirect
-	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-github/v84 v84.0.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect

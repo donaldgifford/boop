@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 # Stub Renovate image for e2e tests only (IMPL-0001 task 4.6). Never published.
-FROM golang:1.27.2 AS build
+FROM golang:1.27.3 AS build
 WORKDIR /src
 COPY go.* ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
