@@ -3,6 +3,17 @@
 All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
+## [unreleased]
+
+### Bug Fixes
+
+- *(chart)* Count the ingest replicas in the runs quota
+
+### Documentation
+
+- *(chart)* Ingest needs egress to the OIDC token endpoint
+- *(impl)* IMPL-0004 homelab setup and timings
+
 ## [0.5.1] - 2026-10-21
 
 ### Documentation
