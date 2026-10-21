@@ -307,6 +307,8 @@ ingest:
     # -- Peers allowed to the metrics port: Prometheus. Empty admits none.
     metricsFrom: []
     # -- Egress rules (NetworkPolicyEgressRule list) reaching Temporal.
+    # With temporal.auth.oidc, add the token endpoint too (Keycloak's
+    # port, e.g. 8080): ingest fetches its own token.
     # @default -- TCP 7233 to anywhere
     temporal:
       - ports:

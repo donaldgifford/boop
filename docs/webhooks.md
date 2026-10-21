@@ -107,6 +107,9 @@ NetworkPolicy:
   default) only.
 
 An empty `from` admits nothing, so set it before you expose the route.
+With `temporal.auth.oidc`, ingest fetches its own token: add an
+egress rule for the token endpoint (Keycloak's port, for example 8080)
+to `ingest.networkPolicy.temporal`, or Temporal calls fail with 403.
 
 The worker also starts a `delivery-audit/<app>` Schedule for each App
 with a `webhook` block (see [Lost and failed deliveries](#lost-and-failed-deliveries)).
