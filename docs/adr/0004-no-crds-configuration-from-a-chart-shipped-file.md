@@ -1,7 +1,7 @@
 ---
 id: ADR-0004
 title: "No CRDs; configuration from a chart-shipped file"
-status: Proposed
+status: Accepted
 author: Donald Gifford
 created: 2026-10-01
 ---

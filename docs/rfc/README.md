@@ -33,5 +33,5 @@ docz create rfc "Your RFC Title"
 
 | ID | Title | Status | Date | Author | Link |
 |----|-------|--------|------|--------|------|
-| RFC-0001 | boopd: run Renovate per repository on Temporal | Draft | 2026-10-01 | Donald Gifford | [0001-boopd-run-renovate-per-repository-on-temporal.md](0001-boopd-run-renovate-per-repository-on-temporal.md) |
+| RFC-0001 | boopd: run Renovate per repository on Temporal | Accepted | 2026-10-01 | Donald Gifford | [0001-boopd-run-renovate-per-repository-on-temporal.md](0001-boopd-run-renovate-per-repository-on-temporal.md) |
 <!-- END DOCZ AUTO-GENERATED -->

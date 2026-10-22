@@ -1,7 +1,7 @@
 ---
 id: ADR-0001
 title: "Use Temporal as the control plane"
-status: Proposed
+status: Accepted
 author: Donald Gifford
 created: 2026-10-01
 ---

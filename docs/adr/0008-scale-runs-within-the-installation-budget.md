@@ -1,7 +1,7 @@
 ---
 id: ADR-0008
 title: "Scale runs within the installation budget; choose the scaling mechanism after the spike"
-status: Proposed
+status: Accepted
 author: Donald Gifford
 created: 2026-10-01
 ---

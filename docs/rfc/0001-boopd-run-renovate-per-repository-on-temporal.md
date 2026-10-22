@@ -1,7 +1,7 @@
 ---
 id: RFC-0001
 title: "boopd: run Renovate per repository on Temporal"
-status: Draft
+status: Accepted
 author: Donald Gifford
 created: 2026-10-01
 ---
