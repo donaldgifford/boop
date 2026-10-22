@@ -1,7 +1,7 @@
 ---
 id: IMPL-0004
 title: "Webhook ingest: ingest role, RepoWorkflow event and changed signals, delivery audit"
-status: Draft
+status: In Progress
 author: Donald Gifford
 created: 2026-10-18
 ---

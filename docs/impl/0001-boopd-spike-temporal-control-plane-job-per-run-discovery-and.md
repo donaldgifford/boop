@@ -690,15 +690,15 @@ and the first real environment.
   Renovate lines were forwarded with the correlation fields, and the Job
   and its token Secret were gone afterwards. The installation must
   include the shared-preset repository, since every run's token does.
-- [ ] 7.10 Homelab: a `boopd` namespace on repo-guardian's reference
+- [x] 7.10 Homelab: a `boopd` namespace on repo-guardian's reference
   Temporal cluster with its own client identity (OQ6), a `boop-bot`
   GitHub App installed on the homelab organisation with the private key
   in a Secret, the Redis subchart or an existing instance (OQ7), Loki
   labels from the correlation fields; the first release `0.1.0` cut by
   the release train (OQ5) and deployed.
-  **Deferred - human required:** the homelab cluster, the Temporal
-  client identity, the GitHub App registration and the release merge
-  are outside this repository.
+  Done by hand: the homelab runs boopd 0.5.x from the release train on
+  its own Temporal namespace and client identity, with `boop-bot`
+  installed on the homelab organisation.
 
 #### Success Criteria
 
@@ -859,11 +859,11 @@ Per DESIGN-0001 § Testing Strategy, with the e2e emphasis from OQ3: the
 main path of every layer is proven in the k3d harness, and unit tests
 cover the branches an e2e run cannot reach cheaply.
 
-- [ ] Process builder and Job spec: table and golden tests (Phase 1, done).
-- [ ] Platform additions: `httptest` servers, no network (Phase 2).
-- [ ] Config and profiles: golden HCL, one failing case per rule with its
+- [x] Process builder and Job spec: table and golden tests (Phase 1, done).
+- [x] Platform additions: `httptest` servers, no network (Phase 2).
+- [x] Config and profiles: golden HCL, one failing case per rule with its
   diagnostic position, resolver table (Phase 3).
-- [ ] e2e harness in k3d with the stub Renovate image, `just e2e` locally
+- [x] e2e harness in k3d with the stub Renovate image, `just e2e` locally
   and the "E2E Tests" job in CI; scenarios added per phase: the Job
   lifecycle (Phase 4), `RunRenovate` (Phase 5), the worker role with the
   Temporal dev server (Phase 6), the chart with an in-cluster worker and
@@ -872,11 +872,12 @@ cover the branches an e2e run cannot reach cheaply.
   `httptest` log server; the report parser and scanner over real Renovate
   44 fixtures (Phase 4, OQ11); the classification table (Phase 5); the
   convergence table and the budget interplay in the Temporal `testsuite`
-  (Phase 6). No replay tests in the spike (OQ8).
-- [ ] Integration (build tag `integration`): the Temporal dev server for
+  (Phase 6). No replay tests in the spike (OQ8). Open until 4.5 swaps the
+  synthetic fixtures for real Renovate 44 logs.
+- [x] Integration (build tag `integration`): the Temporal dev server for
   the client, versioning, schedules and the budget entity, already in CI
   (Phase 1, done).
-- [ ] Chart: helm-unittest for the Role's verbs, the config render, the
+- [x] Chart: helm-unittest for the Role's verbs, the config render, the
   posture objects and the alerts, plus `boopd config validate` on the
   rendered config and the chart e2e scenario (Phase 7).
 - [ ] Spike: the criteria in the homelab against your scratch

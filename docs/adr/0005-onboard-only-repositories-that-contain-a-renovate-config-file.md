@@ -1,7 +1,7 @@
 ---
 id: ADR-0005
 title: "Onboard only repositories that contain a Renovate config file"
-status: Proposed
+status: Accepted
 author: Donald Gifford
 created: 2026-10-01
 ---

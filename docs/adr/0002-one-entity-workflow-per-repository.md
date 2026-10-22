@@ -1,7 +1,7 @@
 ---
 id: ADR-0002
 title: "One entity workflow per repository"
-status: Proposed
+status: Accepted
 author: Donald Gifford
 created: 2026-10-01
 ---
