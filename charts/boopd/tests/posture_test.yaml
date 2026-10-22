@@ -44,6 +44,25 @@ tests:
           path: spec.hard.pods
           value: "23"
 
+  - it: adds the ingest replicas to the quota when they share the namespace
+    template: templates/resourcequota.yaml
+    set:
+      ingest.enabled: true
+    asserts:
+      - equal:
+          path: spec.hard.pods
+          value: "25"
+
+  - it: leaves ingest out of a dedicated runs namespace's quota
+    template: templates/resourcequota.yaml
+    set:
+      ingest.enabled: true
+      boopd.runs.namespace: boopd-runs
+    asserts:
+      - equal:
+          path: spec.hard.pods
+          value: "20"
+
   - it: leaves redis out of the quota when the subchart is off
     template: templates/resourcequota.yaml
     set:

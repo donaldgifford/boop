@@ -6,13 +6,16 @@
 {{- if .Values.redis.enabled -}}
 {{- $pods = add $pods 1 -}}
 {{- end -}}
+{{- if .Values.ingest.enabled -}}
+{{- $pods = add $pods .Values.ingest.replicaCount -}}
+{{- end -}}
 {{- end -}}
 # A cluster-side backstop for runs.max_concurrent (IMPL-0001 OQ12). The
 # worker enforces the cap with a CapacityWorkflow lease; this quota only
 # matters if that is bypassed. It limits pods, not Jobs, so a Job past it
 # is created and its pod refused, and the run waits pending_timeout.
-# It covers every pod in the namespace: the worker replicas and the redis
-# pod are added when they share it, and any other pod there takes a slot,
+# It covers every pod in the namespace: the worker and ingest replicas
+# and the redis pod are added when they share it, and any other pod there takes a slot,
 # so a dedicated runs namespace is the clean setup. Rendered whenever
 # boopd.runs.maxConcurrent > 0 (IMPL-0002 OQ7).
 apiVersion: v1

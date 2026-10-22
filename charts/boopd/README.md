@@ -127,7 +127,7 @@ renders with an existing Secret are identical.
 | ingest.ingress.tls | list | `[]` | Ingress TLS entries. |
 | ingest.networkPolicy.from | list | `[]` | Peers (NetworkPolicyPeer list) allowed to the webhook port: the ingress controller or gateway. Empty admits none. |
 | ingest.networkPolicy.metricsFrom | list | `[]` | Peers allowed to the metrics port: Prometheus. Empty admits none. |
-| ingest.networkPolicy.temporal | list | TCP 7233 to anywhere | Egress rules (NetworkPolicyEgressRule list) reaching Temporal. |
+| ingest.networkPolicy.temporal | list | TCP 7233 to anywhere | Egress rules (NetworkPolicyEgressRule list) reaching Temporal. With temporal.auth.oidc, add the token endpoint too (Keycloak's port, e.g. 8080): ingest fetches its own token. |
 | ingest.pdb.enabled | bool | `true` | Render a PodDisruptionBudget for the ingest pods. |
 | ingest.pdb.maxUnavailable | int | `1` | PDB maxUnavailable. |
 | ingest.replicaCount | int | `2` | Ingest replicas; stateless, so two for a rollout without loss. |
