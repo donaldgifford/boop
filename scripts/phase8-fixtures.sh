@@ -198,7 +198,9 @@ setup(name="boop-fixture-sdist", version="0.1.0", py_modules=[])
 EOF
 echo "No wheel is ever published for this package, on purpose." >"${work}/${name}/README.md"
 publish "${name}"
-git -C "${work}/${name}" tag -f v0.1.0 >/dev/null
+# A lightweight tag: pip only needs the ref, and tag.gpgSign would open
+# an editor for a message.
+git -C "${work}/${name}" -c tag.gpgSign=false tag -f v0.1.0 >/dev/null
 git -C "${work}/${name}" push -qf origin v0.1.0
 
 # --- python-sdist ----------------------------------------------------
