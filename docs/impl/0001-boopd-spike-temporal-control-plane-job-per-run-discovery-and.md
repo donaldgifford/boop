@@ -437,16 +437,15 @@ and the k3d end-to-end harness every later phase extends (OQ3).
   `packageFiles`, `Managers`, `Problems`; `reportMissing` when the line is
   absent or fails to parse, with tuples reconstructed from branch and PR
   events.
-- [ ] 4.5 Fixtures (OQ11): run the upstream Renovate 44 image locally with
+- [x] 4.5 Fixtures (OQ11): run the upstream Renovate 44 image locally with
   Docker against one scratch repository, once in `dryRun: full` and once
   live, `RENOVATE_REPORT_TYPE=logging`; commit the sanitized logs under
   `internal/renovate/testdata` with the command that produced them. The
   exact `msg` strings are pinned by them, so a Renovate change fails the
   parser's test, not a run.
-  **Deferred - human required:** needs a scratch repository and a token
-  (OQ10 `c`: the fixture repositories are made by hand). The parser
-  tests run over synthetic fixtures in `internal/renovate/testdata`
-  until then; its README has the steps.
+  Done 2026-10-23: `renovate-44-dryrun.log` and `renovate-44-live.log`
+  (Renovate 44.179.2) with the command in the testdata README;
+  `TestScanner_Renovate44*` pass over them with no parser change.
 - [x] 4.6 Stub Renovate image, `test/stub-renovate/`: a small static Go
   binary on a distroless base that replays a fixture log line by line
   with a configurable delay, exit code and report size, can hang on
@@ -734,14 +733,18 @@ Strategy, run in the homelab, with the fixtures the design describes
   what each must contain so they can be rebuilt.
   **Deferred - human required:** the repositories are created by hand on
   the homelab organisation. Each carries `renovate.json5` extending the
-  shared preset, so discovery onboards it. Code runs only where a
+  shared preset, so discovery onboards it.
+  [`scripts/phase8-fixtures.sh`](../../scripts/phase8-fixtures.sh)
+  creates or refreshes them as `boop-fixture-<name>` under `OWNER`
+  (default `donaldgifford`), with a public `boop-fixture-sdist-package`
+  for `python-sdist`. Code runs only where a
   manager's artifact update executes repository code, so each fixture
   routes its probe through one. The findings leave as the step's stderr,
   which Renovate logs as an artifact error (nothing is pushed in
   `dryRun: full`).
-  - `isolation`: a Gradle project with an outdated wrapper and a
-    `build.gradle` whose top-level block, run by Renovate's wrapper
-    update, writes `boopd-marker` files into `RENOVATE_CACHE_DIR` (or
+  - `isolation`: a Gradle project with an outdated wrapper whose
+    `gradlew` is the probe (Renovate's wrapper update runs it, so it
+    needs no JVM). It writes `boopd-marker` files into `RENOVATE_CACHE_DIR` (or
     `cacheDir` from `RENOVATE_CONFIG`), the repository's parent
     (`baseDir`) and `/tmp`; prints the inherited environment; reads
     every `/proc/*/environ` and `/proc/*/cmdline` it can and greps the
@@ -750,11 +753,13 @@ Strategy, run in the homelab, with the fixtures the design describes
   - `isolation-probe`: the same Gradle shape, run after `isolation`,
     reporting any `boopd-marker` under those paths and any `sleep`
     process it can see.
-  - `python-sdist`: `requirements.txt` pinning an old version of a
-    package published only as an sdist (from a local index or a
-    `git+` URL to a repository whose `setup.py` writes
-    `/tmp/boopd-sdist-marker` and prints it); the `python` profile's
-    `PIP_ONLY_BINARY=:all:` should make the lock update fail first.
+  - `python-sdist`: a pip-compile `requirements.in` and
+    `requirements.txt` with an outdated `six` and a `git+` dependency
+    on `sdist-package`, whose `setup.py` writes
+    `/tmp/boopd-sdist-marker` and prints it. Updating `six` makes
+    pip-compile resolve, and so build, the git dependency; the `python`
+    profile's `PIP_ONLY_BINARY=:all:` should make the lock update fail
+    first.
   - `many-updates`: a `package.json` and lockfile pinning about fifty
     dependencies at old majors, so an uninterrupted run takes well over
     the forced two-minute soft deadline.
@@ -868,12 +873,11 @@ cover the branches an e2e run cannot reach cheaply.
   lifecycle (Phase 4), `RunRenovate` (Phase 5), the worker role with the
   Temporal dev server (Phase 6), the chart with an in-cluster worker and
   the stub GitHub (Phase 7).
-- [ ] Unit tests beside the e2e: the log follower's reconnect against an
+- [x] Unit tests beside the e2e: the log follower's reconnect against an
   `httptest` log server; the report parser and scanner over real Renovate
   44 fixtures (Phase 4, OQ11); the classification table (Phase 5); the
   convergence table and the budget interplay in the Temporal `testsuite`
-  (Phase 6). No replay tests in the spike (OQ8). Open until 4.5 swaps the
-  synthetic fixtures for real Renovate 44 logs.
+  (Phase 6). No replay tests in the spike (OQ8).
 - [x] Integration (build tag `integration`): the Temporal dev server for
   the client, versioning, schedules and the budget entity, already in CI
   (Phase 1, done).

@@ -3,6 +3,7 @@ package renovate_test
 import (
 	"bufio"
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -210,5 +211,64 @@ func TestScanner_SecondaryLimit(t *testing.T) {
 				t.Errorf("SecondaryLimit=%v RetryAfter=%v, want %v %v", got.SecondaryLimit, got.RetryAfter, tt.hit, tt.after)
 			}
 		})
+	}
+}
+
+// The renovate-44-* fixtures are real Renovate 44 output (IMPL-0001 4.5;
+// testdata/README.md has the command), so a change in Renovate's message
+// strings or report shape fails here rather than in a run.
+func TestScanner_Renovate44Live(t *testing.T) {
+	t.Parallel()
+	got := scan(t, "renovate-44-live.log")
+	if got.ReportMissing {
+		t.Fatal("Result().ReportMissing = true, want the report parsed")
+	}
+	if want := upgradesInReport(t, "renovate-44-live.log"); len(got.Tuples) != want || want == 0 {
+		t.Fatalf("Result() tuples = %d, want %d (branches[].upgrades[] total)", len(got.Tuples), want)
+	}
+	// Two branches and PRs created; two aborted by the token's missing
+	// workflow scope, which Renovate reports as no-work.
+	if got.Progress != (renovate.Progress{BranchesChanged: 2, PRsChanged: 2}) {
+		t.Errorf("Progress = %+v, want 2 branches, 2 PRs", got.Progress)
+	}
+	if got.Finished == nil || *got.Finished != (renovate.Finished{Result: "done", Status: "onboarded", DurationMs: 33144, Cloned: true}) {
+		t.Errorf("Finished = %+v, want done/onboarded/33144/cloned", got.Finished)
+	}
+	if got.RenovateVersion != "44.179.2" {
+		t.Errorf("RenovateVersion = %q, want 44.179.2", got.RenovateVersion)
+	}
+	prs := make(map[string]int)
+	for _, tu := range got.Tuples {
+		if tu.Manager == "" || tu.DepName == "" || tu.BranchName == "" {
+			t.Errorf("tuple %+v lacks a manager, dependency or branch", tu)
+		}
+		if tu.PRNumber != 0 {
+			prs[tu.BranchName] = tu.PRNumber
+		}
+	}
+	if want := map[string]int{"renovate-fixture/docker-images-(non-major)": 2, "renovate-fixture/mise-tools-(non-major)": 3}; !maps.Equal(prs, want) {
+		t.Errorf("PR numbers by branch = %v, want %v", prs, want)
+	}
+	if len(got.Problems) != 0 {
+		t.Errorf("Problems = %+v, want none", got.Problems)
+	}
+	if want := []string{"dockerfile", "github-actions", "gomod", "helm-values", "mise", "renovate-config"}; !slices.Equal(got.Managers, want) {
+		t.Errorf("Managers = %v, want %v", got.Managers, want)
+	}
+}
+
+func TestScanner_Renovate44DryRun(t *testing.T) {
+	t.Parallel()
+	got := scan(t, "renovate-44-dryrun.log")
+	// Eleven "Would commit files" lines; at info level Renovate logs no
+	// "Would create PR" line.
+	if got.Progress != (renovate.Progress{BranchesChanged: 11}) {
+		t.Errorf("Progress = %+v, want 11 branches from DRY-RUN lines", got.Progress)
+	}
+	if want := upgradesInReport(t, "renovate-44-dryrun.log"); got.ReportMissing || len(got.Tuples) != want || want == 0 {
+		t.Errorf("tuples = %d, missing %v; want the report's %d", len(got.Tuples), got.ReportMissing, want)
+	}
+	if got.Finished == nil || got.Finished.Result != "done" {
+		t.Errorf("Finished = %+v, want result done", got.Finished)
 	}
 }
