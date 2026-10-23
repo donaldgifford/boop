@@ -3,15 +3,15 @@
 All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
-## [0.5.3] - 2026-10-23
+## [unreleased]
 
 ### Bug Fixes
 
-- *(temporal)* OIDC token fetch honours the call's deadline
+- *(scripts)* Phase8-fixtures tags the sdist package without signing
+- *(scripts)* Drop phase8-fixtures' INSTALLATION_ID option
 
 ### Documentation
 
-- Refresh ADR, RFC and IMPL statuses
 - *(impl)* IMPL-0005 findings on the real fixtures and the copy pin
 
 ### Testing
@@ -21,6 +21,16 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Miscellaneous Tasks
 
 - *(scripts)* Phase8-fixtures.sh creates the IMPL-0001 8.1 fixtures
+
+## [0.5.3] - 2026-10-23
+
+### Bug Fixes
+
+- *(temporal)* OIDC token fetch honours the call's deadline
+
+### Documentation
+
+- Refresh ADR, RFC and IMPL statuses
 
 ## [0.5.2] - 2026-10-22
 
