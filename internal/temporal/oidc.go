@@ -121,15 +121,37 @@ func (o *OIDCConfig) tokenSource(ctx context.Context) (oauth2.TokenSource, error
 
 // tokenCallback adapts ts to the SDK's API-key credentials, which send
 // the returned value as `Authorization: Bearer <token>` on every call.
+// It returns when the call's context ends even if the token endpoint
+// has not answered, so a caller's deadline (ingest's 5 s) holds when the
+// IdP is unreachable; the fetch carries on, bounded by
+// tokenFetchTimeout, and fills the cache for the next call.
 func tokenCallback(ts oauth2.TokenSource, logger *slog.Logger) func(context.Context) (string, error) {
-	return func(context.Context) (string, error) {
-		tok, err := ts.Token()
-		if err != nil {
-			logger.Warn("temporal: fetching OIDC access token failed", "error", err)
+	type result struct {
+		tok *oauth2.Token
+		err error
+	}
 
-			return "", fmt.Errorf("temporal: fetching OIDC access token: %w", err)
+	return func(ctx context.Context) (string, error) {
+		done := make(chan result, 1)
+
+		go func() {
+			tok, err := ts.Token()
+			done <- result{tok, err}
+		}()
+
+		var r result
+		select {
+		case r = <-done:
+		case <-ctx.Done():
+			r.err = context.Cause(ctx)
 		}
 
-		return tok.AccessToken, nil
+		if r.err != nil {
+			logger.Warn("temporal: fetching OIDC access token failed", "error", r.err)
+
+			return "", fmt.Errorf("temporal: fetching OIDC access token: %w", r.err)
+		}
+
+		return r.tok.AccessToken, nil
 	}
 }
