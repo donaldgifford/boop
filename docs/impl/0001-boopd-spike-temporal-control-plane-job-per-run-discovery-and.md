@@ -437,16 +437,15 @@ and the k3d end-to-end harness every later phase extends (OQ3).
   `packageFiles`, `Managers`, `Problems`; `reportMissing` when the line is
   absent or fails to parse, with tuples reconstructed from branch and PR
   events.
-- [ ] 4.5 Fixtures (OQ11): run the upstream Renovate 44 image locally with
+- [x] 4.5 Fixtures (OQ11): run the upstream Renovate 44 image locally with
   Docker against one scratch repository, once in `dryRun: full` and once
   live, `RENOVATE_REPORT_TYPE=logging`; commit the sanitized logs under
   `internal/renovate/testdata` with the command that produced them. The
   exact `msg` strings are pinned by them, so a Renovate change fails the
   parser's test, not a run.
-  **Deferred - human required:** needs a scratch repository and a token
-  (OQ10 `c`: the fixture repositories are made by hand). The parser
-  tests run over synthetic fixtures in `internal/renovate/testdata`
-  until then; its README has the steps.
+  Done 2026-10-23: `renovate-44-dryrun.log` and `renovate-44-live.log`
+  (Renovate 44.179.2) with the command in the testdata README;
+  `TestScanner_Renovate44*` pass over them with no parser change.
 - [x] 4.6 Stub Renovate image, `test/stub-renovate/`: a small static Go
   binary on a distroless base that replays a fixture log line by line
   with a configurable delay, exit code and report size, can hang on
@@ -874,12 +873,11 @@ cover the branches an e2e run cannot reach cheaply.
   lifecycle (Phase 4), `RunRenovate` (Phase 5), the worker role with the
   Temporal dev server (Phase 6), the chart with an in-cluster worker and
   the stub GitHub (Phase 7).
-- [ ] Unit tests beside the e2e: the log follower's reconnect against an
+- [x] Unit tests beside the e2e: the log follower's reconnect against an
   `httptest` log server; the report parser and scanner over real Renovate
   44 fixtures (Phase 4, OQ11); the classification table (Phase 5); the
   convergence table and the budget interplay in the Temporal `testsuite`
-  (Phase 6). No replay tests in the spike (OQ8). Open until 4.5 swaps the
-  synthetic fixtures for real Renovate 44 logs.
+  (Phase 6). No replay tests in the spike (OQ8).
 - [x] Integration (build tag `integration`): the Temporal dev server for
   the client, versioning, schedules and the budget entity, already in CI
   (Phase 1, done).
