@@ -12,9 +12,10 @@
 #   VISIBILITY       private or public (default private); the sdist
 #                    package is always public, since pip clones it with
 #                    no credentials
-#   INSTALLATION_ID  if set, adds every fixture to that boop-bot
-#                    installation (only needed for "selected
-#                    repositories" installations)
+#
+# An installation on selected repositories needs the four onboarded
+# fixtures added by hand (the App's installation settings): gh's OAuth
+# token cannot call the installation repositories API.
 #
 # Needs gh (logged in, repo scope), git and npm.
 # The probes and JSON5 are literal text for the fixture repositories.
@@ -313,14 +314,5 @@ EOF
 echo "legacy-peer-deps=true" >"${work}/${name}/.npmrc"
 (cd "${work}/${name}" && npm install --package-lock-only --ignore-scripts --no-audit --no-fund >/dev/null)
 publish "${name}"
-
-# --- installation ----------------------------------------------------
-if [[ -n "${INSTALLATION_ID:-}" ]]; then
-  for repo in isolation isolation-probe python-sdist many-updates; do
-    id="$(gh api "repos/${OWNER}/${PREFIX}${repo}" --jq .id)"
-    gh api -X PUT "/user/installations/${INSTALLATION_ID}/repositories/${id}" >/dev/null
-    echo "added ${PREFIX}${repo} to installation ${INSTALLATION_ID}"
-  done
-fi
 
 echo "done: run isolation before isolation-probe; ${SDIST_REPO} is not onboarded (no renovate.json5)"
