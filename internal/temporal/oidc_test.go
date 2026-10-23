@@ -1,7 +1,9 @@
 package temporal
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -11,6 +13,7 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // tokenServer is a client-credentials endpoint that counts requests and
@@ -135,6 +138,40 @@ func TestTokenCallback_EndpointError(t *testing.T) {
 
 	if tok, err := tokenCallback(ts, quiet)(t.Context()); err == nil || tok != "" {
 		t.Errorf("callback = %q, %v; want an error and no token", tok, err)
+	}
+}
+
+// An unreachable IdP must not hold a call past its own deadline: ingest
+// answers GitHub within 5 s, while a fetch may take tokenFetchTimeout.
+func TestTokenCallback_HonoursCallDeadline(t *testing.T) {
+	t.Parallel()
+
+	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		<-release
+	}))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(release) })
+
+	ts, err := testOIDC(t, srv.URL).tokenSource(t.Context())
+	if err != nil {
+		t.Fatalf("tokenSource: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	tok, err := tokenCallback(ts, quiet)(ctx)
+
+	if !errors.Is(err, context.DeadlineExceeded) || tok != "" {
+		t.Errorf("callback = %q, %v; want a deadline error and no token", tok, err)
+	}
+
+	if took := time.Since(start); took > time.Second {
+		t.Errorf("callback returned after %v; want it at the call's 50ms deadline", took)
 	}
 }
 
