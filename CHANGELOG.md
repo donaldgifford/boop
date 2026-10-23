@@ -8,6 +8,15 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Documentation
 
 - Refresh ADR, RFC and IMPL statuses
+- *(impl)* IMPL-0005 findings on the real fixtures and the copy pin
+
+### Testing
+
+- *(renovate)* Real Renovate 44 fixtures (IMPL-0001 4.5)
+
+### Miscellaneous Tasks
+
+- *(scripts)* Phase8-fixtures.sh creates the IMPL-0001 8.1 fixtures
 
 ## [0.5.2] - 2026-10-22
 
