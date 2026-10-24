@@ -265,7 +265,7 @@ func TestBuildEnv_Preset(t *testing.T) {
 func TestBuildEnv_RejectsForbiddenOptions(t *testing.T) {
 	t.Parallel()
 	forbidden := []string{
-		"exposeAllEnv", "allowScripts", "allowedCommands", "logLevel",
+		"exposeAllEnv", "allowScripts", "allowedCommands", "allowedUnsafeExecutions", "logLevel",
 		"platform", "endpoint", "token", "autodiscover", "repositories",
 		"requireConfig", "onboarding", "baseDir", "cacheDir", "binarySource",
 		"redisUrl", "reportType", "reportPath", "exitCodeForErrors", "gitAuthor",
