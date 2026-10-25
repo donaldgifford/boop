@@ -46,20 +46,7 @@ created: 2026-10-24
 - [Testing Strategy](#testing-strategy)
 - [Migration / Rollout Plan](#migration--rollout-plan)
 - [Open Questions](#open-questions)
-  - [OQ1: Which sandbox runtime?](#oq1-which-sandbox-runtime)
-  - [OQ2: Which runs are sandboxed?](#oq2-which-runs-are-sandboxed)
-  - [OQ3: What happens when a run needs the sandbox and it is unavailable?](#oq3-what-happens-when-a-run-needs-the-sandbox-and-it-is-unavailable)
-  - [OQ4: How far do we protect the token from code in the same run?](#oq4-how-far-do-we-protect-the-token-from-code-in-the-same-run)
-  - [OQ5: Which permissions does a sandboxed run's token get?](#oq5-which-permissions-does-a-sandboxed-runs-token-get)
-  - [OQ6: How is sandbox egress limited?](#oq6-how-is-sandbox-egress-limited)
-  - [OQ7: What cache do sandboxed runs use?](#oq7-what-cache-do-sandboxed-runs-use)
-  - [OQ8: Where do sandboxed Jobs run?](#oq8-where-do-sandboxed-jobs-run)
-  - [OQ9: Does the python profile keep PIP_ONLY_BINARY inside the sandbox?](#oq9-does-the-python-profile-keep-pip_only_binary-inside-the-sandbox)
-  - [OQ10: Who owns the floor list?](#oq10-who-owns-the-floor-list)
-  - [OQ11: What does IMPL-0001 8.8 test?](#oq11-what-does-impl-0001-88-test)
-  - [OQ12: The ungated maven-wrapper in Renovate?](#oq12-the-ungated-maven-wrapper-in-renovate)
-  - [OQ13: When does the floor start enforcing?](#oq13-when-does-the-floor-start-enforcing)
-  - [OQ14: How does an ordinary run avoid executing a floor manager it did not know about?](#oq14-how-does-an-ordinary-run-avoid-executing-a-floor-manager-it-did-not-know-about)
+- [Resolved Questions](#resolved-questions)
 - [References](#references)
 <!-- markdownlint-restore -->
 <!--toc:end-->
@@ -76,8 +63,8 @@ showed that this is not enough: a Python fixture ran its dependency's
 `setup.py` in an ordinary Job.
 
 This design adds a **sandboxed tier**. A run that may execute
-repository code runs as a Kata Containers VM on dedicated nodes, with a
-hardened pod posture, an egress allowlist, no shared cache and a
+repository code runs as a Kata Containers VM on a Kata-capable worker,
+with a hardened pod posture, an egress allowlist, no shared cache and a
 narrowed token. Only in that tier does boopd turn on Renovate's unsafe
 executions. A repository that needs the sandbox never runs outside it.
 <!--docz:overview:end-->
@@ -226,7 +213,7 @@ any human sees the change.
 
 | Asset | Reachable today (runc) | In the sandboxed tier |
 | - | - | - |
-| Node kernel, kubelet credentials, other pods | a container escape away | a VM escape away, on a node that runs only sandboxed Jobs |
+| Node kernel, kubelet credentials, other pods | a container escape away | a VM escape away (any Kata-capable worker by default; dedicated nodes optional) |
 | Kubernetes API | not by token (none mounted); network reachable | denied by egress policy |
 | Worker, App private key, Temporal | network reachable unless policies say otherwise | denied |
 | Shared Redis cache (poisoning other repositories' lookups) | read and write | not configured |
@@ -246,7 +233,7 @@ flowchart LR
     W[RunRenovate activity]
     KEY[(App private key)]
   end
-  subgraph sbx["sandbox node (tainted, Kata)"]
+  subgraph sbx["Kata-capable worker"]
     subgraph vm["Kata VM: guest kernel"]
       R[Renovate] --> X[repository code: gradlew, mvnw, setup.py, Gemfile]
       TOK[(repo-scoped token)]
@@ -347,14 +334,20 @@ worker and a `kata` RuntimeClass, so the sandbox is
 
 ### Placement
 
-Sandboxed Jobs run only on **dedicated sandbox nodes**: a label
-`boopd.dev/sandbox=true` and a taint `boopd.dev/sandbox=true:NoSchedule`
-that only sandboxed Jobs tolerate (OQ8). A VM escape then reaches a node
-that runs nothing but other sandboxed Jobs: no worker, no ingest, no
-Temporal, no Redis. In the homelab that is two of the five workers.
+By default sandboxed Jobs run on **any Kata-capable worker** (OQ8). The
+VM is the isolation boundary, so reserving nodes would spend capacity
+on a second boundary the design does not depend on. boopd adds no node
+selector: the RuntimeClass's own `scheduling.nodeSelector` (in the
+homelab, the `extensions.talos.dev/kata-containers` label) keeps the
+pods on nodes that can run them. In the homelab that is all five
+workers.
 
-The sandbox block sets the node selector and toleration; profiles
-cannot override them.
+**Dedicated nodes are supported** for operators who want a VM escape to
+land on a node that runs nothing else: the sandbox block takes an
+optional `node_selector` and `toleration`, for example a label
+`boopd.dev/sandbox=true` and a taint `boopd.dev/sandbox=true:NoSchedule`
+that only sandboxed Jobs tolerate. Profiles cannot override the
+sandbox's placement.
 
 ### Pod posture
 
@@ -364,7 +357,7 @@ Everything a Job has today, plus:
 | - | - | - |
 | `runtimeClassName` | the sandbox's (`kata`) | guest kernel boundary |
 | `hostUsers` | `false` | container root is not node root, inside the guest too |
-| node selector, toleration | sandbox nodes only | escape lands on an isolated node |
+| node selector, toleration | none by default (the RuntimeClass schedules); the sandbox's when set | Kata-capable nodes, or dedicated ones by choice |
 | ServiceAccount | `boopd-sandbox`, no RBAC, token not mounted | nothing to steal from the API |
 | `dnsPolicy` | `ClusterFirst`, with DNS answers filtered by the network policy | only allowlisted names resolve to reachable addresses |
 | `RENOVATE_REDIS_URL` | unset | no shared cache ([Cache](#cache)) |
@@ -377,8 +370,12 @@ holds with the read-only root filesystem under Kata.
 
 ### Network
 
-A `CiliumNetworkPolicy` per sandboxed profile, rendered by the chart,
-selects the sandbox pods (OQ6):
+The chart renders an egress policy per sandboxed profile, selecting the
+sandbox pods, for the cluster's network provider (OQ6):
+`networkPolicies.provider` is `cilium`, `kubernetes` or `vpc-cni`.
+
+**`cilium`** (the homelab; the only provider with name-based filtering):
+a `CiliumNetworkPolicy`.
 
 - **Ingress:** none.
 - **Egress:**
@@ -395,12 +392,29 @@ selects the sandbox pods (OQ6):
   - nothing else: no cluster or service CIDRs, no node addresses, no
     LAN, no link-local or metadata addresses, no other ports.
 
+**`kubernetes`** (any CNI that enforces standard NetworkPolicy): a
+`NetworkPolicy` with no ingress and egress only to DNS on `kube-dns` and
+TCP 443 to `0.0.0.0/0` except the private, link-local, CGNAT and
+metadata ranges and the cluster's pod and service CIDRs
+(`sandbox.egress.denyCIDRs`, defaulted). `sandbox.egress.allowCIDRs`
+narrows 443 further, for example to GitHub's published ranges. Without
+names, any public host on 443 is reachable; `NOTES.txt` says so.
+
+**`vpc-cni`** (EKS): the Amazon VPC CNI enforces the same standard
+`NetworkPolicy` when its network policy agent is enabled, so the chart
+renders the `kubernetes` objects and adds the instance metadata address
+(`169.254.169.254/32`) and the VPC CIDR to the deny list explicitly.
+Name-based filtering on EKS needs an egress proxy or a firewall outside
+the cluster; the design leaves that to the operator (the proxy is a
+later option, not built here).
+
 GitHub stays reachable because Renovate needs it. Exfiltration through
 GitHub needs credentials, and the only ones in the pod are the run's
 narrowed token, whose writes are limited to the repository itself.
 
-Hubble records every denied flow; the chart's alert rules gain
-`BoopdSandboxEgressDenied` so a dependency that phones home is visible.
+With Cilium, Hubble records every denied flow, and the chart's alert
+rules gain `BoopdSandboxEgressDenied` so a dependency that phones home
+is visible. Other providers have no equivalent signal in the chart.
 
 ### Cache
 
@@ -412,6 +426,13 @@ trusts.
 The cost is more registry and GitHub lookups per sandboxed run, which
 spends more of the installation budget. `boopd_rate_spend_per_run`
 already measures it per run, and the budget entity adapts.
+
+None is the default, not a permanent answer. Large estates, several
+organisations or many sandboxed repositories may need a cache again;
+the likely shape is a per-repository Redis ACL user and key prefix, so a
+run shares cache only with its own repository's earlier runs (OQ7 b).
+The `sandbox` block leaves room for a `cache` setting when that is
+needed.
 
 ### The token
 
@@ -487,9 +508,18 @@ managers whose artifact code calls `exec`, and fails when either differs
 from what boopd knows. Renovate upgrades in the chart then force a
 decision on any new execution path.
 
-`maven-wrapper` running `./mvnw` with no gate, while `gradle-wrapper` is
-gated, looks like an upstream gap; the rollout files it with Renovate
-(OQ12).
+boopd keeps the floor and **tracks** upstream rather than driving it
+(OQ12): no issues are filed for boopd. The drift test and this table
+are where a change shows up; when Renovate gates a floor manager, it
+moves from the floor to `unsafe_executions`.
+
+| Execution | Upstream state (2026-10-25) | boopd |
+| - | - | - |
+| `gradleWrapper`, `goGenerate`, `bazelModDeps`, `mise`, `pixi` | gated by `allowedUnsafeExecutions` (renovatebot/renovate#39458; empty default #39459) | refused in raw config; a sandboxed profile's `unsafe_executions` |
+| blocked execution reported as an artifact error | open: renovatebot/renovate#44232 | today a dashboard WARN only; picked up by the run's problems |
+| `maven-wrapper` (`./mvnw`) | not gated; no upstream issue found | floor |
+| sdist builds (pip-compile, pipenv, poetry, pdm, uv) | not gated | floor |
+| Bundler, CocoaPods, Mix, NuGet, Conan | not gated | floor |
 
 ### Observability
 
@@ -516,14 +546,17 @@ gated, looks like an upstream gap; the rollout files it with Renovate
 # One sandbox per cluster. Without it, sandboxed profiles and floor
 # managers make runs fail closed.
 sandbox {
-  runtime_class = "kata"
-  node_selector = { "boopd.dev/sandbox" = "true" }
-  toleration {
-    key    = "boopd.dev/sandbox"
-    value  = "true"
-    effect = "NoSchedule"
-  }
+  runtime_class   = "kata" # placement comes from the RuntimeClass
   service_account = "boopd-sandbox"
+
+  # Optional: dedicated nodes for sandboxed Jobs only.
+  # node_selector = { "boopd.dev/sandbox" = "true" }
+  # toleration {
+  #   key    = "boopd.dev/sandbox"
+  #   value  = "true"
+  #   effect = "NoSchedule"
+  # }
+
   egress_allow = [
     "github.com", "api.github.com", "codeload.github.com",
     "objects.githubusercontent.com", "release-assets.githubusercontent.com",
@@ -551,21 +584,22 @@ Validation:
 - `unsafe_executions` only on a profile with `sandboxed = true`, values
   from Renovate's `allowedValues`;
 - `sandboxed = true` with a profile `pod.runtime_class_name` is an
-  error: the sandbox owns the runtime class, nodes and tolerations;
+  error: the sandbox owns the runtime class and placement;
 - a sandboxed profile must not be stricter-ordered below an ordinary
   one it inherits from (`order` stays the strictness order);
 - `allowedUnsafeExecutions` in any `renovate` block stays forbidden.
 
 ### Chart
 
-- `sandbox.enabled`, `sandbox.runtimeClass`, `sandbox.nodeSelector`,
-  `sandbox.tolerations`, `sandbox.egressAllow`, rendered into the
-  `sandbox` block.
+- `sandbox.enabled`, `sandbox.runtimeClass`, `sandbox.egressAllow`, and
+  the optional `sandbox.nodeSelector` and `sandbox.tolerations`,
+  rendered into the `sandbox` block.
 - A `boopd-sandbox` ServiceAccount with no bindings.
-- `CiliumNetworkPolicy` per sandboxed profile when
-  `networkPolicies.cilium` is set; plain `NetworkPolicy` (deny all but
-  DNS and 443 to `0.0.0.0/0` minus private ranges) otherwise, with a
-  warning in `NOTES.txt` that FQDN filtering needs Cilium.
+- `networkPolicies.provider`: `cilium` (`CiliumNetworkPolicy` with
+  `toFQDNs`), `kubernetes` or `vpc-cni` (standard `NetworkPolicy` with
+  `sandbox.egress.denyCIDRs` and `allowCIDRs`); see [Network](#network).
+  The non-Cilium providers get a `NOTES.txt` warning that host names
+  are not filtered.
 - The runs quota counts sandbox pods with the Kata overhead.
 - `PrometheusRule`: `BoopdSandboxNotReady`, `BoopdRunsNeedSandbox`,
   `BoopdSandboxEgressDenied` (the last from Hubble metrics, when
@@ -574,8 +608,8 @@ Validation:
 ### Job builder
 
 `jobspec.BuildInput` gains a `Sandbox` (nil for ordinary runs). With it,
-the builder sets the runtime class, node selector, toleration,
-ServiceAccount, `hostUsers: false`, ephemeral storage, the
+the builder sets the runtime class, the node selector and toleration
+when the sandbox has them, the ServiceAccount, `hostUsers: false`, ephemeral storage, the
 `boopd.dev/sandbox` label, drops `RENOVATE_REDIS_URL`, and writes
 `allowedUnsafeExecutions` into the global config from the profile.
 Without it, `unsafe_executions` is an error (`ErrNeedsSandbox`).
@@ -622,8 +656,9 @@ from the resolved profile.
   `exec` with boopd's gated and floor lists ([Keeping up with
   Renovate](#keeping-up-with-renovate)).
 - **e2e (k3d):** k3d has no Kata, so the e2e registers a RuntimeClass
-  `kata` with handler `runc` and a labelled, tainted node. It proves the
-  plumbing: placement, posture, no Redis URL, the global config, fail
+  `kata` with handler `runc` and, for the dedicated-node mode, a
+  labelled and tainted node. It proves the plumbing: placement in both
+  modes, posture, no Redis URL, the global config, fail
   closed when the RuntimeClass is deleted, `needs-sandbox` recorded.
 - **Homelab (the isolation proof),** reusing the IMPL-0001 8.1
   fixtures under a sandboxed profile with `gradleWrapper` allowed:
@@ -656,159 +691,44 @@ from the resolved profile.
    first release ships `floor_mode = "report"` (log, metric and
    repository event; runs proceed as today) and a later release
    defaults to `enforce` (OQ13).
-4. **Homelab:** label and taint two workers, enable the sandbox and the
-   Cilium policy, move `python` and a new `jvm` profile into it, switch
-   `floor_mode` to `enforce`.
-5. **Prove it:** run the homelab checks in Testing; record them in
-   INV-0002 under IMPL-0001 8.8, which is re-scoped to containment
-   (OQ11).
-6. **Upstream:** file the `maven-wrapper` gate gap with Renovate (OQ12).
+4. **Homelab:** enable the sandbox on the existing `kata` RuntimeClass
+   (all five workers) with `networkPolicies.provider = "cilium"`, move
+   `python` and a new `jvm` profile into it, switch `floor_mode` to
+   `enforce`.
+5. **Prove it:** run the homelab checks in Testing; record them in the
+   spike results investigation under IMPL-0001 8.8, which is re-scoped
+   to containment (OQ11).
+6. **Upstream:** keep the [tracking table](#keeping-up-with-renovate)
+   current on each Renovate upgrade; no issues filed (OQ12).
+7. **Later:** INV-0003 (Kata VMM choice, OQ1 c).
 <!--docz:rollout:end-->
 
 <!--docz:open-questions:start-->
 ## Open Questions
 
-Each question lists options; **a** is the recommendation and the body
-above is written to it.
+None open. The answered questions are listed under
+[Resolved Questions](#resolved-questions).
 
-### OQ1: Which sandbox runtime?
+## Resolved Questions
 
-- **a** (recommended): Kata Containers through the existing `kata`
-  RuntimeClass (QEMU in the homelab's Talos extension). A VM per pod,
-  already installed on all five workers.
-- **b**: gVisor (`runsc`). No nested virtualisation, lower overhead, but
-  a user-space kernel rather than a VM boundary, and some build tools
-  hit unimplemented syscalls. Needs the Talos `gvisor` extension.
-- **c**: Kata with an explicit VMM choice (Cloud Hypervisor or
-  Firecracker) for faster boot; Firecracker needs a devmapper
-  snapshotter.
-- **d**: Kata where available, gVisor as the fallback runtime.
-- **other:**
+Answered 2026-10-25. The body above is written to these decisions.
 
-### OQ2: Which runs are sandboxed?
-
-- **a** (recommended): repositories with a floor manager, plus profiles
-  the operator marks `sandboxed`. Everything else stays ordinary.
-- **b**: every run. One posture, no floor list to maintain, but every
-  run pays the VM boot and overhead and loses the shared cache.
-- **c**: only profiles the operator marks; no built-in floor.
-- **other:**
-
-### OQ3: What happens when a run needs the sandbox and it is unavailable?
-
-- **a** (recommended): the run does not happen; phase `needs-sandbox`,
-  a metric, an alert and a repository event.
-- **b**: run as an ordinary Job with lockfile updates turned off
-  (`updateLockFiles: false`), after verifying that covers every floor
-  manager.
-- **c**: run as an ordinary Job as today, with a warning.
-- **other:**
-
-### OQ4: How far do we protect the token from code in the same run?
-
-- **a** (recommended): bound it: narrowed permissions (OQ5), one
-  repository, revoked at the end, default-branch protection required by
-  the docs. Measure the exposure in the homelab checks.
-- **b**: split execution from the token: Renovate runs with
-  `binarySource=docker` and a `docker` shim that runs each tool command
-  in a second, token-less Kata pod sharing the workspace. Strongest, but
-  a large build that depends on Renovate's sidecar contract.
-- **c**: separate users inside the VM (tool commands under a second UID
-  that cannot read Renovate's `/proc`). Renovate has no hook for it, so
-  it needs a wrapper around every tool binary.
-- **other:**
-
-### OQ5: Which permissions does a sandboxed run's token get?
-
-- **a** (recommended): an explicit set without `workflows`
-  (`contents`, `pull_requests` and `issues` write; `checks`, `statuses`
-  and `metadata` read). GitHub Actions updates in sandboxed repositories
-  fail visibly.
-- **b**: the same permissions as ordinary runs (everything the App has).
-- **c**: the narrowed set for every run, ordinary ones included, with
-  `workflows` only for repositories the operator lists.
-- **other:**
-
-### OQ6: How is sandbox egress limited?
-
-- **a** (recommended): `CiliumNetworkPolicy` with `toFQDNs` and the DNS
-  proxy, per sandboxed profile; plain NetworkPolicy plus a warning on
-  other CNIs.
-- **b**: an egress proxy (Squid, Envoy or smokescreen) with a domain
-  allowlist and `HTTPS_PROXY`; the NetworkPolicy allows only the proxy.
-  CNI-agnostic, one more component.
-- **c**: plain NetworkPolicy by CIDR (GitHub's published ranges);
-  registries cannot be named.
-- **other:**
-
-### OQ7: What cache do sandboxed runs use?
-
-- **a** (recommended): none shared: no Redis, per-run `cacheDir`.
-- **b**: Redis with a per-repository ACL user and key prefix, so runs
-  share a cache only with their own repository's earlier runs.
-- **c**: the shared Redis, as ordinary runs.
-- **other:**
-
-### OQ8: Where do sandboxed Jobs run?
-
-- **a** (recommended): dedicated, tainted sandbox nodes (two homelab
-  workers), which run nothing else.
-- **b**: any Kata-capable worker (all five), alongside other workloads.
-- **c**: a separate cluster for sandboxed runs.
-- **other:**
-
-### OQ9: Does the python profile keep `PIP_ONLY_BINARY` inside the sandbox?
-
-- **a** (recommended): no. The sandbox is where sdists may build; the
-  flags would only make sdist-only dependencies fail.
-- **b**: yes, both: wheels only even in the sandbox; sdist-only
-  dependencies fail with a clear artifact problem.
-- **other:**
-
-### OQ10: Who owns the floor list?
-
-- **a** (recommended): boopd ships it, tied to the pinned Renovate
-  version by the drift test; config can add managers, not remove them.
-- **b**: config only, with the shipped example as the starting list.
-- **c**: no floor list (pairs with OQ2 c).
-- **other:**
-
-### OQ11: What does IMPL-0001 8.8 test?
-
-- **a** (recommended): re-scope it to containment and run it against the
-  sandboxed tier; INV-0002 records the runc result (gate blocks Gradle,
-  pip-compile builds sdists) as the baseline finding.
-- **b**: keep 8.8 as prevention under runc as written, and add a
-  separate criterion for the sandbox.
-- **other:**
-
-### OQ12: The ungated `maven-wrapper` in Renovate?
-
-- **a** (recommended): file an issue upstream asking for a
-  `mavenWrapper` value in `allowedUnsafeExecutions`, and keep it on the
-  floor meanwhile.
-- **b**: keep it on the floor only.
-- **other:**
-
-### OQ13: When does the floor start enforcing?
-
-- **a** (recommended): one release in `report` mode (log, metric,
-  repository event; runs proceed as today), then `enforce`.
-- **b**: `enforce` from the first release; floor repositories stop until
-  the sandbox is configured.
-- **other:**
-
-### OQ14: How does an ordinary run avoid executing a floor manager it did not know about?
-
-- **a** (recommended): force `skipArtifactsUpdate` for every floor
-  manager in ordinary runs, re-resolve on the report and run again in the
-  sandbox at once; a never-run repository starts in the sandbox when one
-  exists. A manifest-only branch can exist for minutes.
-- **b**: sandbox every run (OQ2 b), which removes the question.
-- **c**: an extract-only pass (`dryRun: extract`, no lookups and no
-  artifact commands) before every ordinary run to learn the managers
-  first. Exact, but two Jobs per run.
-- **other:**
+| OQ | Question | Decision |
+| - | - | - |
+| 1 | Which sandbox runtime? | **a**: Kata through the existing `kata` RuntimeClass. An explicit VMM (Cloud Hypervisor or Firecracker, option c) is for later: [INV-0003](../investigation/0003-kata-vmm-choice-for-sandboxed-runs-cloud-hypervisor-or.md), not started |
+| 2 | Which runs are sandboxed? | **a**: repositories with a floor manager, plus profiles marked `sandboxed` |
+| 3 | Sandbox needed but unavailable? | **a**: the run does not happen; `needs-sandbox`, metric, alert, repository event |
+| 4 | How far is the token protected from code in the same run? | **a**: bounded (narrowed, one repository, revoked at the end, default branch protected), measured in the homelab |
+| 5 | Sandboxed token permissions? | **a**: explicit set without `workflows` |
+| 6 | Egress control? | **a, with providers**: `cilium` (`toFQDNs`), `kubernetes` (standard NetworkPolicy by CIDR) and `vpc-cni` (EKS, the same objects plus metadata and VPC denies) ([Network](#network)) |
+| 7 | Cache for sandboxed runs? | **a**: none shared by default; a per-repository cache (b) may be needed later for large or multi-organisation estates ([Cache](#cache)) |
+| 8 | Where do sandboxed Jobs run? | **b as the default, a supported**: any Kata-capable worker, since the VM is the isolation; dedicated tainted nodes are optional ([Placement](#placement)) |
+| 9 | `PIP_ONLY_BINARY` inside the sandbox? | **a**: no; sdists may build there |
+| 10 | Who owns the floor list? | **a**: boopd, tied to the pinned Renovate by the drift test; config can add, not remove |
+| 11 | What does IMPL-0001 8.8 test? | **a**: containment, against the sandboxed tier; the runc result is the baseline finding |
+| 12 | The ungated `maven-wrapper`? | **b, tracked**: keep it on the floor; track upstream in the [tracking table](#keeping-up-with-renovate) without filing issues |
+| 13 | When does the floor enforce? | **a**: one release in `report` mode, then `enforce` |
+| 14 | Unknown floor managers in ordinary runs? | **a**: forced `skipArtifactsUpdate`, re-resolve on the report, immediate sandboxed rerun; a never-run repository starts sandboxed when a sandbox exists |
 <!--docz:open-questions:end-->
 
 <!--docz:references:start-->
@@ -819,12 +739,16 @@ above is written to it.
 - ADR-0009 (each run is a Kubernetes Job)
 - IMPL-0001 Phase 8: 8.1 fixtures, 8.3 overhead, 8.8 isolation
 - DESIGN-0004 (runs projection and UI)
+- [INV-0003](../investigation/0003-kata-vmm-choice-for-sandboxed-runs-cloud-hypervisor-or.md)
+  (Kata VMM choice; not started)
 - #33 (refuse `allowedUnsafeExecutions`)
 - Renovate 44.179.2: `allowedUnsafeExecutions` option definition;
-  `dist/modules/manager/*/artifacts.js`
+  `dist/modules/manager/*/artifacts.js`; renovatebot/renovate#39458,
+  #39459, #44232
 - Kata Containers: RuntimeClass and pod overhead; Talos
   `siderolabs/kata-containers` extension
 - Cilium: DNS-based (`toFQDNs`) egress policy, Hubble
+- Amazon VPC CNI: Kubernetes network policy support
 - Kubernetes: user namespaces (`hostUsers: false`), RuntimeClass
   scheduling and overhead, Pod Security Standards
 - GitHub: installation access tokens (`repository_ids`, `permissions`)
