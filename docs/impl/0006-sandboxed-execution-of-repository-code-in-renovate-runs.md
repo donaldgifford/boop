@@ -435,7 +435,9 @@ and one commit per numbered task. The PR split is OQ1.
     the VPC CIDR (a required value) in the deny list.
 - [ ] 10.4 RBAC for the RuntimeClass check (OQ2): a ClusterRole with
   `get` on `runtimeclasses.node.k8s.io`, limited by `resourceNames` to
-  the configured class, and its binding.
+  the configured class, and its binding; `sandbox.checkRuntimeClass:
+  false` omits both and the worker falls back to the pod admission
+  failure. Any error on the check fails closed.
 - [ ] 10.5 The runs quota adds the RuntimeClass overhead
   (`sandbox.overhead`, default 250m and 130Mi) for sandboxed Jobs.
 - [ ] 10.6 `PrometheusRule`: `BoopdSandboxNotReady`,
@@ -574,6 +576,8 @@ above are written to it.
 
 ### OQ1: How is the work split into PRs?
 
+**Answer (2026-10-25): a.**
+
 - **a** (recommended): three PRs. A: Phases 1–5 (fixture, floor, drift
   test, config, resolver, builder), `minor`. B: Phases 6–12 (token,
   detection, workflows, observability, chart, e2e, docs), released in
@@ -583,6 +587,19 @@ above are written to it.
 - **other:**
 
 ### OQ2: How does the worker know the sandbox RuntimeClass exists?
+
+**Answer (2026-10-25): a**, after weighing whether cluster-scoped RBAC
+is a step back in posture. It is a `get` on one named object, and a
+RuntimeClass holds no secrets: a handler name, the overhead and the
+scheduling labels, which any node already exposes. The ClusterRole has
+no `list` or `watch` and covers no other resource. The worker already
+holds the App key and creates Secrets in its namespace, so this read
+adds nothing an attacker would want. Without it (b), a missing sandbox
+is found only after a token has been minted and a Job created, which is
+the worse failure. A 403 or any other error on the check counts as "not
+ready" and fails closed. `sandbox.checkRuntimeClass: false` drops the
+ClusterRole for clusters where installs may not create one, and falls
+back to b.
 
 - **a** (recommended): a ClusterRole with `get` on
   `runtimeclasses.node.k8s.io`, limited by `resourceNames` to the
@@ -596,6 +613,8 @@ above are written to it.
 
 ### OQ3: Where does the Renovate drift test run?
 
+**Answer (2026-10-25): a.**
+
 - **a** (recommended): a Go test under a `renovate` build tag that
   extracts the chart's pinned image with Docker, in a CI job required
   when the pinned image or `internal/renovate/unsafe` change, and in
@@ -608,6 +627,8 @@ above are written to it.
 
 ### OQ4: When does PlanRun look for floor files?
 
+**Answer (2026-10-25): a.**
+
 - **a** (recommended): before every run: one REST tree call per run,
   which also catches a floor file added between runs.
 - **b**: only in `CheckRepo` (discovery passes and config pushes), and
@@ -616,6 +637,8 @@ above are written to it.
 - **other:**
 
 ### OQ5: Which permissions does the default sandbox token set carry?
+
+**Answer (2026-10-25): a.**
 
 - **a** (recommended): `contents`, `pull_requests` and `issues` write;
   `checks`, `statuses`, `metadata` and `vulnerability_alerts` read (the
@@ -629,6 +652,8 @@ above are written to it.
 
 ### OQ6: Where does the `needs-sandbox` repository event go before the store exists?
 
+**Answer (2026-10-25): a.**
+
 - **a** (recommended): a structured `repository_event` log line, the
   metric, the `Phase` search attribute and the alert; IMPL-0005's store
   records it as an event when it lands.
@@ -636,6 +661,8 @@ above are written to it.
 - **other:**
 
 ### OQ7: What does `report` mode do to a floor repository?
+
+**Answer (2026-10-25): a.**
 
 - **a** (recommended): it runs as an ordinary Job exactly as today (no
   forced disable), with `would_sandbox` logged and counted, so the first
@@ -647,16 +674,38 @@ above are written to it.
 
 ### OQ8: User namespaces for ordinary Jobs?
 
-Kubernetes 1.36 has `hostUsers: false` GA and the homelab has it on;
-ordinary Jobs run runc, which supports it. It is outside DESIGN-0005.
+**Revised 2026-10-25 after the first answers; awaiting confirmation.**
 
-- **a** (recommended): a follow-up issue, not in this IMPL.
-- **b**: add it here as an opt-in `runs.host_users = false` setting,
-  default off.
+With `hostUsers: false` the kubelet gives each pod its own range of
+host uids, so uid 12021 in one Job maps to a different unprivileged host
+uid than in the next. Today every boopd Job runs as host uid 12021. A
+process that escapes one ordinary runc Job can read other boopd Jobs'
+processes on the same node, including the `RENOVATE_TOKEN` in their
+environment (`/proc/<pid>/environ`) and their `emptyDir` checkouts.
+User namespaces close that cross-Job path for ordinary runs, which
+stay on runc even after the sandbox ships. The sandbox does not need
+them: Kata rejects `hostUsers: false` and the VM separates Jobs.
+
+What it needs: Kubernetes 1.33 or later (GA in 1.36), a runtime with
+idmap mounts (containerd 2.x), and Linux 6.3 or later for idmapped
+tmpfs. Nodes without them fail pod creation, which today would end as
+`Pending`. The homelab has all three. On EKS it depends on the AMI's
+kernel version.
+
+The change is small: a run setting, one line in `podTemplate` for runc
+Jobs, validation that no sandboxed profile sets it, a chart value, a
+golden Job, and a homelab check.
+
+- **a** (recommended): add it here as an opt-in `runs.host_users = false`
+  setting, default off, turned on in the homelab during Phase 13; the
+  default changes in a later release once it is proven.
+- **b**: a follow-up issue, outside this IMPL.
 - **c**: add it here, on by default.
 - **other:**
 
 ### OQ9: Pending timeout for sandboxed Jobs?
+
+**Answer (2026-10-25): a.**
 
 - **a** (recommended): its own `sandbox.pending_timeout`, defaulting to
   the runs pending timeout plus 60 s for the VM boot, tuned by Phase
@@ -666,6 +715,8 @@ ordinary Jobs run runc, which supports it. It is outside DESIGN-0005.
 
 ### OQ10: How does e2e stand in for Kata?
 
+**Answer (2026-10-25): a.**
+
 - **a** (recommended): RuntimeClass `kata` with handler `runc` in k3d;
   the isolation itself is a homelab check.
 - **b**: skip the sandbox e2e scenarios; unit and helm tests only.
@@ -674,6 +725,8 @@ ordinary Jobs run runc, which supports it. It is outside DESIGN-0005.
 - **other:**
 
 ### OQ11: Where do the floor managers' default patterns come from at build time?
+
+**Answer (2026-10-25): a.**
 
 - **a** (recommended): generated into `internal/renovate/unsafe` from
   the pinned image (Phase 2), so the builder needs no image at run
