@@ -140,10 +140,15 @@ Values become JSON. `null` is an error. These options are rejected, because
 boopd owns them through the Job's environment or they are Renovate's script
 and environment controls (DESIGN-0001 § Process builder):
 
-`exposeAllEnv`, `allowScripts`, `allowedCommands`, `logLevel`, `platform`,
-`endpoint`, `token`, `autodiscover`, `repositories`, `requireConfig`,
-`onboarding`, `baseDir`, `cacheDir`, `binarySource`, `redisUrl`,
-`reportType`, `reportPath`, `exitCodeForErrors`, `gitAuthor`.
+`exposeAllEnv`, `allowScripts`, `allowedCommands`,
+`allowedUnsafeExecutions`, `logLevel`, `platform`, `endpoint`, `token`,
+`autodiscover`, `repositories`, `requireConfig`, `onboarding`, `baseDir`,
+`cacheDir`, `binarySource`, `redisUrl`, `reportType`, `reportPath`,
+`exitCodeForErrors`, `gitAuthor`.
+
+`allowedUnsafeExecutions` stays at Renovate's empty default, so the
+Gradle wrapper, `go generate`, Bazel module deps, mise and pixi never
+run repository code in a Job.
 
 `customEnvVariables`, if set, must be a map of strings.
 

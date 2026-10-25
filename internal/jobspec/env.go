@@ -68,11 +68,12 @@ const (
 )
 
 // forbiddenOptions are rejected in global config and in profile overrides:
-// Renovate's script and env controls (ADR-0003 rules, carried over), and
-// options the builder owns through the environment, so there is one source
-// for each.
+// Renovate's script, execution and env controls (ADR-0003 rules, carried
+// over; allowedUnsafeExecutions since Renovate 44 gates repository code
+// such as the Gradle wrapper), and options the builder owns through the
+// environment, so there is one source for each.
 var forbiddenOptions = []string{
-	"exposeAllEnv", "allowScripts", "allowedCommands", "logLevel",
+	"exposeAllEnv", "allowScripts", "allowedCommands", "allowedUnsafeExecutions", "logLevel",
 	"platform", "endpoint", "token", "autodiscover", "repositories",
 	"requireConfig", "onboarding", "baseDir", "cacheDir", "binarySource",
 	"redisUrl", "reportType", "reportPath", "exitCodeForErrors", "gitAuthor",

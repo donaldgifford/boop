@@ -847,6 +847,10 @@ Rules the tests also cover:
   `customEnvVariables`, so repository config cannot change them. Whether
   `exposeAllEnv=false` keeps the token and Redis URL out of child processes
   is what the spike's environment-isolation criterion verifies.
+  Amended 2026-10-24: `allowedUnsafeExecutions` (Renovate 44, also
+  `globalOnly`) is rejected the same way. Its empty default keeps the
+  Gradle wrapper, `go generate`, Bazel module deps, mise and pixi from
+  running repository code; DESIGN-0005 covers running them safely.
 - **Profile overrides are `globalOnly` options only**, merged last, so a
   profile can tighten but repository config cannot loosen.
 - **Nothing from the worker's environment leaks.** The pod's environment is
