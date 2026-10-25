@@ -8,6 +8,26 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Bug Fixes
 
 - *(github)* Own the clients' default transport
+- *(scripts)* Phase8-fixtures tags the sdist package without signing
+- *(scripts)* Drop phase8-fixtures' INSTALLATION_ID option
+
+### Documentation
+
+- *(impl)* IMPL-0005 findings on the real fixtures and the copy pin
+
+### Testing
+
+- *(renovate)* Real Renovate 44 fixtures (IMPL-0001 4.5)
+
+### Miscellaneous Tasks
+
+- *(scripts)* Phase8-fixtures.sh creates the IMPL-0001 8.1 fixtures
+
+## [0.5.4] - 2026-10-25
+
+### Bug Fixes
+
+- *(jobspec)* Refuse allowedUnsafeExecutions
 
 ## [0.5.3] - 2026-10-23
 
