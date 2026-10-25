@@ -303,11 +303,17 @@ ordinary run must therefore never execute a floor manager, even one it
 did not expect (OQ14, amended 2026-10-25):
 
 - **Ordinary runs disable the floor managers.** The builder adds
-  `force: { "<manager>": { enabled: false } }` for every floor manager
-  to the global config. `force` is `globalOnly` and Renovate spreads it
-  over the config at every merge, so a repository cannot turn a floor
-  manager back on, and a disabled manager produces no upgrades, so no
-  branch can mix it with another manager.
+  `force: { "<manager>": { enabled: false, managerFilePatterns: [<Renovate's default>] } }`
+  for every floor manager to the global config. `force` is `globalOnly`
+  and Renovate spreads it over the config at every merge, so a
+  repository cannot turn a floor manager back on, and a disabled manager
+  produces no upgrades, so no branch can mix it with another manager.
+  The default patterns must be in the forced object: it replaces the
+  manager's whole config, and without them Renovate fails the repository
+  ("managerFilePatterns is not iterable"). Verified on 2026-10-25 with
+  the pinned 44.149.2 against `boop-fixture-python-sdist` in
+  `dryRun: extract`: `pip-compile` left the report while
+  `pip_requirements` and `renovate-config` stayed.
 - **PlanRun looks for floor files before each run.** One REST call reads
   the default branch's tree (`GET /repos/{owner}/{repo}/git/trees/{default branch}?recursive=1`)
   and matches the paths against the floor managers' default
@@ -758,6 +764,8 @@ Answered 2026-10-25. The body above is written to these decisions.
 - ADR-0009 (each run is a Kubernetes Job)
 - IMPL-0001 Phase 8: 8.1 fixtures, 8.3 overhead, 8.8 isolation
 - DESIGN-0004 (runs projection and UI)
+- [IMPL-0006](../impl/0006-sandboxed-execution-of-repository-code-in-renovate-runs.md)
+  (the implementation plan)
 - [INV-0003](../investigation/0003-kata-vmm-choice-for-sandboxed-runs-cloud-hypervisor-or.md)
   (Kata VMM choice; not started)
 - #33 (refuse `allowedUnsafeExecutions`)
