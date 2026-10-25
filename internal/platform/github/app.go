@@ -82,7 +82,7 @@ func NewAppClient(appID int64, key []byte, endpoint string, opts ...AppOption) (
 		opt(c)
 	}
 
-	transport := http.DefaultTransport
+	transport := defaultTransport
 	if c.httpClient != nil && c.httpClient.Transport != nil {
 		transport = c.httpClient.Transport
 	}
