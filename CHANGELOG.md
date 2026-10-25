@@ -13,6 +13,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(inv)* INV-0004 placeholder for nix flake updates in boopd Jobs
 - *(design)* DESIGN-0005 corrections from the pinned image and Kata
 - *(impl)* IMPL-0006 sandboxed execution plan; DESIGN-0005 forced-disable patterns
+- *(impl)* IMPL-0006 open questions answered; OQ8 revised
 
 ## [0.5.3] - 2026-10-23
 
