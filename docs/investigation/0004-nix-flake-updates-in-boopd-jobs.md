@@ -43,9 +43,12 @@ Known so far, from 2026-10-25 (not yet tested):
   and never enables it, so no repository's flake is updated today.
 - The manager updates only flakes with a `flake.lock`
   (`nix flake update <inputs>`).
-- The upstream image has no `nix` and no `/nix`; Renovate installs nix
-  at run time, and the Job runs as uid 12021 with a read-only root
-  filesystem.
+- boopd's Jobs run the chart's pinned `renovate:44-full` (44.149.2)
+  with `binarySource=global`, so nothing is installed at run time.
+  That image has `/usr/local/bin/nix` as a 721-byte containerbase shim
+  and no `/nix`; the slim `renovate:44` has no `nix` at all. The Job
+  runs as uid 12021 with a read-only root filesystem, and whether the
+  shim's nix can create its store there is the first thing to test.
 - Renovate passes the GitHub token on the command line
   (`--extra-access-tokens github.com=<token>`).
 

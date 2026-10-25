@@ -113,7 +113,9 @@ executions. A repository that needs the sandbox never runs outside it.
 ### What runs repository code
 
 From the Renovate 44.179.2 image (`dist/modules/manager`, read
-2026-10-24). "Gated" means Renovate refuses unless the global
+2026-10-24), and checked against the chart's pinned
+`renovate:44-full` (44.149.2): the same gated list, and `maven-wrapper`
+ungated in both. "Gated" means Renovate refuses unless the global
 `allowedUnsafeExecutions` list names it. That list is `globalOnly`,
 empty by default, and accepts `bazelModDeps`, `goGenerate`,
 `gradleWrapper`, `mise` and `pixi`.
@@ -298,21 +300,31 @@ The resolver sees a repository's managers only in its last run's
 report. Before the first run they are unknown, and a commit can add a
 floor manager (a new `requirements.txt`) between two ordinary runs. An
 ordinary run must therefore never execute a floor manager, even one it
-did not expect (OQ14):
+did not expect (OQ14, amended 2026-10-25):
 
-- **Ordinary runs force artifact updates off for floor managers.** The
-  builder adds `force: { "<manager>": { skipArtifactsUpdate: true } }`
-  for every floor manager to the global config. `force` is
-  `globalOnly` and overrides repository config, so a repository cannot
-  turn it back on.
-- **A floor manager in an ordinary run's report re-resolves the
-  repository** to a sandboxed profile and schedules an immediate run.
-  That run regenerates the lockfiles, so a branch the ordinary run left
-  with only its manifest updated is corrected within minutes.
-- **A repository with no report yet** resolves as if it had a floor
-  manager when the sandbox is configured, so its first run is sandboxed.
-  Without a sandbox, its first run is ordinary and the forced skip
-  protects it.
+- **Ordinary runs disable the floor managers.** The builder adds
+  `force: { "<manager>": { enabled: false } }` for every floor manager
+  to the global config. `force` is `globalOnly` and Renovate spreads it
+  over the config at every merge, so a repository cannot turn a floor
+  manager back on, and a disabled manager produces no upgrades, so no
+  branch can mix it with another manager.
+- **PlanRun looks for floor files before each run.** One REST call reads
+  the default branch's tree (`GET /repos/{owner}/{repo}/git/trees/{default branch}?recursive=1`)
+  and matches the paths against the floor managers' default
+  `managerFilePatterns`, taken from the pinned Renovate by the drift
+  test. A match, or a truncated tree, resolves the repository to a
+  sandboxed profile. Managers only ever grow in `RepoState`, so a
+  repository that has been sandboxed stays sandboxed.
+- **What this misses fails safe.** A repository that points a floor
+  manager at a non-default file name through its own
+  `managerFilePatterns` is not detected; its ordinary runs skip that
+  manager, so nothing executes and those dependencies are not updated
+  until a profile rule routes it to the sandbox.
+
+`skipArtifactsUpdate` was the first choice and does not work here:
+`force` replaces the whole `"<manager>"` object, which drops the
+repository's own manager settings, and Renovate updates artifacts for a
+branch whose upgrades mix skipped and unskipped managers.
 
 ### The runtime: Kata
 
@@ -329,6 +341,10 @@ worker and a `kata` RuntimeClass, so the sandbox is
   kernel is the first boundary and the container posture the second.
 - `emptyDir` volumes are shared into the guest; their `sizeLimit` still
   applies.
+- No user namespaces: Kubernetes user namespaces (`hostUsers: false`,
+  GA in 1.36) are for runtimes that isolate with Linux namespaces, and
+  Kata's handler rejects them ("does not support user namespaces"). The
+  guest kernel takes their place; the container still runs non-root.
 - On nested virtualisation the VM boot adds seconds per run. IMPL-0001
   8.3's overhead measurement covers sandboxed runs too.
 
@@ -356,7 +372,6 @@ Everything a Job has today, plus:
 | Setting | Value | Why |
 | - | - | - |
 | `runtimeClassName` | the sandbox's (`kata`) | guest kernel boundary |
-| `hostUsers` | `false` | container root is not node root, inside the guest too |
 | node selector, toleration | none by default (the RuntimeClass schedules); the sandbox's when set | Kata-capable nodes, or dedicated ones by choice |
 | ServiceAccount | `boopd-sandbox`, no RBAC, token not mounted | nothing to steal from the API |
 | `dnsPolicy` | `ClusterFirst`, with DNS answers filtered by the network policy | only allowlisted names resolve to reachable addresses |
@@ -364,9 +379,11 @@ Everything a Job has today, plus:
 | `ephemeral-storage` | request and limit | a disk-filling dependency stops at the pod |
 | `activeDeadlineSeconds` | the profile's, default 55 min | runaway or mining code stops |
 
-Renovate with `binarySource=install` writes tools under its home and
-`/tmp`, which are `emptyDir`s today; the Testing section verifies that
-holds with the read-only root filesystem under Kata.
+boopd runs the full image with `binarySource=global`: the tools are in
+the image and nothing is installed at run time. What the tools write
+goes to the work and `/tmp` `emptyDir`s; the Testing section verifies
+that the read-only root filesystem holds for each floor manager's tool
+under Kata.
 
 ### Network
 
@@ -384,8 +401,8 @@ a `CiliumNetworkPolicy`.
   - TCP 443 to `toFQDNs` from the sandbox allowlist plus the profile's
     additions: GitHub (`github.com`, `api.github.com`,
     `codeload.github.com`, `objects.githubusercontent.com`,
-    `release-assets.githubusercontent.com`, `ghcr.io`), containerbase's
-    tool downloads, and the ecosystem's registries (`repo1.maven.org`,
+    `release-assets.githubusercontent.com`, `ghcr.io`), and the
+    ecosystem's registries (`repo1.maven.org`,
     `services.gradle.org`, `plugins.gradle.org`, `pypi.org`,
     `files.pythonhosted.org`, `rubygems.org`, `registry.npmjs.org`,
     `proxy.golang.org`, `sum.golang.org`, `api.nuget.org`, ...);
@@ -466,13 +483,13 @@ sequenceDiagram
   participant RW as RepoWorkflow
   participant A as RunRenovate activity
   participant K as Kubernetes API
-  participant N as Sandbox node (Kata)
+  participant N as Kata-capable node
   participant R as Renovate in the VM
   participant GH as GitHub
   RW->>A: PlanRun: profile jvm (sandboxed, unsafe_executions gradleWrapper)
   A->>A: refuse if the sandbox RuntimeClass is not ready (fail closed)
   A->>GH: mint token: one repository, reduced permissions
-  A->>K: create suspended Job (runtimeClassName kata, sandbox nodes, hostUsers false, no Redis URL) and token Secret
+  A->>K: create suspended Job (runtimeClassName kata, sandbox placement, no Redis URL) and token Secret
   A->>K: unsuspend
   K->>N: schedule, Kata boots a VM for the pod
   N->>R: start Renovate with allowedUnsafeExecutions from the profile
@@ -609,7 +626,7 @@ Validation:
 
 `jobspec.BuildInput` gains a `Sandbox` (nil for ordinary runs). With it,
 the builder sets the runtime class, the node selector and toleration
-when the sandbox has them, the ServiceAccount, `hostUsers: false`, ephemeral storage, the
+when the sandbox has them, the ServiceAccount, ephemeral storage, the
 `boopd.dev/sandbox` label, drops `RENOVATE_REDIS_URL`, and writes
 `allowedUnsafeExecutions` into the global config from the profile.
 Without it, `unsafe_executions` is an error (`ErrNeedsSandbox`).
@@ -644,13 +661,14 @@ from the resolved profile.
   sandboxed profile; rules raise but never lower; no report yet means
   sandboxed when configured); config validation for every rule above;
   the builder's sandboxed pod spec and global config; the forced
-  `skipArtifactsUpdate` for floor managers in ordinary runs;
+  `enabled: false` for floor managers in ordinary runs; floor-file
+  matching over a tree listing, including a truncated tree;
   `ErrNeedsSandbox`; the narrowed mint request body.
-- **Renovate behaviour:** a homelab run over `boop-fixture-python-sdist`
-  as an ordinary run must show Renovate honouring the forced
-  `skipArtifactsUpdate` (manifest updated, `requirements.txt` not
-  regenerated, no `setup.py` marker), then the sandboxed rerun fixing
-  the branch.
+- **Renovate behaviour:** an ordinary run over
+  `boop-fixture-python-sdist` with the forced `enabled: false` must
+  report no `pip-compile` package file, open no branch for it and leave
+  no `setup.py` marker; a repository config that sets
+  `"pip-compile": { enabled: true }` must not override it.
 - **Renovate drift test:** over the pinned image, compare
   `allowedUnsafeExecutions.allowedValues` and the managers that call
   `exec` with boopd's gated and floor lists ([Keeping up with
@@ -674,7 +692,8 @@ from the resolved profile.
     answers 401 after the run;
   - `python-sdist`: the lock update succeeds inside the sandbox and the
     marker is confined to that VM;
-  - the readonly root filesystem holds with `binarySource=install`.
+  - the read-only root filesystem holds for each floor manager's tool
+    in the full image (`binarySource=global`).
 - **Overhead:** IMPL-0001 8.3's measurement split by `sandboxed`.
 <!--docz:testing:end-->
 
@@ -728,7 +747,7 @@ Answered 2026-10-25. The body above is written to these decisions.
 | 11 | What does IMPL-0001 8.8 test? | **a**: containment, against the sandboxed tier; the runc result is the baseline finding |
 | 12 | The ungated `maven-wrapper`? | **b, tracked**: keep it on the floor; track upstream in the [tracking table](#keeping-up-with-renovate) without filing issues |
 | 13 | When does the floor enforce? | **a**: one release in `report` mode, then `enforce` |
-| 14 | Unknown floor managers in ordinary runs? | **a**: forced `skipArtifactsUpdate`, re-resolve on the report, immediate sandboxed rerun; a never-run repository starts sandboxed when a sandbox exists |
+| 14 | Unknown floor managers in ordinary runs? | **a, amended 2026-10-25**: ordinary runs force floor managers `enabled: false`, and PlanRun routes a repository with floor files (from a tree listing) to the sandbox. Forcing `skipArtifactsUpdate` does not work: `force` replaces the manager object and mixed branches still update artifacts ([Learning the managers safely](#learning-the-managers-safely)) |
 <!--docz:open-questions:end-->
 
 <!--docz:references:start-->
