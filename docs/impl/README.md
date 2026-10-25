@@ -39,5 +39,6 @@ docz create impl "Your Implementation Title"
 | IMPL-0003 | GraphQL probe lookup budget, timeout split and REST fallback (issue 14) | Completed | 2026-10-15 | Donald Gifford | [0003-graphql-probe-lookup-budget-timeout-split-and-rest-fallback.md](0003-graphql-probe-lookup-budget-timeout-split-and-rest-fallback.md) |
 | IMPL-0004 | Webhook ingest: ingest role, RepoWorkflow event and changed signals, delivery audit | In Progress | 2026-10-18 | Donald Gifford | [0004-webhook-ingest-ingest-role-repoworkflow-event-and-changed.md](0004-webhook-ingest-ingest-role-repoworkflow-event-and-changed.md) |
 | IMPL-0005 | Event store, API and management UI | Draft | 2026-10-18 | Donald Gifford | [0005-event-store-api-and-management-ui.md](0005-event-store-api-and-management-ui.md) |
+| IMPL-0006 | Sandboxed execution of repository code in Renovate runs | Draft | 2026-10-25 | Donald Gifford | [0006-sandboxed-execution-of-repository-code-in-renovate-runs.md](0006-sandboxed-execution-of-repository-code-in-renovate-runs.md) |
 <!-- markdownlint-restore -->
 <!-- END DOCZ AUTO-GENERATED -->

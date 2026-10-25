@@ -797,10 +797,15 @@ Strategy, run in the homelab, with the fixtures the design describes
   admission never dips under the reserve.
   **Deferred - human required:** runs in the homelab against the 8.1
   fixtures and real GitHub.
-- [ ] 8.8 Isolation and profile enforcement: the isolation fixture finds
-  the scoped token and the Redis URL and nothing else; the second
-  repository finds no markers; the Python fixture ends `Failed` with a
-  lockfile error and its marker is absent.
+- [ ] 8.8 Isolation and profile enforcement, re-scoped to containment by
+  DESIGN-0005 OQ11 (2026-10-25): run the isolation fixtures under a
+  sandboxed profile and record DESIGN-0005 § Testing Strategy's homelab
+  checks (guest kernel, no markers across runs, denied egress, the
+  narrowed token). The runc baseline is the finding: Renovate 44's
+  `allowedUnsafeExecutions` default blocks the Gradle wrapper probes, and
+  pip-compile built `python-sdist`'s `git+` dependency (its `setup.py`
+  ran) because the homelab has no `profile_rule` blocks. Waits on
+  DESIGN-0005's implementation.
   **Deferred - human required:** runs in the homelab against the 8.1
   fixtures and real GitHub.
 - [ ] 8.9 Discovery cost: `boopd_discovery_probe_cost` for a full pass is
