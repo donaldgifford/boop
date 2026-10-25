@@ -108,8 +108,10 @@ From reading the code for this plan:
   decision log points in `RepoWorkflow`.
 - **The report parser reads only `packageFiles` keys**
   (`internal/renovate/report.go`, `reportPackageFile{PackageFile}`).
-  Phase 4 extends the struct with `deps[]`. The parser already has
-  testdata from real reports, which may need refreshing to include deps.
+  Phase 4 extends the struct with `deps[]`. The real Renovate 44
+  fixtures (`internal/renovate/testdata/renovate-44-*.log`, added
+  2026-10-23) already carry `packageFiles[].deps[]`, 140 in the live
+  report.
 - **`RunResult` is in workflow history.** Adding `Dependencies` grows
   every run's result. A large repository has hundreds of deps (OQ5).
 - **`recheck` discards payloads** (`c.Receive(ctx, nil)`). The actor
@@ -117,7 +119,12 @@ From reading the code for this plan:
 - **There is no Postgres anywhere in the repository yet.** There are no
   pgx, goose or sqlc modules, no test database, and no e2e Postgres
   (OQ2, OQ3, OQ10).
-- **repo-guardian v2 @ `a72faf9`** is the copy source. Its `ui/` uses
+- **repo-guardian v2 @ `a72faf9`** is the copy source. It is not on
+  repo-guardian's `main`, and by 2026-10-23 its `ui/` had five newer
+  commits, including repository-page fixes and Tabler Icons behind an
+  `Icon` component (INV-0024), where DESIGN-0004 says inline SVG icons.
+  Re-pin to the newest commit before Phase 11 and update DESIGN-0004's
+  icon row to match. Its `ui/` uses
   Bun 1.3.14, React 19.3, Vite 8, Tailwind v4, TanStack Router 1.170 and
   Query 5, openapi-typescript and openapi-fetch, Hono 4, openid-client
   6, jose 6, Recharts 3, Radix and `@fontsource`. On the Go side it uses
