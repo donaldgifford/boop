@@ -61,6 +61,8 @@ resolved as recorded there (2026-10-25):
   not happen, and says so (`needs-sandbox`).
 - **A drift test** that ties the floor, the gated list and the floor
   managers' file patterns to the pinned Renovate image.
+- **User namespaces for ordinary Jobs**, opt-in and off by default
+  (OQ8): each runc Job gets its own host uid range.
 
 **Implements:** DESIGN-0005. Re-scopes IMPL-0001 8.8, which runs against
 this tier once Phase 13 is done.
@@ -108,7 +110,6 @@ this tier once Phase 13 is done.
 - **Splitting the token from the execution** (DESIGN-0005 OQ4 b).
 - **A sandbox cache** (DESIGN-0005 OQ7 b), until scale asks for it.
 - **An egress proxy** for name-based filtering without Cilium.
-- **User namespaces for ordinary Jobs** (OQ8 here).
 - **The DESIGN-0004 store columns**: the fields land in `RunResult`;
   the store picks them up when IMPL-0005 runs.
 <!--docz:out-of-scope:end-->
@@ -255,6 +256,9 @@ and one commit per numbered task. The PR split is OQ1.
   `sandbox` block and sandboxed `python` and `jvm` profiles;
   `docs/config.md` documents every key (the reference test keeps it
   complete).
+- [ ] 3.6 `runs.host_users` (bool, default `true`, OQ8): `false` asks
+  for a user namespace in ordinary Jobs. A sandboxed profile is never
+  given one, and the setting is documented as runc-only.
 
 #### Success Criteria
 
@@ -307,10 +311,13 @@ and one commit per numbered task. The PR split is OQ1.
 - [ ] 5.6 Tests: the env table and golden Job for an ordinary run, an
   ordinary run in `enforce` mode, a sandboxed run with and without
   dedicated placement, `force` rejected in global and profile config.
+- [ ] 5.7 `BuildInput.HostUsers`: when `false` and the run is not
+  sandboxed, `podTemplate` sets `hostUsers: false`; a sandboxed run
+  never sets it (Kata rejects it). A golden Job for each case.
 
 #### Success Criteria
 
-- Golden Jobs match for all four shapes; the forced object matches the
+- Golden Jobs match for all six shapes; the forced object matches the
   Phase 1.1 fixture's.
 - `TestBuildEnv_RejectsForbiddenOptions` covers `force`.
 
@@ -448,6 +455,9 @@ and one commit per numbered task. The PR split is OQ1.
 - [ ] 10.8 helm-unittest suites for every template and provider, the
   schema's rejections, and `boopd config validate` on the rendered
   config.
+- [ ] 10.9 `runs.hostUsers` (default `true`) rendered into `boopd.hcl`;
+  `NOTES.txt` names the node requirements when it is `false`
+  (Kubernetes 1.33+, containerd 2.x, Linux 6.3+).
 
 #### Success Criteria
 
@@ -516,13 +526,19 @@ and one commit per numbered task. The PR split is OQ1.
   investigation.
 - [ ] 13.5 The chart default moves to `enforce` in the release after
   13.4 (DESIGN-0005 OQ13).
-- [ ] 13.6 IMPL status → Completed; DESIGN-0005 → Implemented.
+- [ ] 13.6 **Deferred, human required.** Homelab: set `runs.hostUsers:
+  false`; confirm ordinary Jobs start, and that a pod's process maps to
+  a host uid other than 12021 (`/proc/<pid>/uid_map` on the node) and
+  differs between two concurrent Jobs. The default stays `true` in this
+  IMPL; flipping it is a later release.
+- [ ] 13.7 IMPL status → Completed; DESIGN-0005 → Implemented.
 
 #### Success Criteria
 
 - The homelab runs `enforce` with every floor repository sandboxed and
   no `needs-sandbox` outside the fixtures' failure cases.
 - IMPL-0001 8.8's containment checks pass and are recorded.
+- Ordinary homelab Jobs run in their own user namespaces.
 
 ## File Changes
 
@@ -674,7 +690,7 @@ back to b.
 
 ### OQ8: User namespaces for ordinary Jobs?
 
-**Revised 2026-10-25 after the first answers; awaiting confirmation.**
+**Answer (2026-10-25): a**, default off. Tasks 3.6, 5.7, 10.9 and 13.6.
 
 With `hostUsers: false` the kubelet gives each pod its own range of
 host uids, so uid 12021 in one Job maps to a different unprivileged host
