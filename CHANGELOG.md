@@ -8,6 +8,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Documentation
 
 - *(design)* DESIGN-0005 sandboxed execution of repository code
+- *(design)* DESIGN-0005 open questions answered; INV-0003 placeholder
 
 ## [0.5.3] - 2026-10-23
 
