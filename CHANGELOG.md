@@ -22,6 +22,12 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 - *(scripts)* Phase8-fixtures.sh creates the IMPL-0001 8.1 fixtures
 
+## [0.5.4] - 2026-10-25
+
+### Bug Fixes
+
+- *(jobspec)* Refuse allowedUnsafeExecutions
+
 ## [0.5.3] - 2026-10-23
 
 ### Bug Fixes
