@@ -14,6 +14,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(design)* DESIGN-0005 corrections from the pinned image and Kata
 - *(impl)* IMPL-0006 sandboxed execution plan; DESIGN-0005 forced-disable patterns
 - *(impl)* IMPL-0006 open questions answered; OQ8 revised
+- *(impl)* IMPL-0006 OQ8 answered: opt-in user namespaces for ordinary Jobs
 
 ## [0.5.3] - 2026-10-23
 
