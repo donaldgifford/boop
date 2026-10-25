@@ -9,6 +9,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 - *(design)* DESIGN-0005 sandboxed execution of repository code
 - *(design)* DESIGN-0005 open questions answered; INV-0003 placeholder
+- *(impl)* IMPL-0001 8.8 re-scoped to containment (DESIGN-0005 OQ11)
+- *(inv)* INV-0004 placeholder for nix flake updates in boopd Jobs
+- *(design)* DESIGN-0005 corrections from the pinned image and Kata
+- *(impl)* IMPL-0006 sandboxed execution plan; DESIGN-0005 forced-disable patterns
 
 ## [0.5.3] - 2026-10-23
 
