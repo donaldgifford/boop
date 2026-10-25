@@ -64,6 +64,21 @@ const (
 	discoveredRateBurst = 10
 )
 
+// defaultTransport is the base transport for clients built without
+// WithHTTPClient or WithAppHTTPClient: one pool shared by every client,
+// like http.DefaultTransport, but owned by this package. httptest's
+// Server.Close calls http.DefaultTransport.CloseIdleConnections, which
+// breaks a parallel test's connection as it is reused, and a POST (the
+// GraphQL probe) is not retried.
+var defaultTransport = newDefaultTransport()
+
+func newDefaultTransport() http.RoundTripper {
+	if t, ok := http.DefaultTransport.(*http.Transport); ok {
+		return t.Clone()
+	}
+	return http.DefaultTransport
+}
+
 // DiscoveredRate turns an installation's hourly core limit from
 // /rate_limit into a limiter rate and burst: limit / 3600 per second,
 // burst 10. ok is false for a non-positive limit, when the default
@@ -179,7 +194,7 @@ func NewWithApp(auth AppAuth, opts ...ClientOption) (*Client, error) {
 		opt(c)
 	}
 
-	transport := http.DefaultTransport
+	transport := defaultTransport
 	if c.httpClient != nil && c.httpClient.Transport != nil {
 		transport = c.httpClient.Transport
 	}
@@ -216,7 +231,7 @@ func NewWithToken(auth TokenAuth, opts ...ClientOption) (*Client, error) {
 
 	httpClient := c.httpClient
 	if httpClient == nil {
-		httpClient = &http.Client{Transport: &tokenTransport{token: auth.Token, base: http.DefaultTransport}}
+		httpClient = &http.Client{Transport: &tokenTransport{token: auth.Token, base: defaultTransport}}
 	} else {
 		httpClient.Transport = &tokenTransport{token: auth.Token, base: httpClient.Transport}
 	}
