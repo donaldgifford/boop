@@ -7,6 +7,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Bug Fixes
 
+- *(github)* Own the clients' default transport
 - *(scripts)* Phase8-fixtures tags the sdist package without signing
 - *(scripts)* Drop phase8-fixtures' INSTALLATION_ID option
 
