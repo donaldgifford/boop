@@ -22,6 +22,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(impl)* IMPL-0006 open questions answered; OQ8 revised
 - *(impl)* IMPL-0006 OQ8 answered: opt-in user namespaces for ordinary Jobs
 - *(impl)* IMPL-0005 findings on the real fixtures and the copy pin
+- Python profile does not contain pip-compile git+ builds
 
 ### Testing
 
