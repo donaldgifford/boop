@@ -128,7 +128,7 @@ empty by default, and accepts `bazelModDeps`, `goGenerate`,
 | `mise` | `mise lock` | mise config and plugins | `mise` | blocked |
 | `pixi` | `pixi lock` | build backends | `pixi` | blocked |
 | `maven-wrapper` | `./mvnw wrapper:wrapper` | the wrapper script | **none** | **runs** |
-| `pip-compile`, `pipenv`, `poetry`, `pep621` | the resolver (`pip-compile`, `pipenv lock`, `poetry update --lock`, `pdm`, `uv`) | `setup.py` and build backends of sdists and `git+` requirements | **none** | **runs**; the python profile's `PIP_ONLY_BINARY` and `UV_NO_BUILD` cover part of it |
+| `pip-compile`, `pipenv`, `poetry`, `pep621` | the resolver (`pip-compile`, `pipenv lock`, `poetry update --lock`, `pdm`, `uv`) | `setup.py` and build backends of sdists and `git+` requirements | **none** | **runs**; `PIP_ONLY_BINARY` and `UV_NO_BUILD` did not stop a `git+` build and were removed from the python profile (2026-10-26) |
 | `bundler` | `bundler lock --update` | Gemfile and gemspecs (Ruby) | **none** | **runs** |
 | `cocoapods` | `pod install` | Podfile (Ruby) | **none** | **runs** |
 | `mix` | `mix deps.get`, `mix deps.update` | `mix.exs` (Elixir) | **none** | **runs** |
@@ -153,8 +153,13 @@ The IMPL-0001 Phase 8 fixtures ran on 2026-10-23:
   that dependency's `setup.py` ran in the Job. The fixture resolved to
   `baseline`, because the homelab's `boopd.hcl` has profiles but no
   `profile_rule` blocks, so the python profile's flags never applied.
-  Whether `PIP_ONLY_BINARY=:all:` stops a `git+` build is still
-  untested.
+  **Retested 2026-10-26 under the python profile** (homelab
+  `profile_rule` blocks added, v0.5.4): the flags do not stop it.
+  pip-compile regenerated `requirements.txt` with no artifact error, so
+  the `git+` dependency was built and its `setup.py` ran.
+  `--only-binary` covers index lookups, not direct references. It also
+  wrote `--only-binary :all:` into the generated `requirements.txt`, so
+  the profile's flag reaches the repository's users (IMPL-0006 OQ12).
 
 Environment flags depend on the right rule matching, and they are
 specific to each tool. A posture that does not depend on either is the

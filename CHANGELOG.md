@@ -10,6 +10,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(scripts)* Phase8-fixtures tags the sdist package without signing
 - *(scripts)* Drop phase8-fixtures' INSTALLATION_ID option
 - *(github)* Own the clients' default transport
+- *(chart)* Drop PIP_ONLY_BINARY and UV_NO_BUILD from the python profile
 
 ### Documentation
 
@@ -22,6 +23,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(impl)* IMPL-0006 open questions answered; OQ8 revised
 - *(impl)* IMPL-0006 OQ8 answered: opt-in user namespaces for ordinary Jobs
 - *(impl)* IMPL-0005 findings on the real fixtures and the copy pin
+- Python profile does not contain pip-compile git+ builds
 
 ### Testing
 

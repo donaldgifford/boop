@@ -156,8 +156,19 @@ From reading the code and running the pinned image for this plan:
   checking that a RuntimeClass exists is a cluster-scoped read (OQ2).
 - **The homelab** has Kata 3.32.0 on all five workers, RuntimeClass
   `kata` (overhead 250m and 130Mi, scheduling on the extension label),
-  Cilium 1.20.1 and Kubernetes 1.36.5. Its `boopd.hcl` has profiles but
-  no `profile_rule` blocks.
+  Cilium 1.20.1 and Kubernetes 1.36.5. Its `boopd.hcl` gained
+  `profile_rule` blocks for the `:python` and `:node` presets on
+  2026-10-26 (v0.5.4).
+- **The python profile does not contain pip-compile** (2026-10-26).
+  `boop-fixture-python-sdist` resolved to `python`; a rebase of its PR #1
+  (run attempt 6, branch at `a600d2d`) regenerated `requirements.txt`
+  with no artifact error. The `git+` dependency was therefore built and
+  its `setup.py` ran: `--only-binary` covers index lookups, not direct
+  references. The run also wrote `--only-binary :all:` into the
+  generated `requirements.txt`, so the flag passes to whoever installs
+  from it (OQ12). This is the case the floor and the sandbox exist for:
+  `pip-compile` is a floor manager, so in `enforce` mode the repository
+  runs only in the sandbox.
 
 ## Implementation Phases
 
@@ -259,6 +270,9 @@ and one commit per numbered task. The PR split is OQ1.
 - [ ] 3.6 `runs.host_users` (bool, default `true`, OQ8): `false` asks
   for a user namespace in ordinary Jobs. A sandboxed profile is never
   given one, and the setting is documented as runc-only.
+- [x] 3.7 (OQ12) Remove `PIP_ONLY_BINARY` and `UV_NO_BUILD` from the
+  python profile in `charts/boopd/values.yaml` and `examples/boopd.hcl`;
+  `docs/config.md` says why (Findings, 2026-10-26).
 
 #### Success Criteria
 
@@ -750,6 +764,27 @@ golden Job, and a homelab check.
 - **b**: read from the Renovate image at worker start through a helper
   Job.
 - **c**: hand-maintained in Go, checked by the drift test.
+- **other:**
+
+### OQ12: What happens to the python profile's `PIP_ONLY_BINARY` and `UV_NO_BUILD`?
+
+**Answer (2026-10-26): a.** Done ahead of Phase 3 (task 3.7). The
+homelab retest without them (run attempt 7, branch at `06d3b90`) wrote a
+`requirements.txt` without `--only-binary :all:` and built the `git+`
+dependency as before.
+
+They did not stop a `git+` build (Findings), and pip-compile copies
+`--only-binary :all:` into the lock file it writes, which changes how the
+repository's users install. Ordinary runs no longer depend on them once
+the floor forces pip-compile, pipenv, poetry and pep621 off, and
+DESIGN-0005 OQ9 already leaves them out of the sandbox.
+
+- **a** (recommended): remove both from the chart's and the example's
+  python profile in Phase 3 (task 3.7), with a note in `docs/config.md`
+  on why; the python profile keeps its resources and egress label.
+- **b**: keep them for ordinary runs in `report` mode only, and remove
+  them when the default moves to `enforce` (13.5).
+- **c**: keep them; document the lock-file side effect.
 - **other:**
 
 <!--docz:references:start-->

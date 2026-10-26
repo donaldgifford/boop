@@ -125,8 +125,8 @@ func TestValidation(t *testing.T) {
 		},
 		{
 			name:    "forbidden profile option",
-			old:     "customEnvVariables = {",
-			new:     "allowScripts = true\n    customEnvVariables = {",
+			old:     `inherit = "baseline" # scripts are already ignored by default`,
+			new:     `inherit = "baseline" # scripts are already ignored by default` + "\n  renovate {\n    allowScripts = true\n  }",
 			summary: "Forbidden Renovate option",
 			at:      "allowScripts",
 		},
@@ -139,8 +139,8 @@ func TestValidation(t *testing.T) {
 		},
 		{
 			name:    "customEnvVariables not strings",
-			old:     `UV_NO_BUILD     = "1"`,
-			new:     `UV_NO_BUILD = 1`,
+			old:     `inherit = "baseline" # scripts are already ignored by default`,
+			new:     `inherit = "baseline" # scripts are already ignored by default` + "\n  renovate {\n    customEnvVariables = { UV_NO_BUILD = 1 }\n  }",
 			summary: "Forbidden Renovate option",
 			at:      "customEnvVariables",
 		},
