@@ -10,6 +10,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(scripts)* Phase8-fixtures tags the sdist package without signing
 - *(scripts)* Drop phase8-fixtures' INSTALLATION_ID option
 - *(github)* Own the clients' default transport
+- *(chart)* Drop PIP_ONLY_BINARY and UV_NO_BUILD from the python profile
 
 ### Documentation
 
