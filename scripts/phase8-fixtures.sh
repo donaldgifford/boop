@@ -206,8 +206,8 @@ git -C "${work}/${name}" push -qf origin v0.1.0
 
 # --- python-sdist ----------------------------------------------------
 # pip-compile resolves every requirement, so updating six makes it build
-# the git dependency from source: setup.py runs unless the python
-# profile's PIP_ONLY_BINARY=:all: stops it first.
+# the git dependency from source, so setup.py runs. PIP_ONLY_BINARY does
+# not stop it (IMPL-0001 8.8); only the sandbox contains it.
 name="${PREFIX}python-sdist"
 checkout "${name}" "${VISIBILITY}" "boop Phase 8 fixture: sdist-only dependency under the python profile"
 renovate_config "${work}/${name}" '  "pip-compile": {

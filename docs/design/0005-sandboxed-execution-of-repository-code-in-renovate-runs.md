@@ -128,7 +128,7 @@ empty by default, and accepts `bazelModDeps`, `goGenerate`,
 | `mise` | `mise lock` | mise config and plugins | `mise` | blocked |
 | `pixi` | `pixi lock` | build backends | `pixi` | blocked |
 | `maven-wrapper` | `./mvnw wrapper:wrapper` | the wrapper script | **none** | **runs** |
-| `pip-compile`, `pipenv`, `poetry`, `pep621` | the resolver (`pip-compile`, `pipenv lock`, `poetry update --lock`, `pdm`, `uv`) | `setup.py` and build backends of sdists and `git+` requirements | **none** | **runs**; the python profile's `PIP_ONLY_BINARY` and `UV_NO_BUILD` cover part of it |
+| `pip-compile`, `pipenv`, `poetry`, `pep621` | the resolver (`pip-compile`, `pipenv lock`, `poetry update --lock`, `pdm`, `uv`) | `setup.py` and build backends of sdists and `git+` requirements | **none** | **runs**; `PIP_ONLY_BINARY` and `UV_NO_BUILD` did not stop a `git+` build and were removed from the python profile (2026-10-26) |
 | `bundler` | `bundler lock --update` | Gemfile and gemspecs (Ruby) | **none** | **runs** |
 | `cocoapods` | `pod install` | Podfile (Ruby) | **none** | **runs** |
 | `mix` | `mix deps.get`, `mix deps.update` | `mix.exs` (Elixir) | **none** | **runs** |

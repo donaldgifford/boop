@@ -49,9 +49,6 @@ renders the golden example (examples/boopd.hcl as values):
             limits = {"memory":"6Gi"}
           }
         }
-        renovate {
-          customEnvVariables = {"PIP_ONLY_BINARY":":all:","UV_NO_BUILD":"1"}
-        }
       }
 
       profile "strict" {

@@ -270,7 +270,7 @@ and one commit per numbered task. The PR split is OQ1.
 - [ ] 3.6 `runs.host_users` (bool, default `true`, OQ8): `false` asks
   for a user namespace in ordinary Jobs. A sandboxed profile is never
   given one, and the setting is documented as runc-only.
-- [ ] 3.7 (OQ12) Remove `PIP_ONLY_BINARY` and `UV_NO_BUILD` from the
+- [x] 3.7 (OQ12) Remove `PIP_ONLY_BINARY` and `UV_NO_BUILD` from the
   python profile in `charts/boopd/values.yaml` and `examples/boopd.hcl`;
   `docs/config.md` says why (Findings, 2026-10-26).
 
@@ -767,6 +767,11 @@ golden Job, and a homelab check.
 - **other:**
 
 ### OQ12: What happens to the python profile's `PIP_ONLY_BINARY` and `UV_NO_BUILD`?
+
+**Answer (2026-10-26): a.** Done ahead of Phase 3 (task 3.7). The
+homelab retest without them (run attempt 7, branch at `06d3b90`) wrote a
+`requirements.txt` without `--only-binary :all:` and built the `git+`
+dependency as before.
 
 They did not stop a `git+` build (Findings), and pip-compile copies
 `--only-binary :all:` into the lock file it writes, which changes how the

@@ -104,10 +104,9 @@ boopd:
           boopd.dev/egress: python
         resources:
           limits: {memory: 6Gi}
-      renovate:
-        customEnvVariables:
-          PIP_ONLY_BINARY: ":all:"
-          UV_NO_BUILD: "1"
+      # No PIP_ONLY_BINARY or UV_NO_BUILD: they do not stop a git+ or
+      # direct-reference build, and pip-compile writes the flag into the
+      # lock file (IMPL-0006 OQ12). The sandbox contains repository code.
     strict:
       inherit: python
   # Ascending strictness.

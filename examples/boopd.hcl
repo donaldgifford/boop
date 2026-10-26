@@ -66,13 +66,9 @@ profile "python" {
       limits = { memory = "6Gi" }
     }
   }
-  renovate {
-    # Passed to child processes by Renovate.
-    customEnvVariables = {
-      PIP_ONLY_BINARY = ":all:" # pip, pip-compile, pipenv: never build an sdist
-      UV_NO_BUILD     = "1"     # uv: never build an sdist
-    }
-  }
+  # No PIP_ONLY_BINARY or UV_NO_BUILD: they do not stop a git+ or
+  # direct-reference build, and pip-compile writes the flag into the lock
+  # file (IMPL-0006 OQ12). The sandbox contains repository code.
 }
 
 profile "strict" {

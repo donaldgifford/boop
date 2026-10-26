@@ -152,6 +152,13 @@ run repository code in a Job.
 
 `customEnvVariables`, if set, must be a map of strings.
 
+The example and chart `python` profiles set no `PIP_ONLY_BINARY` or
+`UV_NO_BUILD` (removed 2026-10-26, IMPL-0006 OQ12). In the homelab
+they did not stop pip-compile building a `git+` requirement, so its
+`setup.py` still ran, and pip-compile wrote `--only-binary :all:` into
+the generated `requirements.txt`. DESIGN-0005's sandbox is what
+contains repository code.
+
 ### redis_secret_ref
 
 | Setting | Type | Default | Description |
