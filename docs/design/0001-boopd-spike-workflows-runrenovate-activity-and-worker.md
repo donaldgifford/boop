@@ -289,6 +289,14 @@ runtime class and the egress policy are what contain it, and that is the
 reason the profile has both levers (OQ9). A repository that genuinely needs
 an sdist build opts out by `profileRules`, knowingly.
 
+> **Amended 2026-10-26 (IMPL-0001 8.8, IMPL-0006 OQ12).** In the
+> homelab, `PIP_ONLY_BINARY=:all:` did not stop pip-compile building a
+> `git+` requirement: the flag covers index lookups, not direct
+> references, so that dependency's `setup.py` ran. pip-compile also
+> wrote `--only-binary :all:` into the generated `requirements.txt`.
+> The flags narrow sdist builds from an index; DESIGN-0005's sandbox is
+> what contains repository code.
+
 **How ecosystems are learned** (OQ1):
 
 - **From the config file at discovery.** The probe already asks GitHub for

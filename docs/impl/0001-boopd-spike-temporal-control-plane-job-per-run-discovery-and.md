@@ -759,7 +759,7 @@ Strategy, run in the homelab, with the fixtures the design describes
     `/tmp/boopd-sdist-marker` and prints it. Updating `six` makes
     pip-compile resolve, and so build, the git dependency; the `python`
     profile's `PIP_ONLY_BINARY=:all:` should make the lock update fail
-    first.
+    first. It does not (2026-10-26, see 8.8).
   - `many-updates`: a `package.json` and lockfile pinning about fifty
     dependencies at old majors, so an uninterrupted run takes well over
     the forced two-minute soft deadline.
@@ -804,7 +804,11 @@ Strategy, run in the homelab, with the fixtures the design describes
   narrowed token). The runc baseline is the finding: Renovate 44's
   `allowedUnsafeExecutions` default blocks the Gradle wrapper probes, and
   pip-compile built `python-sdist`'s `git+` dependency (its `setup.py`
-  ran) because the homelab has no `profile_rule` blocks. Waits on
+  ran) under `baseline`, and again on 2026-10-26 under the `python`
+  profile (attempt 6, PR #1 rebased to `a600d2d`): `PIP_ONLY_BINARY`
+  reached pip-compile, which wrote `--only-binary :all:` into
+  `requirements.txt`, and still built the direct reference. A profile
+  does not contain Python; the sandbox does (IMPL-0006). Waits on
   DESIGN-0005's implementation.
   **Deferred - human required:** runs in the homelab against the 8.1
   fixtures and real GitHub.

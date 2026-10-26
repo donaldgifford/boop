@@ -153,8 +153,13 @@ The IMPL-0001 Phase 8 fixtures ran on 2026-10-23:
   that dependency's `setup.py` ran in the Job. The fixture resolved to
   `baseline`, because the homelab's `boopd.hcl` has profiles but no
   `profile_rule` blocks, so the python profile's flags never applied.
-  Whether `PIP_ONLY_BINARY=:all:` stops a `git+` build is still
-  untested.
+  **Retested 2026-10-26 under the python profile** (homelab
+  `profile_rule` blocks added, v0.5.4): the flags do not stop it.
+  pip-compile regenerated `requirements.txt` with no artifact error, so
+  the `git+` dependency was built and its `setup.py` ran.
+  `--only-binary` covers index lookups, not direct references. It also
+  wrote `--only-binary :all:` into the generated `requirements.txt`, so
+  the profile's flag reaches the repository's users (IMPL-0006 OQ12).
 
 Environment flags depend on the right rule matching, and they are
 specific to each tool. A posture that does not depend on either is the
