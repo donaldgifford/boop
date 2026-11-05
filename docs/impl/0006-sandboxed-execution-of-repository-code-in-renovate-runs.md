@@ -155,8 +155,9 @@ From reading the code and running the pinned image for this plan:
 - **The worker's Role is namespaced** (`charts/boopd/templates/rbac.yaml`);
   checking that a RuntimeClass exists is a cluster-scoped read (OQ2).
 - **The homelab** has Kata 3.32.0 on all five workers, RuntimeClass
-  `kata` (overhead 250m and 130Mi, scheduling on the extension label),
-  Cilium 1.20.1 and Kubernetes 1.36.5. Its `boopd.hcl` gained
+  `kata` (overhead 250m and 250Mi, node selector
+  `runtime.hoomlab.dev/kata: "true"`; corrected 2026-11-05, it changed
+  in homelab #284), Cilium 1.20.1 and Kubernetes 1.36.5. Its `boopd.hcl` gained
   `profile_rule` blocks for the `:python` and `:node` presets on
   2026-10-26 (v0.5.4).
 - **The python profile does not contain pip-compile** (2026-10-26).
@@ -169,6 +170,51 @@ From reading the code and running the pinned image for this plan:
   from it (OQ12). This is the case the floor and the sandbox exist for:
   `pip-compile` is a floor manager, so in `enforce` mode the repository
   runs only in the sandbox.
+
+## Findings (2026-11-04/05, homelab)
+
+Tasks 1.2 and 1.3 ran in the homelab as part of its IMPL-0018 Phase 1
+(tasks 1.8, 1.9, 1.8b), on Talos v1.13.12, Kata 3.32.0. The manifests
+are in the homelab repo under `docs/impl/assets/0018/`
+(`10-boop-posture.yaml`, `09-net.yaml`, `11-guest-seccomp.yaml`).
+
+- **The posture runs under Kata.** uid 12021, read-only root,
+  `CapEff` 0, `emptyDir` `/work` and `/tmp`, no ServiceAccount token,
+  with the chart's pinned `renovate:44-full` (44.149.2): Renovate
+  starts, Python 3.14.8, Ruby 4.0.7, OpenJDK 25 and bundler 4.0.22 are
+  present, and `pip-compile` writes a pinned `requirements.txt` from
+  `/work`. Guest kernel `6.18.35`, node `6.18.57-talos`.
+  Creation to started with the image cached: **4 s** on `work05`
+  (2 s for a small image; runc 1 s). That is the number OQ9 needs.
+- **`hostUsers: false` is rejected**, as the earlier Finding expected:
+  `FailedCreatePodSandBox … RuntimeClass handler "kata" does not
+  support user namespaces`.
+- **The VMM is Cloud Hypervisor**, not QEMU (the extension's
+  `configuration.toml` is `[hypervisor.clh]`). INV-0003's starting
+  point is CLH.
+- **The pod's seccomp profile is not applied in the guest by
+  default.** The extension sets `disable_guest_seccomp = true`, so with
+  `RuntimeDefault` the guest shows `Seccomp: 0` and `unshare -U`
+  succeeds. The pod annotation
+  `io.katacontainers.config.runtime.disable_guest_seccomp: "false"`
+  turns it back on for that pod: `Seccomp: 2`, and `unshare -U` gets
+  `Operation not permitted`. The homelab's CRI config allows
+  `io.katacontainers.*` pod annotations; a cluster that doesn't would
+  drop it. Without user namespaces this profile is one of the layers
+  in front of the guest kernel, so sandboxed Jobs set the annotation
+  (5.8).
+- **`toFQDNs` egress policy holds for a Kata pod.** A
+  `CiliumNetworkPolicy` with the DNS proxy and `toFQDNs` on 443:
+  `api.github.com` allowed; `example.com`, the node's `:10250`, the
+  Kubernetes API and `169.254.169.254` denied, and Hubble logs each
+  as `Policy denied DROPPED`. The same holds for a container nested
+  inside the pod (via dind), so traffic can't route around it.
+- **Plain `emptyDir` volumes are virtio-fs in the guest**, not
+  guest-local. That's fine for `/work` and `/tmp` (pip-compile ran on
+  them). It only matters for overlay mounts, which Renovate doesn't
+  make.
+- **Metrics are pod-level only.** `container_memory_working_set_bytes`
+  is reported for the pod's cgroup, not per container.
 
 ## Implementation Phases
 
@@ -184,7 +230,7 @@ and one commit per numbered task. The PR split is OQ1.
   `dryRun: extract` run over `boop-fixture-python-sdist` with the forced
   object, sanitized like the 4.5 fixtures, with the command in the
   testdata README.
-- [ ] 1.2 **Deferred, human required.** In the homelab, run a pod with
+- [x] 1.2 **Deferred, human required.** In the homelab, run a pod with
   the boopd Job's exact posture (`internal/jobspec` output for a
   sandboxed profile, applied by hand) under `runtimeClassName: kata`:
   - it schedules on a Kata worker and `uname -r` differs from the node's;
@@ -193,10 +239,18 @@ and one commit per numbered task. The PR split is OQ1.
   - the same pod with `hostUsers: false` is rejected (records the
     Finding);
   - the time from creation to Running, for the pending timeout (OQ9).
-- [ ] 1.3 **Deferred, human required.** A `CiliumNetworkPolicy` with
+
+  Done 2026-11-04 (Findings, 2026-11-04/05). `pip-compile` ran and
+  `bundle --version` answered; `./gradlew` was not run because the spike
+  had no fixture checkout. It carries into 13.4's homelab checks over
+  the fixtures. Also found: seccomp is off in the guest unless the pod
+  carries an annotation (5.8).
+- [x] 1.3 **Deferred, human required.** A `CiliumNetworkPolicy` with
   `toFQDNs` and the DNS proxy, selecting a Kata pod, allows
   `api.github.com` on 443 and denies `example.com`, the node address,
   the Kubernetes API and `169.254.169.254`; Hubble shows the denials.
+  Done 2026-11-04: all as expected, nested containers included
+  (Findings, 2026-11-04/05).
 - [ ] 1.4 Mint a token with the narrowed permissions (OQ5's set) for a
   fixture repository and run Renovate live against it with the pinned
   image: it clones, pushes a branch, opens a PR and updates the
@@ -328,6 +382,12 @@ and one commit per numbered task. The PR split is OQ1.
 - [ ] 5.7 `BuildInput.HostUsers`: when `false` and the run is not
   sandboxed, `podTemplate` sets `hostUsers: false`; a sandboxed run
   never sets it (Kata rejects it). A golden Job for each case.
+- [ ] 5.8 Sandboxed: the pod template carries the annotation
+  `io.katacontainers.config.runtime.disable_guest_seccomp: "false"`
+  next to `RuntimeDefault`, so the profile applies inside the guest
+  (Findings, 2026-11-04/05). The sandboxed golden Jobs include it;
+  ordinary Jobs don't. `docs/sandbox.md` (12.1) says that the cluster's
+  CRI config must allow `io.katacontainers.*` pod annotations.
 
 #### Success Criteria
 
@@ -460,7 +520,8 @@ and one commit per numbered task. The PR split is OQ1.
   false` omits both and the worker falls back to the pod admission
   failure. Any error on the check fails closed.
 - [ ] 10.5 The runs quota adds the RuntimeClass overhead
-  (`sandbox.overhead`, default 250m and 130Mi) for sandboxed Jobs.
+  (`sandbox.overhead`, default 250m and 250Mi, the homelab class's) for
+  sandboxed Jobs.
 - [ ] 10.6 `PrometheusRule`: `BoopdSandboxNotReady`,
   `BoopdRunsNeedSandbox`, and `BoopdSandboxEgressDenied` (Hubble
   metrics, `cilium` only).
