@@ -39,6 +39,11 @@ Firecracker instead of the default QEMU, for faster VM boot and lower
 per-pod overhead, and what would each need on the nodes (Firecracker's
 devmapper snapshotter, the Talos extension's VMM support)?
 
+**Note (2026-11-05):** the Talos extension's default is already Cloud
+Hypervisor, not QEMU (`[hypervisor.clh]`; homelab IMPL-0018 Phase 0).
+Measured with it: a Kata pod starts in 2 s (4 s for Renovate's image),
+against 1 s under runc. What's left to ask is CLH against Firecracker.
+
 <!--docz:question:end-->
 
 <!--docz:hypothesis:start-->

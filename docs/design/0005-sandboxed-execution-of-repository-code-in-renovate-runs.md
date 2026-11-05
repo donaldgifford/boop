@@ -194,7 +194,7 @@ Read from the cluster on 2026-10-24:
 | Component | Version or state |
 | - | - |
 | Nodes | Talos v1.13.11, Kubernetes v1.36.5, containerd 2.2.9; 3 control plane, 5 workers (Proxmox VMs) |
-| Kata | Talos extension `kata-containers` 3.32.0 on all five workers; RuntimeClass `kata` (handler `kata`, overhead 250m CPU and 130Mi, node selector on the extension label) |
+| Kata | Talos extension `kata-containers` 3.32.0 on all five workers, VMM Cloud Hypervisor; RuntimeClass `kata` (handler `kata`, overhead 250m CPU and 250Mi, node selector `runtime.hoomlab.dev/kata: "true"`; corrected 2026-11-05) |
 | gVisor | not installed |
 | CNI | Cilium v1.20.1: kube-proxy replacement, L7 proxy, Hubble, VXLAN tunnel; `CiliumNetworkPolicy` and `CiliumClusterwideNetworkPolicy` CRDs present |
 | User namespaces | `UserNamespacesSupport` enabled |
@@ -202,7 +202,8 @@ Read from the cluster on 2026-10-24:
 
 Kata in Proxmox VMs runs on nested virtualisation, so the workers need
 the host CPU type and `/dev/kvm`. The extension is installed and the
-RuntimeClass exists; a pod using it has not been run yet.
+RuntimeClass exists. Pods with the sandboxed posture first ran under it
+on 2026-11-04 (IMPL-0006 Findings, 2026-11-04/05).
 <!--docz:background:end-->
 
 <!--docz:detailed-design:start-->
@@ -345,11 +346,20 @@ the guest, not on the node. The homelab already has Kata 3.32.0 on every
 worker and a `kata` RuntimeClass, so the sandbox is
 `runtime_class = "kata"` (OQ1).
 
-- The RuntimeClass `overhead` (250m, 130Mi) is added to the pod's
-  requests by the scheduler; the sandbox's resource defaults account for
-  it.
+- The RuntimeClass `overhead` (250m, 250Mi in the homelab) is added to
+  the pod's requests by the scheduler; the sandbox's resource defaults
+  account for it.
 - The container's `securityContext` applies inside the guest. The guest
   kernel is the first boundary and the container posture the second.
+- **Except seccomp, by default.** The Talos extension sets
+  `disable_guest_seccomp = true`, so `RuntimeDefault` isn't applied in
+  the guest. Sandboxed Jobs carry the pod annotation
+  `io.katacontainers.config.runtime.disable_guest_seccomp: "false"`,
+  which turns it back on for that pod (verified 2026-11-05:
+  `Seccomp: 2`, `unshare -U` refused). This needs the CRI config to
+  allow `io.katacontainers.*` pod annotations, as the homelab's does.
+  Without user namespaces, seccomp is part of what stands between the
+  repository's code and the guest kernel.
 - `emptyDir` volumes are shared into the guest; their `sizeLimit` still
   applies.
 - No user namespaces: Kubernetes user namespaces (`hostUsers: false`,
@@ -365,7 +375,7 @@ By default sandboxed Jobs run on **any Kata-capable worker** (OQ8). The
 VM is the isolation boundary, so reserving nodes would spend capacity
 on a second boundary the design does not depend on. boopd adds no node
 selector: the RuntimeClass's own `scheduling.nodeSelector` (in the
-homelab, the `extensions.talos.dev/kata-containers` label) keeps the
+homelab, `runtime.hoomlab.dev/kata: "true"`) keeps the
 pods on nodes that can run them. In the homelab that is all five
 workers.
 

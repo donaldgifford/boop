@@ -3,6 +3,12 @@
 All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
+## [unreleased]
+
+### Documentation
+
+- Record the homelab Kata checks (IMPL-0006 1.2, 1.3)
+
 ## [0.5.5] - 2026-10-26
 
 ### Bug Fixes
