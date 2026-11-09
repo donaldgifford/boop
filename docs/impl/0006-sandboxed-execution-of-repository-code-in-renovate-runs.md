@@ -251,15 +251,16 @@ and one commit per numbered task. The PR split is OQ1.
   the Kubernetes API and `169.254.169.254`; Hubble shows the denials.
   Done 2026-11-04: all as expected, nested containers included
   (Findings, 2026-11-04/05).
-- [ ] 1.4 Mint a token with the narrowed permissions (OQ5's set) for a
-  fixture repository and run Renovate live against it with the pinned
-  image: it clones, pushes a branch, opens a PR and updates the
-  dashboard; a change under `.github/workflows/` is refused; a
-  `minimumReleaseAge` update sets `renovate/stability-days`. Record
-  which permission each Renovate step needed.
-  `scripts/sandbox-token-check.sh` does the run against
-  `boop-fixture-sandbox-token`, which has no Renovate config file so
-  boopd never onboards it.
+- [x] 1.4 Mint a token with the narrowed permissions (OQ5's set) for a
+  fixture repository. Done 2026-11-09 with
+  `scripts/sandbox-token-check.sh` against `boop-fixture-sandbox-token`
+  (no Renovate config, so boopd never onboards it): GitHub granted
+  exactly `{"checks":"write","contents":"write","issues":"write",
+  "metadata":"read","pull_requests":"write","statuses":"write",
+  "vulnerability_alerts":"read"}`. The live Renovate run with that token
+  (branch, PR, dashboard, the refused workflow push,
+  `renovate/stability-days`) moved to 13.4: it changes no code, and the
+  homelab runs it through boopd's own mint with the image cached.
 - [ ] 1.5 **Deferred, human required.** (OQ13 b) Under 1.3's sandbox
   `CiliumNetworkPolicy` with `registry.fartlab.dev` in `toFQDNs`, a Kata
   pod pulls a manifest from `https://registry.fartlab.dev/v2/` by name.
@@ -611,7 +612,10 @@ and one commit per numbered task. The PR split is OQ1.
 - [ ] 13.4 **Deferred, human required.** Switch to `enforce`; run
   DESIGN-0005 § Testing Strategy's homelab checks over the IMPL-0001
   8.1 fixtures; record them for IMPL-0001 8.8 in the spike results
-  investigation.
+  investigation. Include 1.4's live checks on a sandboxed run: it pushes
+  a branch, opens a PR and updates the dashboard; an update under
+  `.github/workflows/` is refused for want of `workflows`; a
+  `minimumReleaseAge` update sets `renovate/stability-days`.
 - [ ] 13.5 The chart default moves to `enforce` in the release after
   13.4 (DESIGN-0005 OQ13).
 - [ ] 13.6 **Deferred, human required.** Homelab: set `runs.hostUsers:
