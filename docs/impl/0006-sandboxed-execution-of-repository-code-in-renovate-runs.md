@@ -367,8 +367,14 @@ and one commit per numbered task. The PR split is OQ1.
   hosts are DNS names with an optional `*.`, and token levels are `read`
   or `write`. Without a `sandbox` block `floor_mode` is `report`, so a
   sandboxed profile there is always the warning.
-- [ ] 3.4 `config.BuildInput` carries the sandbox and the profile's
-  sandbox fields to `jobspec`.
+- [x] 3.4 `config.BuildInput` carries the sandbox and the profile's
+  sandbox fields to `jobspec`. A sandboxed profile gets
+  `BuildInput.Sandbox` when the file has a `sandbox` block, and
+  `Profile.Sandboxed` and `Profile.UnsafeExecutions` always, so jobspec
+  can refuse it without one (5.5). An ordinary profile gets
+  `ForceDisable` (`Config.Floor`: the floor plus `floor_add`) in
+  `enforce` mode and `HostUsers` (`*bool`) from `runs.host_users`.
+  Egress stays in the config for the chart.
 - [ ] 3.5 Golden HCL (`internal/config/testdata/golden.hcl`) and one
   failing case per rule; `examples/boopd.hcl` gains a commented
   `sandbox` block and sandboxed `python` and `jvm` profiles;

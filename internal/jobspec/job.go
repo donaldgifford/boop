@@ -144,6 +144,11 @@ type Profile struct {
 	Name     string
 	Pod      PodOverlay
 	Renovate map[string]any
+	// Sandboxed profiles run only with a BuildInput.Sandbox.
+	Sandboxed bool
+	// UnsafeExecutions becomes Renovate's allowedUnsafeExecutions; a
+	// profile with any runs only with a BuildInput.Sandbox.
+	UnsafeExecutions []string
 }
 
 // PodOverlay is what a profile may change on the pod. The security context
@@ -183,6 +188,31 @@ type BuildInput struct {
 	// ActiveDeadline and TTLAfterFinished override the defaults when > 0.
 	ActiveDeadline   time.Duration
 	TTLAfterFinished time.Duration
+
+	// Sandbox, when set, runs the Job in the sandboxed tier (DESIGN-0005).
+	Sandbox *Sandbox
+
+	// ForceDisable are Renovate managers forced off, each with its
+	// default managerFilePatterns: the floor, for an ordinary run in
+	// enforce mode (DESIGN-0005 OQ14).
+	ForceDisable []string
+
+	// HostUsers false asks for a user namespace (hostUsers: false) on an
+	// ordinary run (IMPL-0006 OQ8); nil or true leaves the pod's default.
+	// A sandboxed run never gets one: Kata rejects it.
+	HostUsers *bool
+}
+
+// Sandbox is where a sandboxed run executes: the config's sandbox block.
+type Sandbox struct {
+	// RuntimeClassName is the sandbox's RuntimeClass (Kata).
+	RuntimeClassName string
+	// ServiceAccountName is the Job's ServiceAccount, with no RBAC.
+	ServiceAccountName string
+	// NodeSelector and Tolerations are the optional dedicated placement;
+	// empty runs on any node the RuntimeClass schedules to.
+	NodeSelector map[string]string
+	Tolerations  []corev1.Toleration
 }
 
 // JobName returns the Job name for a repository's run attempt. It is always

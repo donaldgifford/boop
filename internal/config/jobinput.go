@@ -19,14 +19,20 @@ package config
 import (
 	"fmt"
 	"maps"
+	"slices"
+
+	corev1 "k8s.io/api/core/v1"
 
 	"github.com/donaldgifford/boop/internal/jobspec"
+	"github.com/donaldgifford/boop/internal/renovate/unsafe"
 )
 
 // BuildInput is the one constructor from the config file to the job
 // builder (IMPL-0001 task 3.5): the namespace, image and dry-run mode,
 // the jobspec.App from the renovate block and the app's secrets, and the
-// named profile. The RunRenovate activity sets the per-run fields
+// named profile. A sandboxed profile gets the sandbox block, when there is
+// one; without it jobspec refuses the run. An ordinary profile in enforce
+// mode gets the floor forced off, and runs.host_users. The RunRenovate activity sets the per-run fields
 // (Attempt, TokenSecret, WorkflowID, RunID, deadlines). Option maps are
 // deep-copied, so concurrent runs never share nested values.
 func (c *Config) BuildInput(app *App, profile string, repo jobspec.Repo) (*jobspec.BuildInput, error) {
@@ -37,7 +43,7 @@ func (c *Config) BuildInput(app *App, profile string, repo jobspec.Repo) (*jobsp
 	if !ok {
 		return nil, fmt.Errorf("config: unknown profile %q", profile)
 	}
-	return &jobspec.BuildInput{
+	in := &jobspec.BuildInput{
 		Namespace: c.Runs.Namespace,
 		Image:     c.Renovate.Image,
 		App: jobspec.App{
@@ -50,12 +56,43 @@ func (c *Config) BuildInput(app *App, profile string, repo jobspec.Repo) (*jobsp
 		},
 		Repo: repo,
 		Profile: jobspec.Profile{
-			Name:     p.Name,
-			Pod:      clonePod(&p.Pod),
-			Renovate: cloneOptions(p.Renovate),
+			Name:             p.Name,
+			Pod:              clonePod(&p.Pod),
+			Renovate:         cloneOptions(p.Renovate),
+			Sandboxed:        p.Sandboxed,
+			UnsafeExecutions: slices.Clone(p.UnsafeExecutions),
 		},
 		DryRun: c.Renovate.DryRun,
-	}, nil
+	}
+	switch {
+	case p.Sandboxed && c.Sandbox != nil:
+		s := c.Sandbox
+		in.Sandbox = &jobspec.Sandbox{
+			RuntimeClassName:   s.RuntimeClass,
+			ServiceAccountName: s.ServiceAccount,
+			NodeSelector:       maps.Clone(s.NodeSelector),
+			Tolerations:        cloneTolerations(s.Tolerations),
+		}
+	case !p.Sandboxed:
+		if c.FloorMode() == FloorEnforce {
+			in.ForceDisable = c.Floor()
+		}
+		if !c.Runs.HostUsers {
+			in.HostUsers = new(false)
+		}
+	}
+	return in, nil
+}
+
+// Floor returns the managers that sandbox a repository: the built-in
+// floor plus sandbox.floor_add, sorted and without duplicates.
+func (c *Config) Floor() []string {
+	out := unsafe.Floor()
+	if c.Sandbox != nil {
+		out = append(out, c.Sandbox.FloorAdd...)
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
 // App returns the configured app named name, or nil.
@@ -107,8 +144,17 @@ func clonePod(p *jobspec.PodOverlay) jobspec.PodOverlay {
 	if p.Resources != nil {
 		out.Resources = p.Resources.DeepCopy()
 	}
-	for i := range p.Tolerations {
-		out.Tolerations = append(out.Tolerations, *p.Tolerations[i].DeepCopy())
+	out.Tolerations = cloneTolerations(p.Tolerations)
+	return out
+}
+
+func cloneTolerations(in []corev1.Toleration) []corev1.Toleration {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]corev1.Toleration, len(in))
+	for i := range in {
+		in[i].DeepCopyInto(&out[i])
 	}
 	return out
 }
