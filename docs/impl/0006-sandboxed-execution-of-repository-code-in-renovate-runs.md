@@ -261,7 +261,7 @@ and one commit per numbered task. The PR split is OQ1.
   (branch, PR, dashboard, the refused workflow push,
   `renovate/stability-days`) moved to 13.4: it changes no code, and the
   homelab runs it through boopd's own mint with the image cached.
-- [ ] 1.5 **Deferred, human required.** (OQ13 b) Under 1.3's sandbox
+- [x] 1.5 **Deferred, human required.** (OQ13 b) Under 1.3's sandbox
   `CiliumNetworkPolicy` with `registry.fartlab.dev` in `toFQDNs`, a Kata
   pod pulls a manifest from `https://registry.fartlab.dev/v2/` by name.
   If the name resolves to one of the cluster's LoadBalancer addresses,
@@ -275,10 +275,18 @@ and one commit per numbered task. The PR split is OQ1.
   Gateway's Envoy, not zot, is the next hop), and `example.com` timed
   out as it should. But the pod got HTTP 403 on `/v2/` where the
   internet gets 200: the Gateway refuses in-cluster sources, most
-  likely by enforcing zot's policy against the pod's identity. Ordinary
-  runs avoid it by going to `zot:5000` directly. The homelab admits
-  pods labelled `boopd.dev/sandbox: "true"` (5.1) at the zot end; the
-  test passes when a pod with that label gets 200. OQ13 b stands.
+  likely by enforcing zot's policy against the pod's identity.
+
+  Resolved 2026-11-09: nothing on the zot side has a policy, and zot
+  allows anonymous reads. For an in-cluster client, Cilium's Gateway
+  also checks the client's own egress policy against the real backend
+  (`zot` pods on 5000) and Envoy answers a denial with 403. That is why
+  the homelab already has `boopd-runs-registry` (egress to `zot:5000`)
+  for ordinary runs. So the answer to OQ13 is settled without a rerun:
+  boopd's chart renders no in-cluster egress (b stands), and an
+  operator whose registry sits behind an in-cluster Gateway adds one
+  narrow policy from `boopd.dev/sandbox: "true"` pods to the registry's
+  backend port (12.1 documents it; the homelab's is 13.2).
 
 #### Success Criteria
 
@@ -594,7 +602,10 @@ and one commit per numbered task. The PR split is OQ1.
 - [ ] 12.1 `docs/sandbox.md`: what the sandbox is for, prerequisites
   (Kata and its RuntimeClass; Cilium, standard NetworkPolicy or VPC
   CNI), the `boopd.hcl` and chart settings, no in-cluster egress (an
-  internal registry by its external name through `egress_allow`, OQ13), the token and default-branch
+  internal registry by its external name through `egress_allow`, OQ13;
+  behind an in-cluster Cilium Gateway the operator also allows egress
+  from `boopd.dev/sandbox: "true"` pods to the registry's backend
+  port, with an example policy), the token and default-branch
   protection, `report` to `enforce`, troubleshooting `needs-sandbox`.
 - [ ] 12.2 `docs/config.md` and the chart README (helm-docs).
 - [ ] 12.3 CLAUDE.md: the layout line for `internal/renovate/unsafe`,
@@ -615,7 +626,9 @@ and one commit per numbered task. The PR split is OQ1.
   `profile_rule` blocks; a `sandbox` block on RuntimeClass `kata` with
   `networkPolicies.provider = "cilium"`; sandboxed `python` and `jvm`
   (`unsafe_executions = ["gradleWrapper"]`) profiles; `floor_mode =
-  "report"`.
+  "report"`; a `boopd-sandbox-registry` CiliumNetworkPolicy from
+  `boopd.dev/sandbox: "true"` pods to `zot` on 5000 (1.5), checked by
+  a sandboxed run's lookup in `registry.fartlab.dev`.
 - [ ] 13.3 **Deferred, human required.** A week in `report` mode: read
   `boopd_floor_raised_total` and the `would_sandbox` lines; confirm the
   list of repositories that will move.
