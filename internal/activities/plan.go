@@ -42,8 +42,9 @@ func (a *Activities) PlanRun(ctx context.Context, in *workflows.PlanRunInput) (*
 	if cadence <= 0 {
 		cadence = config.DefaultCadence
 	}
+	profile, _ := res.Resolve(in.Extends, in.Managers)
 	return &workflows.RunPlan{
-		Profile:     res.Resolve(in.Extends, in.Managers),
+		Profile:     profile,
 		Cadence:     cadence,
 		Settle:      a.cfg.Ingest.Settle,
 		MinInterval: a.cfg.Ingest.MinInterval,

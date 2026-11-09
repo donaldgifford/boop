@@ -151,6 +151,10 @@ var forbiddenTokenPermissions = []string{"administration", "secrets", "workflows
 func (b *builder) validateSandbox(cfg *Config, raw *fileSchema) {
 	if s := raw.Sandbox; s != nil {
 		b.validateSandboxBlock(s)
+		if len(cfg.SandboxedProfiles()) == 0 {
+			b.errorf(s.DefRange, "Sandbox without a sandboxed profile",
+				"The floor raises repositories to the least strict sandboxed profile; set sandboxed = true on at least one profile.")
+		}
 	}
 	for i := range raw.Profiles {
 		rp := &raw.Profiles[i]

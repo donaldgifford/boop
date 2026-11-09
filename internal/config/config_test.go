@@ -83,10 +83,15 @@ func TestResolver_FromExample(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolver() = %v", err)
 	}
-	if got := r.Resolve(nil, []string{"poetry"}); got != "strict" {
+	if got, _ := r.Resolve(nil, []string{"poetry"}); got != "strict" {
 		t.Errorf("Resolve(nil, poetry) = %q, want strict", got)
 	}
-	if got := r.Resolve([]string{"github>boop-bot/renovate-config:python"}, nil); got != "python" {
+	if got, _ := r.Resolve([]string{"github>boop-bot/renovate-config:python"}, nil); got != "python" {
 		t.Errorf("Resolve(python preset) = %q, want python", got)
+	}
+	// The example's sandboxed profiles bring the floor: bundler raises
+	// an ordinary repository to jvm, the least strict sandboxed profile.
+	if got, raised := r.Resolve([]string{"config:recommended"}, []string{"bundler"}); got != "jvm" || !raised {
+		t.Errorf("Resolve(bundler) = %q, %v; want jvm, raised", got, raised)
 	}
 }

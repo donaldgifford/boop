@@ -286,3 +286,29 @@ func quantitiesEqual(a, b corev1.ResourceList) bool {
 	}
 	return true
 }
+
+// TestValidation_SandboxNeedsASandboxedProfile: the floor raises to a
+// sandboxed profile, so a sandbox block with none is an error.
+func TestValidation_SandboxNeedsASandboxedProfile(t *testing.T) {
+	t.Parallel()
+	src, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.NewReplacer(
+		"  sandboxed         = true\n", "",
+		"  unsafe_executions = [\"gradleWrapper\"]\n", "",
+	).Replace(string(src))
+	_, diags := config.Parse("golden.hcl", []byte(text))
+	before, _, ok := strings.Cut(text, "sandbox {")
+	if !ok {
+		t.Fatal("golden.hcl has no sandbox block")
+	}
+	line := strings.Count(before, "\n") + 1
+	for _, d := range diags.Diagnostics {
+		if d.Summary == "Sandbox without a sandboxed profile" && d.Subject != nil && d.Subject.Start.Line == line {
+			return
+		}
+	}
+	t.Errorf("no sandbox diagnostic at line %d; got %v", line, diags.Error())
+}

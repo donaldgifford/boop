@@ -250,13 +250,30 @@ type Budget struct {
 }
 
 // Resolver builds the profile resolver from the file's order, rules and
-// fallbacks.
+// fallbacks. With a sandbox block or a sandboxed profile it carries the
+// floor (Config.Floor); without either, profiles resolve as before the
+// sandbox existed.
 func (c *Config) Resolver() (*profiles.Resolver, error) {
 	rules := make([]profiles.Rule, 0, len(c.ProfileRules))
 	for _, r := range c.ProfileRules {
 		rules = append(rules, profiles.Rule{Profile: r.Profile, Extends: r.Extends, Managers: r.Managers})
 	}
-	return profiles.New(c.Order, rules, c.DefaultProfile, c.UnknownProfile)
+	var floor *profiles.Floor
+	if sandboxed := c.SandboxedProfiles(); c.Sandbox != nil || len(sandboxed) > 0 {
+		floor = &profiles.Floor{Managers: c.Floor(), Sandboxed: sandboxed, Configured: c.Sandbox != nil}
+	}
+	return profiles.New(c.Order, rules, c.DefaultProfile, c.UnknownProfile, floor)
+}
+
+// SandboxedProfiles returns the sandboxed profiles' names in order.
+func (c *Config) SandboxedProfiles() []string {
+	var out []string
+	for _, name := range c.Order {
+		if p := c.Profiles[name]; p != nil && p.Sandboxed {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 // Option tunes Load and Parse.

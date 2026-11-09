@@ -400,18 +400,26 @@ and one commit per numbered task. The PR split is OQ1.
 
 #### Tasks
 
-- [ ] 4.1 `profiles.New` takes the floor (`unsafe.Floor` plus
+- [x] 4.1 `profiles.New` takes the floor (`unsafe.Floor` plus
   `floor_add`) and which profiles are sandboxed.
-- [ ] 4.2 `Resolve` returns the profile and whether the floor raised it:
+- [x] 4.2 `Resolve` returns the profile and whether the floor raised it:
   with a floor manager, a profile below the least strict sandboxed
   profile in `order` is raised to it; rules can raise, never lower.
-- [ ] 4.3 Unknown managers (empty) with a sandbox configured resolve as
+- [x] 4.3 Unknown managers (empty) with a sandbox configured resolve as
   if a floor manager were present (DESIGN-0005 § Learning the managers
   safely).
-- [ ] 4.4 Table tests: no floor manager; a floor manager under an
+- [x] 4.4 Table tests: no floor manager; a floor manager under an
   ordinary profile; already sandboxed; no sandboxed profile defined (an
   error from `New`, caught by validation); empty managers with and
   without a sandbox; `floor_add`.
+
+  Landed together: `profiles.New(..., floor *Floor)` with `Floor{Managers,
+  Sandboxed, Configured}` (nil is no floor), and `Resolve` returns
+  `(profile, raised)`. `Config.Resolver` passes the floor when the file
+  has a `sandbox` block or a sandboxed profile, so a file with neither
+  resolves exactly as before. An ordinary profile stricter than every
+  sandboxed one is raised to the strictest sandboxed profile. A `sandbox`
+  block with no sandboxed profile is a validation error.
 
 #### Success Criteria
 

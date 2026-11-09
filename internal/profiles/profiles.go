@@ -18,6 +18,10 @@ limitations under the License.
 // § Ecosystem profiles, OQ1, OQ9). It is a leaf: the config package
 // builds a Resolver from the file, and activities call Resolve with what
 // discovery and the last report learned.
+//
+// A Floor (DESIGN-0005 § Choosing the tier) raises a repository that
+// uses a manager executing repository code into a sandboxed profile,
+// whatever its rules say.
 package profiles
 
 import (
@@ -38,6 +42,19 @@ type Rule struct {
 	Managers []string
 }
 
+// Floor is the managers that put a repository in the sandbox, and the
+// profiles that are the sandbox.
+type Floor struct {
+	// Managers are the floor managers: the built-in floor plus floor_add.
+	Managers []string
+	// Sandboxed are the sandboxed profiles; at least one.
+	Sandboxed []string
+	// Configured is true when a sandbox exists. A repository whose
+	// managers are not yet known then resolves as if it used a floor
+	// manager (DESIGN-0005 § Learning the managers safely).
+	Configured bool
+}
+
 // Resolver resolves a repository's profile. It is immutable and safe for
 // concurrent use.
 type Resolver struct {
@@ -45,11 +62,15 @@ type Resolver struct {
 	rules          []Rule
 	defaultProfile string
 	unknownProfile string
+	floor          []string
+	sandboxed      map[string]bool
+	unknownIsFloor bool
 }
 
 // New builds a Resolver. order lists every profile in ascending
-// strictness; every other name must appear in it.
-func New(order []string, rules []Rule, defaultProfile, unknownProfile string) (*Resolver, error) {
+// strictness; every other name must appear in it. floor is nil for no
+// floor; otherwise it names at least one sandboxed profile.
+func New(order []string, rules []Rule, defaultProfile, unknownProfile string, floor *Floor) (*Resolver, error) {
 	if len(order) == 0 {
 		return nil, errors.New("profiles: order is empty")
 	}
@@ -76,7 +97,23 @@ func New(order []string, rules []Rule, defaultProfile, unknownProfile string) (*
 		}
 		cloned = append(cloned, Rule{Profile: r.Profile, Extends: slices.Clone(r.Extends), Managers: slices.Clone(r.Managers)})
 	}
-	return &Resolver{rank: rank, rules: cloned, defaultProfile: defaultProfile, unknownProfile: unknownProfile}, nil
+	r := &Resolver{rank: rank, rules: cloned, defaultProfile: defaultProfile, unknownProfile: unknownProfile}
+	if floor == nil {
+		return r, nil
+	}
+	if len(floor.Sandboxed) == 0 {
+		return nil, errors.New("profiles: a floor needs at least one sandboxed profile")
+	}
+	r.sandboxed = make(map[string]bool, len(floor.Sandboxed))
+	for _, name := range floor.Sandboxed {
+		if err := check("sandboxed profile", name); err != nil {
+			return nil, err
+		}
+		r.sandboxed[name] = true
+	}
+	r.floor = slices.Clone(floor.Managers)
+	r.unknownIsFloor = floor.Configured
+	return r, nil
 }
 
 // Resolve returns the profile name for a repository.
@@ -86,7 +123,13 @@ func New(order []string, rules []Rule, defaultProfile, unknownProfile string) (*
 // no rule; the unknown profile when extends is empty. From managers: the
 // strictest rule naming one of them. The result is the stricter of the
 // two, so managers only ever tighten.
-func (r *Resolver) Resolve(extends, managers []string) string {
+//
+// With a floor, a repository using a floor manager (or, with a sandbox
+// configured, one whose managers are not known yet) that resolved to an
+// ordinary profile is raised to the least strict sandboxed profile not
+// below it, or the strictest sandboxed profile when every one is below
+// it; raised reports that. A sandboxed profile is never lowered.
+func (r *Resolver) Resolve(extends, managers []string) (profile string, raised bool) {
 	fromExtends := r.unknownProfile
 	if len(extends) > 0 {
 		fromExtends = r.defaultProfile
@@ -102,7 +145,40 @@ func (r *Resolver) Resolve(extends, managers []string) string {
 			out = r.stricter(out, r.rules[i].Profile)
 		}
 	}
-	return out
+	if r.sandboxed == nil || r.sandboxed[out] || !r.onFloor(managers) {
+		return out, false
+	}
+	return r.sandboxFor(out), true
+}
+
+// Sandboxed reports whether profile is a sandboxed profile.
+func (r *Resolver) Sandboxed(profile string) bool { return r.sandboxed[profile] }
+
+// onFloor reports whether managers put a repository in the sandbox.
+func (r *Resolver) onFloor(managers []string) bool {
+	if len(managers) == 0 {
+		return r.unknownIsFloor
+	}
+	return matchesManager(r.floor, managers)
+}
+
+// sandboxFor returns the sandboxed profile an ordinary one is raised to.
+func (r *Resolver) sandboxFor(profile string) string {
+	from := r.rank[profile]
+	best, strictest := "", ""
+	for name := range r.sandboxed {
+		rank := r.rank[name]
+		if rank >= from && (best == "" || rank < r.rank[best]) {
+			best = name
+		}
+		if strictest == "" || rank > r.rank[strictest] {
+			strictest = name
+		}
+	}
+	if best == "" {
+		return strictest
+	}
+	return best
 }
 
 // Strictness returns the profile's position in order, or -1.
