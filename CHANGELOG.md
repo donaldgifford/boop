@@ -11,6 +11,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(impl)* IMPL-0006 prerequisite check: token set and in-cluster egress
 - *(impl)* IMPL-0006 OQ13 answered b: no in-cluster egress from the sandbox
 
+### Miscellaneous Tasks
+
+- *(scripts)* Sandbox-token-check.sh for IMPL-0006 1.4
+
 ## [0.5.5] - 2026-10-26
 
 ### Bug Fixes
