@@ -225,13 +225,16 @@ and one commit per numbered task. The PR split is OQ1.
 
 #### Tasks
 
-- [ ] 1.1 Record the forced-disable result above in a test fixture:
+- [x] 1.1 Record the forced-disable result above in a test fixture:
   `internal/renovate/testdata/renovate-44-forced-floor.log`, the
   `dryRun: extract` run over `boop-fixture-python-sdist` with the forced
   object, sanitized like the 4.5 fixtures, with the command in the
   testdata README.
-  **Deferred - human required (2026-11-09):** the run needs Docker, and
-  Docker Desktop's daemon on the dev machine did not start.
+  Recorded on 2026-11-09 with the pinned 44.149.2 and the forced object
+  built from `internal/renovate/unsafe` (the data `jobspec` uses), so the
+  fixture and the builder's object come from one source; the report
+  keeps `pip_requirements` and `renovate-config`, drops `pip-compile`,
+  and has no problems (`TestScanner_Renovate44ForcedFloor`).
 - [x] 1.2 **Deferred, human required.** In the homelab, run a pod with
   the boopd Job's exact posture (`internal/jobspec` output for a
   sandboxed profile, applied by hand) under `runtimeClassName: kata`:
