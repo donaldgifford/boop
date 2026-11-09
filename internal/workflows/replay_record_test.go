@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
+	sdktemporal "go.temporal.io/sdk/temporal"
 	sdkworker "go.temporal.io/sdk/worker"
 	"google.golang.org/protobuf/encoding/protojson"
 
@@ -51,8 +53,12 @@ func TestRecordReplayHistories(t *testing.T) {
 	register(workflows.AcquireCapacityActivity, func(_ context.Context, in *workflows.AcquireInput) (*workflows.AcquireResult, error) {
 		return &workflows.AcquireResult{Granted: true, LeaseID: "capacity/" + in.UpdateID}, nil
 	})
-	register(workflows.RunRenovateActivity, func(context.Context, *workflows.RunInput) (*workflows.RunResult, error) {
-		return &workflows.RunResult{Outcome: workflows.OutcomeSucceeded, RepositoryResult: "done"}, nil
+	var needsSandbox atomic.Int32
+	register(workflows.RunRenovateActivity, func(_ context.Context, in *workflows.RunInput) (*workflows.RunResult, error) {
+		if in.RepoID == 103 && needsSandbox.CompareAndSwap(0, 1) {
+			return nil, sdktemporal.NewNonRetryableApplicationError("RuntimeClass kata does not exist", workflows.ErrTypeNeedsSandbox, nil)
+		}
+		return &workflows.RunResult{Outcome: workflows.OutcomeSucceeded, RepositoryResult: "done", Sandbox: "kata"}, nil
 	})
 	register(workflows.CheckRepoActivity, func(context.Context, *workflows.CheckRepoInput) (*workflows.CheckRepoResult, error) {
 		checks++
@@ -109,6 +115,22 @@ func TestRecordReplayHistories(t *testing.T) {
 		t.Fatalf("absence RepoWorkflow: %v", err)
 	}
 	write(ctx, t, srv.Client, run, "repo-absence-present-then-gone.json")
+
+	// A sandboxed run with no sandbox: needs-sandbox, then a recheck
+	// runs it (IMPL-0006 task 8.6).
+	run = start(workflows.RepoWorkflowID(103), workflows.RepoWorkflowName, &workflows.RepoState{
+		RepoID: 103, Slug: "boop-e2e/sandboxed", DefaultBranch: "main", InstallationID: 1,
+		DiscoveryInterval: time.Hour, LastSeen: now, NextDue: now,
+	})
+	for ctx.Err() == nil && needsSandbox.Load() == 0 {
+		time.Sleep(200 * time.Millisecond)
+	}
+	signal(ctx, t, srv.Client, 103, workflows.RecheckSignal, nil)
+	waitState(ctx, t, srv.Client, 103, func(s *workflows.RepoState) bool { return s.LastRun != nil })
+	if err := srv.Client.TerminateWorkflow(ctx, workflows.RepoWorkflowID(103), "", "recorded"); err != nil {
+		t.Fatal(err)
+	}
+	write(ctx, t, srv.Client, run, "repo-needs-sandbox-then-recheck.json")
 
 	// A discovery pass over two installations.
 	run = start(workflows.DiscoveryScheduleID("main"), workflows.DiscoveryWorkflowName, &workflows.DiscoveryInput{App: "main"})

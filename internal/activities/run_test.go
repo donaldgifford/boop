@@ -14,6 +14,8 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	batchv1 "k8s.io/api/batch/v1"
+	nodev1 "k8s.io/api/node/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
@@ -122,22 +124,26 @@ func TestRunRenovate_TokenPermissions(t *testing.T) {
 	}
 
 	app := &fakeApp{}
+	kata := &nodev1.RuntimeClass{ObjectMeta: metav1.ObjectMeta{Name: "kata"}, Handler: "kata"}
 	for i, profile := range []string{"default", "jvm"} {
-		cs := fake.NewClientset()
+		cs := fake.NewClientset(kata)
 		cs.PrependReactor("create", "jobs", jobUID)
 		_, err := newActs(app, cs).ExecuteActivity(workflows.RunRenovateActivity, &workflows.RunInput{
 			RepoID: int64(i + 1), Slug: "acme/app", InstallationID: 1, Profile: profile,
 		})
+		// The fake clientset creates no pod: an ordinary run is pending, a
+		// sandboxed one blames the sandbox (task 8.2).
+		want := map[string]string{"default": workflows.ErrTypePending, "jvm": workflows.ErrTypeNeedsSandbox}[profile]
 		var appErr *temporal.ApplicationError
-		if !errors.As(err, &appErr) || appErr.Type() != workflows.ErrTypePending {
-			t.Fatalf("%s: err = %v, want pending", profile, err)
+		if !errors.As(err, &appErr) || appErr.Type() != want {
+			t.Fatalf("%s: err = %v, want %s", profile, err, want)
 		}
 	}
 	if len(app.mintPerms) != 2 || app.mintPerms[0] != nil || !maps.Equal(app.mintPerms[1], perms) {
 		t.Errorf("mint permissions = %v; want none for default, the sandbox set for jvm", app.mintPerms)
 	}
 
-	cs := fake.NewClientset()
+	cs := fake.NewClientset(kata)
 	refused := &fakeApp{mintErr: fmt.Errorf("422: %w", platform.ErrTokenPermissions)}
 	_, err := newActs(refused, cs).ExecuteActivity(workflows.RunRenovateActivity, &workflows.RunInput{
 		RepoID: 1, Slug: "acme/app", InstallationID: 1, Profile: "jvm",
@@ -146,7 +152,9 @@ func TestRunRenovate_TokenPermissions(t *testing.T) {
 	if !errors.As(err, &appErr) || appErr.Type() != workflows.ErrTypeTokenPermissions || !appErr.NonRetryable() {
 		t.Fatalf("err = %v, want a non-retryable %s error", err, workflows.ErrTypeTokenPermissions)
 	}
-	if n := len(cs.Actions()); n != 0 {
-		t.Errorf("Kubernetes saw %d actions after a refused mint, want 0", n)
+	for _, a := range cs.Actions() {
+		if a.GetVerb() == "create" {
+			t.Errorf("Kubernetes saw %s %s after a refused mint", a.GetVerb(), a.GetResource().Resource)
+		}
 	}
 }

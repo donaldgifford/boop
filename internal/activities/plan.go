@@ -75,7 +75,12 @@ func (a *Activities) PlanRun(ctx context.Context, in *workflows.PlanRunInput) (*
 	}
 	plan.FloorRaised = raised
 	if raised && a.cfg.FloorMode() == config.FloorReport {
-		profile = res.ResolveRules(in.Extends, managers)
+		// OQ7: report mode runs it as today and says what enforce would do.
+		ordinary := res.ResolveRules(in.Extends, managers)
+		activity.GetLogger(ctx).Info("floor would sandbox this repository; report mode runs it ordinary",
+			"would_sandbox", true, "repo_id", in.RepoID, "profile", ordinary, "sandbox_profile", profile,
+			"floor_managers", plan.FloorManagers, "truncated", truncated)
+		profile = ordinary
 	}
 	plan.Profile, plan.Sandboxed = profile, res.Sandboxed(profile)
 	return plan, nil

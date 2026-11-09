@@ -28,11 +28,14 @@ var (
 	SearchPhase          = temporal.NewSearchAttributeKeyKeyword("Phase")
 	SearchLastOutcome    = temporal.NewSearchAttributeKeyKeyword("LastOutcome")
 	SearchNextDue        = temporal.NewSearchAttributeKeyTime("NextDue")
+	// SearchSandboxed is whether the plan runs the repository in the
+	// sandbox (DESIGN-0005); upserted by RepoWorkflows from sandbox-1.
+	SearchSandboxed = temporal.NewSearchAttributeKeyBool("Sandboxed")
 )
 
 // SearchAttributes is every key above, for registration.
 var SearchAttributes = []temporal.SearchAttributeKey{
-	SearchInstallationID, SearchProfile, SearchPhase, SearchLastOutcome, SearchNextDue,
+	SearchInstallationID, SearchProfile, SearchPhase, SearchLastOutcome, SearchNextDue, SearchSandboxed,
 }
 
 // Phase values (the RepoWorkflow state diagram).
@@ -45,4 +48,8 @@ const (
 	PhaseWaitingCapacity = "waiting-capacity"
 	PhaseRunning         = "running"
 	PhaseBackoff         = "backoff"
+	// PhaseNeedsSandbox is a sandboxed repository with no sandbox to run
+	// in, waiting for its next cadence or a recheck (DESIGN-0005
+	// § Failing closed).
+	PhaseNeedsSandbox = "needs-sandbox"
 )

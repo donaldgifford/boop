@@ -551,27 +551,44 @@ and one commit per numbered task. The PR split is OQ1.
 
 #### Tasks
 
-- [ ] 8.1 `RunRenovate`: for a sandboxed plan, check the sandbox (the
+- [x] 8.1 `RunRenovate`: for a sandboxed plan, check the sandbox (the
   RuntimeClass exists, OQ2) before minting; when it does not, or no
   `sandbox` block is configured, return the non-retryable
   `NeedsSandbox` error without creating anything.
-- [ ] 8.2 A sandboxed Job that stays unschedulable past
+- [x] 8.2 A sandboxed Job that stays unschedulable past
   `sandbox.pending_timeout` (OQ9) is deleted and classified
   `NeedsSandbox`, not `Pending`, when its pod events show the
   RuntimeClass or placement as the cause.
-- [ ] 8.3 `RepoWorkflow`, behind a new `GetVersion` change
+- [x] 8.3 `RepoWorkflow`, behind a new `GetVersion` change
   (`sandbox-1`): on `NeedsSandbox`, phase `needs-sandbox`, a
   `repository_event` log line (OQ6), and a wait until the next cadence;
   `recheck` retries at once.
-- [ ] 8.4 In `report` mode, a floor-raised plan runs as an ordinary Job
+- [x] 8.4 In `report` mode, a floor-raised plan runs as an ordinary Job
   (today's behaviour, OQ7) and logs `would_sandbox=true` with the floor
   managers.
-- [ ] 8.5 `RunResult.Sandbox` and `RunResult.UnsafeExecutions`; the
+- [x] 8.5 `RunResult.Sandbox` and `RunResult.UnsafeExecutions`; the
   `Sandboxed` (Bool) search attribute registered by `boopd worker` and
   upserted from the plan.
-- [ ] 8.6 Replay: record a `RepoWorkflow` history from the current code
+- [x] 8.6 Replay: record a `RepoWorkflow` history from the current code
   before 8.3 and keep `TestReplay_Histories` green; add a history for a
   `needs-sandbox` run.
+
+  Landed together. `kube.Runner.RuntimeClassExists` (needs `get` on
+  `runtimeclasses`, cluster-wide) and `SandboxPendingCause` (no pod,
+  an `Unschedulable` pod, or a `FailedScheduling` or
+  `FailedCreatePodSandBox` event; events need `list` on `events`) are
+  the checks; the chart's RBAC for both is Phase 10's, and until then a
+  forbidden RuntimeClass read is an infrastructure error. A sandboxed
+  run waits `sandbox.pending_timeout`. The error type is
+  `workflows.ErrTypeNeedsSandbox` (`needs-sandbox`, non-retryable).
+  RepoWorkflow reads `sandbox-1` once at the start of each execution;
+  from it a NeedsSandbox run logs `repository_event` at warn, waits in
+  phase `needs-sandbox` until start + cadence, and upserts `Sandboxed`.
+  PlanRun logs `would_sandbox=true` for 8.4, since it is where report
+  mode keeps the ordinary profile (Phase 7). The replay histories are
+  `repo-pre-sandbox-run-recheck-continue.json` (recorded before the
+  workflow change) and `repo-needs-sandbox-then-recheck.json`; the older
+  baselines are unchanged.
 
 #### Success Criteria
 

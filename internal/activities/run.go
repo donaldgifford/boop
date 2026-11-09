@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -204,6 +205,9 @@ func (r *run) execute(ctx context.Context) (*workflows.RunResult, error) {
 		wg.Wait()
 	}()
 
+	if err := r.checkSandbox(ctx); err != nil {
+		return nil, err
+	}
 	if err := r.mint(ctx); err != nil {
 		if errors.Is(err, platform.ErrTokenPermissions) {
 			return nil, temporal.NewNonRetryableApplicationError("mint token: "+err.Error(), workflows.ErrTypeTokenPermissions, err)
@@ -221,14 +225,23 @@ func (r *run) execute(ctx context.Context) (*workflows.RunResult, error) {
 		return nil, infraError("create job: "+err.Error(), r.res)
 	}
 
-	pod, err := r.a.runner.WaitRunning(ctx, r.name, r.a.cfg.Runs.PendingTimeout)
+	pending := r.pendingTimeout()
+	pod, err := r.a.runner.WaitRunning(ctx, r.name, pending)
 	if err != nil {
+		// A sandboxed pod that never started because of the sandbox is
+		// NeedsSandbox, not Pending (OQ9); look before the Job goes.
+		var cause string
+		if errors.Is(err, kube.ErrPending) && r.sandboxed() {
+			cause = r.a.runner.SandboxPendingCause(ctx, r.name)
+		}
 		r.finish(ctx)
 		switch {
+		case cause != "":
+			return nil, needsSandbox(fmt.Sprintf("pod not Running within %v: %s", pending, cause), r.res)
 		case errors.Is(err, kube.ErrPending):
 			r.a.metrics.PendingTimeout()
 			return nil, temporal.NewApplicationErrorWithOptions(
-				fmt.Sprintf("pod not Running within %v", r.a.cfg.Runs.PendingTimeout), workflows.ErrTypePending,
+				fmt.Sprintf("pod not Running within %v", pending), workflows.ErrTypePending,
 				temporal.ApplicationErrorOptions{Details: []any{r.res}})
 		case ctx.Err() != nil:
 			return nil, ctx.Err()
@@ -279,6 +292,56 @@ func (r *run) mint(ctx context.Context) error {
 		r.log.WarnContext(ctx, "no rate reader for the run token", "error", err)
 	}
 	return nil
+}
+
+// sandboxed reports whether the run's profile is a sandboxed one.
+func (r *run) sandboxed() bool {
+	p := r.a.cfg.Profiles[r.in.Profile]
+	return p != nil && p.Sandboxed
+}
+
+// pendingTimeout is sandbox.pending_timeout for a sandboxed run, VM boot
+// included, and runs.pending_timeout otherwise.
+func (r *run) pendingTimeout() time.Duration {
+	if r.sandboxed() && r.a.cfg.Sandbox != nil && r.a.cfg.Sandbox.PendingTimeout > 0 {
+		return r.a.cfg.Sandbox.PendingTimeout
+	}
+	return r.a.cfg.Runs.PendingTimeout
+}
+
+// checkSandbox fails a sandboxed run closed before anything is minted
+// or created (IMPL-0006 task 8.1): with no sandbox block, or a
+// RuntimeClass the cluster does not have, it is NeedsSandbox. It also
+// records the sandbox in the result.
+func (r *run) checkSandbox(ctx context.Context) error {
+	if !r.sandboxed() {
+		return nil
+	}
+	sb := r.a.cfg.Sandbox
+	if sb == nil {
+		return needsSandbox(fmt.Sprintf("profile %s is sandboxed but boopd.hcl has no sandbox block", r.in.Profile), nil)
+	}
+	ok, err := r.a.runner.RuntimeClassExists(ctx, sb.RuntimeClass)
+	if err != nil {
+		return infraError("check the sandbox: "+err.Error(), nil)
+	}
+	if !ok {
+		return needsSandbox(fmt.Sprintf("RuntimeClass %s does not exist", sb.RuntimeClass), nil)
+	}
+	r.res.Sandbox = sb.RuntimeClass
+	r.res.UnsafeExecutions = slices.Clone(r.a.cfg.Profiles[r.in.Profile].UnsafeExecutions)
+	return nil
+}
+
+// needsSandbox is the non-retryable NeedsSandbox error, with the
+// partial result when there is one.
+func needsSandbox(msg string, res *workflows.RunResult) error {
+	var details []any
+	if res != nil {
+		details = []any{res}
+	}
+	return temporal.NewApplicationErrorWithOptions(msg, workflows.ErrTypeNeedsSandbox,
+		temporal.ApplicationErrorOptions{NonRetryable: true, Details: details})
 }
 
 // tokenPermissions is the narrowed set for a sandboxed run, nil for an

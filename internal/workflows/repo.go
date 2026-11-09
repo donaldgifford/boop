@@ -54,6 +54,11 @@ const (
 	// capacityLeaseChange gates the capacity lease, so RepoWorkflows
 	// started before it replay without the AcquireCapacity activity.
 	capacityLeaseChange = "capacity-lease"
+
+	// sandboxChange gates NeedsSandbox handling and the Sandboxed search
+	// attribute (IMPL-0006 task 8.3), so RepoWorkflows started before it
+	// replay as they ran: a NeedsSandbox error backs off like any failure.
+	sandboxChange = "sandbox-1"
 )
 
 // repo is RepoWorkflow's state within one execution.
@@ -81,6 +86,14 @@ type repo struct {
 	// acquires numbers acquire Updates for their UpdateIDs.
 	acquires int
 	phase    string
+
+	// sandboxV is sandboxChange's version for this execution.
+	sandboxV workflow.Version
+	// sandboxed is the last plan's Sandboxed.
+	sandboxed bool
+	// needsSandbox is set when the last run had no sandbox; the
+	// repository waits in PhaseNeedsSandbox.
+	needsSandbox bool
 }
 
 // RepoWorkflow owns one repository: it waits for its due time, a
@@ -107,6 +120,7 @@ func RepoWorkflow(ctx workflow.Context, in *RepoState) error {
 	if err := workflow.SetQueryHandler(ctx, StateQuery, func() (RepoState, error) { return r.s, nil }); err != nil {
 		return err
 	}
+	r.sandboxV = workflow.GetVersion(ctx, sandboxChange, workflow.DefaultVersion, 1)
 	if err := r.plan(ctx, PriorityNormal); err != nil {
 		return err
 	}
@@ -125,8 +139,17 @@ func RepoWorkflow(ctx workflow.Context, in *RepoState) error {
 		if err != nil || end {
 			return err
 		}
-		r.upsert(ctx, PhaseWaiting)
+		r.upsert(ctx, r.idlePhase())
 	}
+}
+
+// idlePhase is the phase between runs: needs-sandbox after a run that
+// had no sandbox, waiting otherwise.
+func (r *repo) idlePhase() string {
+	if r.needsSandbox {
+		return PhaseNeedsSandbox
+	}
+	return PhaseWaiting
 }
 
 // firstDue sets a new execution's NextDue. A workflow started by
@@ -174,6 +197,7 @@ func (r *repo) plan(ctx workflow.Context, p Priority) error {
 	}
 	r.s.Profile, r.cadence = plan.Profile, plan.Cadence
 	r.settle, r.minInterval = plan.Settle, plan.MinInterval
+	r.sandboxed = plan.Sandboxed
 	return nil
 }
 
@@ -311,7 +335,7 @@ func (r *repo) checkRepo(ctx workflow.Context) (gone bool) {
 // check runs the CheckRepo activity in the checking phase.
 func (r *repo) check(ctx workflow.Context) (*CheckRepoResult, error) {
 	r.upsert(ctx, PhaseChecking)
-	defer r.upsert(ctx, PhaseWaiting)
+	defer func() { r.upsert(ctx, r.idlePhase()) }()
 	var res CheckRepoResult
 	err := workflow.ExecuteActivity(shortOptions(ctx, PriorityNormal, r.s.InstallationID), CheckRepoActivity,
 		&CheckRepoInput{InstallationID: r.s.InstallationID, RepoID: r.s.RepoID}).Get(ctx, &res)
@@ -328,6 +352,7 @@ func (r *repo) runOnce(ctx workflow.Context, prio Priority) (end bool, err error
 	// The run covers any pending event; events that arrive during it stay
 	// buffered and schedule one more run after it.
 	r.clearEvent()
+	r.needsSandbox = false
 	countEventRun(ctx, r.runReason)
 	if err := r.plan(ctx, prio); err != nil {
 		return false, err
@@ -349,19 +374,22 @@ func (r *repo) runOnce(ctx workflow.Context, prio Priority) (end bool, err error
 		}).Get(ctx, &res)
 
 		a := attemptOf(runErr, &res)
-		r.report(ctx, l, a)
+		r.report(ctx, l, &a)
 		if a.result != nil {
 			r.s.Managers = mergeManagers(r.s.Managers, a.result.Managers)
 		}
 		switch {
 		case a.outcome != "":
-			rerun, offboard := r.decide(ctx, a, start)
+			rerun, offboard := r.decide(ctx, &a, start)
 			if offboard {
 				return true, nil
 			}
 			if !rerun {
 				return false, nil
 			}
+		case a.needsSandbox && r.sandboxV >= 1:
+			r.waitForSandbox(ctx, a.reason, start)
+			return false, nil
 		case a.rateLimited:
 			r.upsert(ctx, PhaseBackoff)
 			if err := workflow.Sleep(ctx, max(a.retryAt.Sub(workflow.Now(ctx)), 0)); err != nil {
@@ -380,6 +408,17 @@ func (r *repo) runOnce(ctx workflow.Context, prio Priority) (end bool, err error
 		}
 		r.upsert(ctx, PhaseAcquiring)
 	}
+}
+
+// waitForSandbox handles a run that had no sandbox (IMPL-0006 task
+// 8.3): the repository_event line (OQ6), and no retry until the next
+// cadence; a recheck runs it again at once.
+func (r *repo) waitForSandbox(ctx workflow.Context, reason string, start time.Time) {
+	workflow.GetLogger(ctx).Warn("repository_event",
+		"event", PhaseNeedsSandbox, "repo_id", r.s.RepoID, "slug", r.s.Slug, "profile", r.s.Profile, "reason", reason)
+	r.needsSandbox = true
+	r.s.NextDue = start.Add(r.cadence)
+	r.s.ConsecutiveReruns = 0
 }
 
 // backoff is min(5 min × 2^n, limit).
@@ -407,6 +446,9 @@ type attempt struct {
 	// rateLimited is a rate-limited error; retryAt is its pause.
 	rateLimited bool
 	retryAt     time.Time
+	// needsSandbox is a NeedsSandbox error; reason is its message.
+	needsSandbox bool
+	reason       string
 }
 
 // attemptOf sorts RunRenovate's return (DESIGN-0001 § RepoWorkflow step
@@ -432,6 +474,12 @@ func attemptOf(err error, res *RunResult) attempt {
 		return a
 	}
 	switch appErr.Type() {
+	case ErrTypeNeedsSandbox:
+		a.needsSandbox, a.reason = true, appErr.Message()
+		var partial RunResult
+		if appErr.Details(&partial) == nil {
+			a.result = &partial
+		}
 	case ErrTypePending:
 		a.pending = true
 		var partial RunResult
@@ -484,7 +532,7 @@ func (r *repo) acquire(ctx workflow.Context, prio Priority) (leases, error) {
 		if err != nil {
 			workflow.GetLogger(ctx).Warn("acquire capacity failed", "error", err)
 		}
-		r.report(ctx, leases{installation: inst}, attempt{})
+		r.report(ctx, leases{installation: inst}, &attempt{})
 		r.upsert(ctx, PhaseWaitingCapacity)
 		if err := workflow.Sleep(ctx, capacityBackoff(denials, r.s.RepoID)); err != nil {
 			return leases{}, err
@@ -551,7 +599,7 @@ func capacityBackoff(n int, repoID int64) time.Duration {
 // when it has both, and a retryAt for a rate-limited run, and the
 // capacity lease when there is one. The report is the budget's rate
 // reading; it costs no /rate_limit call.
-func (r *repo) report(ctx workflow.Context, l leases, a attempt) {
+func (r *repo) report(ctx workflow.Context, l leases, a *attempt) {
 	rep := Report{LeaseID: l.installation}
 	if res := a.result; res != nil && res.RateBefore != nil && res.RateAfter != nil {
 		rep.Before, rep.After = res.RateBefore, res.RateAfter
@@ -574,7 +622,7 @@ func (r *repo) report(ctx workflow.Context, l leases, a attempt) {
 
 // decide applies the convergence table to an attempt with an outcome.
 // rerun asks for a new lease at once; offboard ends the workflow.
-func (r *repo) decide(ctx workflow.Context, a attempt, start time.Time) (rerun, offboard bool) {
+func (r *repo) decide(ctx workflow.Context, a *attempt, start time.Time) (rerun, offboard bool) {
 	now := workflow.Now(ctx)
 	r.s.LastRun = &RunSummary{Outcome: a.outcome, StartedAt: start, FinishedAt: now, Progress: a.progress}
 	if a.result != nil {
@@ -646,6 +694,9 @@ func (r *repo) upsert(ctx workflow.Context, phase string) {
 	}
 	if r.s.LastRun != nil {
 		updates = append(updates, SearchLastOutcome.ValueSet(string(r.s.LastRun.Outcome)))
+	}
+	if r.sandboxV >= 1 {
+		updates = append(updates, SearchSandboxed.ValueSet(r.sandboxed))
 	}
 	if err := workflow.UpsertTypedSearchAttributes(ctx, updates...); err != nil {
 		workflow.GetLogger(ctx).Warn("search attribute upsert failed", "error", err)

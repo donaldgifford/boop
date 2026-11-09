@@ -36,6 +36,11 @@ const (
 	// permissions; the App lacks one. Non-retryable: the config or the
 	// App's settings must change (IMPL-0006 task 6.4).
 	ErrTypeTokenPermissions = "token-permissions"
+	// ErrTypeNeedsSandbox: a sandboxed run had no sandbox to run in (no
+	// sandbox block, no RuntimeClass, or a pod the sandbox could not
+	// start). Non-retryable: the repository waits for its next cadence
+	// or a recheck (IMPL-0006 Phase 8).
+	ErrTypeNeedsSandbox = "needs-sandbox"
 )
 
 // ErrTypeGitHubRateLimited is the type of a GitHub rate limit returned
@@ -89,6 +94,12 @@ type RunResult struct {
 	ReportMissing    bool          // tuples rebuilt from branch and PR events
 	RateBefore       *Readings
 	RateAfter        *Readings
+	// Sandbox is the RuntimeClass a sandboxed run ran under; "" for an
+	// ordinary run.
+	Sandbox string
+	// UnsafeExecutions are the allowedUnsafeExecutions a sandboxed run
+	// was granted.
+	UnsafeExecutions []string
 }
 
 // UpdateTuple is one row per upgrade in the report's
