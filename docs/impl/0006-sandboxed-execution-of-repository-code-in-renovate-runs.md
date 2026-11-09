@@ -375,14 +375,17 @@ and one commit per numbered task. The PR split is OQ1.
   `ForceDisable` (`Config.Floor`: the floor plus `floor_add`) in
   `enforce` mode and `HostUsers` (`*bool`) from `runs.host_users`.
   Egress stays in the config for the chart.
-- [ ] 3.5 Golden HCL (`internal/config/testdata/golden.hcl`) and one
+- [x] 3.5 Golden HCL (`internal/config/testdata/golden.hcl`) and one
   failing case per rule; `examples/boopd.hcl` gains a commented
   `sandbox` block and sandboxed `python` and `jvm` profiles;
   `docs/config.md` documents every key (the reference test keeps it
   complete).
-- [ ] 3.6 `runs.host_users` (bool, default `true`, OQ8): `false` asks
+  The example's `sandbox` block is commented out, so its three
+  sandboxed profiles validate with a warning each.
+- [x] 3.6 `runs.host_users` (bool, default `true`, OQ8): `false` asks
   for a user namespace in ordinary Jobs. A sandboxed profile is never
   given one, and the setting is documented as runc-only.
+  Landed with 3.2 (decode, docs) and 3.4 (`BuildInput.HostUsers`).
 - [x] 3.7 (OQ12) Remove `PIP_ONLY_BINARY` and `UV_NO_BUILD` from the
   python profile in `charts/boopd/values.yaml` and `examples/boopd.hcl`;
   `docs/config.md` says why (Findings, 2026-10-26).
