@@ -1,7 +1,7 @@
 ---
 id: DESIGN-0005
 title: "Sandboxed execution of repository code in Renovate runs"
-status: Draft
+status: Approved
 author: Donald Gifford
 created: 2026-10-24
 ---

@@ -1,7 +1,7 @@
 ---
 id: IMPL-0006
 title: "Sandboxed execution of repository code in Renovate runs"
-status: Draft
+status: In Progress
 author: Donald Gifford
 created: 2026-10-25
 ---
@@ -627,7 +627,8 @@ and one commit per numbered task. The PR split is OQ1.
 - [ ] 12.3 CLAUDE.md: the layout line for `internal/renovate/unsafe`,
   and the "Decisions already made" entry for the sandboxed tier.
 - [ ] 12.4 DESIGN-0005 → Approved at the start of Phase 2; →
-  Implemented in Phase 13.
+  Implemented in Phase 13. Approved on 2026-11-09 (IMPL-0006 → In
+  Progress the same day); Implemented waits on Phase 13.
 
 #### Success Criteria
 
