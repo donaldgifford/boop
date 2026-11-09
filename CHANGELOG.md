@@ -5,6 +5,11 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Features
+
+- *(renovate)* Unsafe package: the floor, gated values and default patterns
+- *(renovate)* Renovate-unsafe-gen reads a Renovate dist into the unsafe package
+
 ### Bug Fixes
 
 - *(scripts)* Sandbox-token-check revokes its token and shows progress
@@ -17,10 +22,17 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(impl)* IMPL-0006 1.4 done for the mint; live run moves to 13.4
 - *(impl)* IMPL-0006 1.5 first run: Gateway answers 403 to in-cluster sources
 - *(impl)* IMPL-0006 1.5 resolved: Gateway checks the client's egress to the backend
+- DESIGN-0005 tracking points at internal/renovate/unsafe; IMPL-0006 Phase 2 progress
+- DESIGN-0005 Approved, IMPL-0006 In Progress
+
+### Testing
+
+- *(renovate)* Drift test ties the unsafe package to the pinned image
 
 ### Miscellaneous Tasks
 
 - *(scripts)* Sandbox-token-check.sh for IMPL-0006 1.4
+- Renovate-drift job runs the drift test when the pin or floor changes
 
 ## [0.5.5] - 2026-10-26
 
