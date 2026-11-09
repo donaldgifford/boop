@@ -94,8 +94,8 @@ func fleet(n int) []fakegithub.Repo {
 // a fork, as workflow ids.
 func onboardedIDs(repos []fakegithub.Repo, fromPage int) []string {
 	var out []string
-	for i, r := range repos {
-		if i/100+1 >= fromPage && r.HasConfig && !r.Fork {
+	for i := range repos {
+		if r := &repos[i]; i/100+1 >= fromPage && r.HasConfig && !r.Fork {
 			out = append(out, workflows.RepoWorkflowID(r.ID))
 		}
 	}

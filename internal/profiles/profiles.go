@@ -130,6 +130,15 @@ func New(order []string, rules []Rule, defaultProfile, unknownProfile string, fl
 // below it, or the strictest sandboxed profile when every one is below
 // it; raised reports that. A sandboxed profile is never lowered.
 func (r *Resolver) Resolve(extends, managers []string) (profile string, raised bool) {
+	out := r.ResolveRules(extends, managers)
+	if r.sandboxed == nil || r.sandboxed[out] || !r.onFloor(managers) {
+		return out, false
+	}
+	return r.sandboxFor(out), true
+}
+
+// ResolveRules is Resolve without the floor: what the rules alone pick.
+func (r *Resolver) ResolveRules(extends, managers []string) string {
 	fromExtends := r.unknownProfile
 	if len(extends) > 0 {
 		fromExtends = r.defaultProfile
@@ -145,10 +154,24 @@ func (r *Resolver) Resolve(extends, managers []string) (profile string, raised b
 			out = r.stricter(out, r.rules[i].Profile)
 		}
 	}
-	if r.sandboxed == nil || r.sandboxed[out] || !r.onFloor(managers) {
-		return out, false
+	return out
+}
+
+// HasFloor reports whether the resolver carries a floor.
+func (r *Resolver) HasFloor() bool { return r.sandboxed != nil }
+
+// FloorManagers returns the floor managers, nil without a floor.
+func (r *Resolver) FloorManagers() []string { return slices.Clone(r.floor) }
+
+// Raise returns the sandboxed profile the floor raises profile to, and
+// true; profile and false when it is already sandboxed or there is no
+// floor. PlanRun uses it when the evidence is not a manager name, such
+// as a truncated tree listing.
+func (r *Resolver) Raise(profile string) (string, bool) {
+	if r.sandboxed == nil || r.sandboxed[profile] {
+		return profile, false
 	}
-	return r.sandboxFor(out), true
+	return r.sandboxFor(profile), true
 }
 
 // Sandboxed reports whether profile is a sandboxed profile.

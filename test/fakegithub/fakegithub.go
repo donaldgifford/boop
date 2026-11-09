@@ -55,6 +55,11 @@ type Repo struct {
 	Config     string
 	HasConfig  bool
 	ConfigPath string
+	// Files are the default branch's other files, for the tree listing
+	// (the config file is listed too when HasConfig). TreeTruncated
+	// marks the listing truncated, as GitHub does past its limits.
+	Files         []string
+	TreeTruncated bool
 }
 
 // configPath is where the repository's config file lives.
@@ -189,6 +194,8 @@ type Server struct {
 	deliveries    []Delivery
 	deleted       map[int64]bool
 	granted       map[string]string
+	treeReads     int
+	treeStatus    int
 }
 
 // NewFake returns a fake GitHub with one installation (id 1) and
@@ -264,6 +271,21 @@ func (s *Server) SetTokenTTL(d time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.tokenTTL = d
+}
+
+// TreeReads returns how many tree listings were served or refused.
+func (s *Server) TreeReads() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.treeReads
+}
+
+// SetTreeStatus makes every tree listing answer code with no body; 0
+// restores the listing.
+func (s *Server) SetTreeStatus(code int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.treeStatus = code
 }
 
 // SetGrantedPermissions replaces the App's permission set. A mint
@@ -419,6 +441,8 @@ func (s *Server) serveInstallation(w http.ResponseWriter, r *http.Request, path 
 		s.listRepos(w, r)
 	case r.Method == http.MethodGet && path == "/rate_limit":
 		s.rateLimit(w)
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/repositories/") && strings.Contains(path, "/git/trees/"):
+		s.tree(w, r, strings.TrimPrefix(path, "/repositories/"))
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/repositories/"):
 		s.repoByID(w, strings.TrimPrefix(path, "/repositories/"))
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/repos/"):
@@ -454,6 +478,9 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 }
 
 // message is GitHub's error body.
+// keyPath is the path key of tree and contents entries.
+const keyPath = "path"
+
 // messageKey is the key of GitHub's error message.
 const messageKey = "message"
 
@@ -745,7 +772,7 @@ func (*Server) contents(w http.ResponseWriter, repo *Repo, parts []string) {
 
 // entry is one contents API object.
 func entry(kind, name, p string) map[string]any {
-	return map[string]any{"type": kind, "name": name, "path": p}
+	return map[string]any{keyType: kind, "name": name, keyPath: p}
 }
 
 func (s *Server) repoByID(w http.ResponseWriter, id string) {
@@ -761,6 +788,45 @@ func (s *Server) repoByID(w http.ResponseWriter, id string) {
 			writeJSON(w, http.StatusOK, repoJSON(&s.repos[i]))
 			return
 		}
+	}
+	notFound(w)
+}
+
+// tree serves /repositories/{id}/git/trees/{ref}?recursive=1: the
+// repository's files at its default branch.
+func (s *Server) tree(w http.ResponseWriter, r *http.Request, rest string) {
+	id, ref, _ := strings.Cut(rest, "/git/trees/")
+	n, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		notFound(w)
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.treeReads++
+	if s.treeStatus != 0 {
+		writeJSON(w, s.treeStatus, message("tree listing failed"))
+		return
+	}
+	for i := range s.repos {
+		repo := &s.repos[i]
+		if repo.ID != n {
+			continue
+		}
+		if ref != repo.DefaultBranch || r.URL.Query().Get("recursive") != "1" {
+			notFound(w)
+			return
+		}
+		files := slices.Clone(repo.Files)
+		if repo.HasConfig {
+			files = append(files, repo.configPath())
+		}
+		entries := make([]map[string]any, 0, len(files))
+		for _, f := range files {
+			entries = append(entries, map[string]any{keyPath: f, keyType: "blob", "mode": "100644"})
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"sha": "fake", "tree": entries, "truncated": repo.TreeTruncated})
+		return
 	}
 	notFound(w)
 }

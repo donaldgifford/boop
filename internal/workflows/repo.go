@@ -167,6 +167,7 @@ func (r *repo) plan(ctx workflow.Context, p Priority) error {
 	var plan RunPlan
 	err := workflow.ExecuteActivity(shortOptions(ctx, p, r.s.InstallationID), PlanRunActivity, &PlanRunInput{
 		InstallationID: r.s.InstallationID, Extends: r.s.Extends, Managers: r.s.Managers,
+		RepoID: r.s.RepoID, DefaultBranch: r.s.DefaultBranch,
 	}).Get(ctx, &plan)
 	if err != nil {
 		return fmt.Errorf("plan run: %w", err)

@@ -161,6 +161,10 @@ func (f *fakeInstall) RepoIDBySlug(_ context.Context, slug string) (int64, error
 	return f.ids[slug], nil
 }
 
+func (*fakeInstall) ListTree(context.Context, int64, string) (*github.Tree, error) {
+	return &github.Tree{}, nil
+}
+
 func (f *fakeInstall) SetDiscoveredLimit(limit int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

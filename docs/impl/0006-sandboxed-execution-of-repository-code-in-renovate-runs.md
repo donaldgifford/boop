@@ -510,20 +510,36 @@ and one commit per numbered task. The PR split is OQ1.
 
 #### Tasks
 
-- [ ] 7.1 `internal/platform/github`: `ListTree(ctx, repo, ref)` over
+- [x] 7.1 `internal/platform/github`: `ListTree(ctx, repo, ref)` over
   `GET /repos/{owner}/{repo}/git/trees/{ref}?recursive=1`, returning
   paths and `truncated`.
-- [ ] 7.2 `unsafe.MatchFloor(paths)`: the floor managers whose default
+- [x] 7.2 `unsafe.MatchFloor(paths)`: the floor managers whose default
   patterns match any path.
-- [ ] 7.3 `PlanRunInput` gains `RepoID` and `DefaultBranch`;
+- [x] 7.3 `PlanRunInput` gains `RepoID` and `DefaultBranch`;
   `PlanRun` lists the tree (OQ4), adds matched managers to the resolve
   input, and treats `truncated` as a floor match. `RunPlan` gains
   `Sandboxed`, `FloorRaised` and `FloorManagers`.
-- [ ] 7.4 A tree-listing failure is not fatal: PlanRun resolves from the
+- [x] 7.4 A tree-listing failure is not fatal: PlanRun resolves from the
   known managers, logs at warn and counts
   `boopd_floor_detection_errors_total`.
-- [ ] 7.5 `test/fakegithub` serves trees; tests for a match, no match, a
+- [x] 7.5 `test/fakegithub` serves trees; tests for a match, no match, a
   truncated tree and an error.
+
+  Landed together. `ListTree(ctx, repoID, ref)` uses
+  `GET /repositories/{id}/git/trees/{ref}?recursive=1`, by id like
+  `CheckRepo`, and returns a `github.Tree`. `MatchFloor(floor, paths)`
+  takes the floor (`Config.Floor`, so `floor_add` counts); it reads
+  `/.../` patterns as regexps and others as globs. PlanRun lists only
+  when the resolver has a floor and the input has `RepoID` and
+  `DefaultBranch`, so files without a sandbox and old histories cost
+  nothing. In `report` mode PlanRun returns the ordinary profile with
+  `FloorRaised` (8.4 logs it). Resolver gains `ResolveRules`,
+  `HasFloor`, `FloorManagers` and `Raise`.
+
+  `pip-compile` has no default patterns, so no file name finds it. The
+  first success criterion holds through 4.3 instead: with a `sandbox`
+  block a repository whose managers are unknown resolves sandboxed
+  before its first run (`TestPlanRun_FloorDetection`, "first run").
 
 #### Success Criteria
 

@@ -46,6 +46,7 @@ type InstallationAPI interface {
 	ReadRateLimit(ctx context.Context) (*workflows.Readings, error)
 	CheckRepo(ctx context.Context, repoID int64) (*github.RepoCheck, error)
 	RepoIDBySlug(ctx context.Context, slug string) (int64, error)
+	ListTree(ctx context.Context, repoID int64, ref string) (*github.Tree, error)
 	SetDiscoveredLimit(limit int)
 }
 
