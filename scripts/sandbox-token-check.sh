@@ -72,6 +72,16 @@ EOF
   echo "pushed ${OWNER}/${REPO}"
 }
 
+TOKEN=""
+
+# revoke deletes the minted token once; safe to call again from the trap.
+revoke() {
+  [[ -n "${TOKEN}" ]] || return 0
+  curl -fsS -o /dev/null -X DELETE -H "Authorization: Bearer ${TOKEN}" \
+    https://api.github.com/installation/token && echo "token revoked"
+  TOKEN=""
+}
+
 b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
 
 # app_jwt prints a 9-minute App JWT signed with $APP_KEY.
@@ -86,10 +96,13 @@ app_jwt() {
 
 run() {
   [[ -n "${APP_ID:-}" && -r "${APP_KEY:-}" ]] || die "set APP_ID and APP_KEY (a readable PEM)"
-  local repo_id image jwt resp token log
+  local repo_id image jwt resp log
   repo_id="$(gh api "repos/${OWNER}/${REPO}" --jq .id)"
   image="$(sed -n 's/^    image: \(ghcr.io\/renovatebot\/renovate:.*\)$/\1/p' "${ROOT}/charts/boopd/values.yaml")"
   [[ -n "${image}" ]] || die "pinned Renovate image not found in charts/boopd/values.yaml"
+
+  echo "pulling ${image} (several GB the first time)"
+  docker pull -q "${image}" >/dev/null
 
   jwt="$(app_jwt)"
   resp="$(curl -fsS -X POST \
@@ -97,19 +110,16 @@ run() {
     "https://api.github.com/app/installations/${INSTALLATION_ID}/access_tokens" \
     -d "{\"repository_ids\":[${repo_id}],\"permissions\":${PERMISSIONS}}")" \
     || die "mint refused: the App lacks part of the set, or APP_ID/APP_KEY are wrong"
-  token="$(jq -r .token <<<"${resp}")"
+  # Global, not local: the EXIT trap runs after run() has returned.
+  TOKEN="$(jq -r .token <<<"${resp}")"
   echo "minted; GitHub granted: $(jq -c .permissions <<<"${resp}")"
-  revoke() {
-    curl -fsS -o /dev/null -X DELETE -H "Authorization: Bearer ${token}" \
-      https://api.github.com/installation/token && echo "token revoked"
-  }
   trap revoke EXIT
 
   log="$(mktemp -t sandbox-token-check.XXXXXX.log)"
   echo "running ${image} against ${OWNER}/${REPO}; log: ${log}"
   docker run --rm \
     -e RENOVATE_PLATFORM=github \
-    -e RENOVATE_TOKEN="${token}" \
+    -e RENOVATE_TOKEN="${TOKEN}" \
     -e RENOVATE_REPOSITORIES="${OWNER}/${REPO}" \
     -e RENOVATE_ONBOARDING=false \
     -e RENOVATE_REQUIRE_CONFIG=optional \
@@ -117,7 +127,9 @@ run() {
     -e RENOVATE_GIT_AUTHOR="boop-bot <boop-bot@users.noreply.github.com>" \
     -e RENOVATE_CONFIG='{"dependencyDashboard":true,"minimumReleaseAge":"3 days","internalChecksFilter":"none","prHourlyLimit":0,"prConcurrentLimit":0,"schedule":["at any time"]}' \
     -e LOG_LEVEL=debug -e LOG_FORMAT=json \
-    "${image}" >"${log}" 2>&1 || echo "renovate exited non-zero (expected if the workflow push failed)"
+    "${image}" 2>&1 | tee "${log}" | jq -rR --unbuffered 'fromjson? | select(.level >= 30) | "  \(.msg)"' \
+    || echo "renovate exited non-zero (expected if the workflow push failed)"
+  revoke
 
   echo
   echo "== Renovate warnings and errors"
