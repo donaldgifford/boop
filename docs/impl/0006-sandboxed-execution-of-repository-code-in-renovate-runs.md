@@ -254,7 +254,8 @@ and one commit per numbered task. The PR split is OQ1.
 - [ ] 1.4 Mint a token with the narrowed permissions (OQ5's set) for a
   fixture repository and run Renovate live against it with the pinned
   image: it clones, pushes a branch, opens a PR and updates the
-  dashboard; a change under `.github/workflows/` is refused. Record
+  dashboard; a change under `.github/workflows/` is refused; a
+  `minimumReleaseAge` update sets `renovate/stability-days`. Record
   which permission each Renovate step needed.
 
 #### Success Criteria
@@ -327,6 +328,9 @@ and one commit per numbered task. The PR split is OQ1.
 - [x] 3.7 (OQ12) Remove `PIP_ONLY_BINARY` and `UV_NO_BUILD` from the
   python profile in `charts/boopd/values.yaml` and `examples/boopd.hcl`;
   `docs/config.md` says why (Findings, 2026-10-26).
+- [ ] 3.8 (OQ13) `sandbox.egress_endpoints`: a list of `{ namespace,
+  labels, port }`, validated (DNS-label namespace, non-empty labels,
+  port 1–65535), empty by default.
 
 #### Success Criteria
 
@@ -533,6 +537,10 @@ and one commit per numbered task. The PR split is OQ1.
 - [ ] 10.9 `runs.hostUsers` (default `true`) rendered into `boopd.hcl`;
   `NOTES.txt` names the node requirements when it is `false`
   (Kubernetes 1.33+, containerd 2.x, Linux 6.3+).
+- [ ] 10.10 (OQ13) `sandbox.egressEndpoints` rendered into each
+  provider's sandbox policy: `toEndpoints` with the namespace label for
+  `cilium`, a `namespaceSelector` and `podSelector` peer for
+  `kubernetes` and `vpc-cni`; a unittest per provider.
 
 #### Success Criteria
 
@@ -657,8 +665,9 @@ and one commit per numbered task. The PR split is OQ1.
 - The homelab: Kata RuntimeClass `kata`, Cilium 1.20 with the DNS proxy
   and Hubble metrics, and the IMPL-0001 8.1 fixtures.
 - Docker in CI for the drift test.
-- GitHub App permissions that cover OQ5's set (they do today; the
-  narrowed set is a subset).
+- GitHub App permissions that cover OQ5's set (they do: on 2026-11-09
+  boop-bot grants Contents, Pull requests, Issues, Checks and Commit
+  statuses read and write, Metadata and Dependabot alerts read).
 
 ## Open Questions
 
@@ -729,7 +738,13 @@ back to b.
 
 ### OQ5: Which permissions does the default sandbox token set carry?
 
-**Answer (2026-10-25): a.**
+**Answer (2026-10-25): a, amended 2026-11-09:** `checks` and `statuses`
+move to write. Renovate writes branch statuses (`renovate/stability-days`
+for `minimumReleaseAge`, which automerge waits on), and its GitHub App
+docs list both as read and write. The set is `contents`,
+`pull_requests`, `issues`, `checks` and `statuses` write; `metadata` and
+`vulnerability_alerts` read; still never `workflows`. The boop-bot App
+grants exactly those on 2026-11-09 (Dependabot alerts lowered to read).
 
 - **a** (recommended): `contents`, `pull_requests` and `issues` write;
   `checks`, `statuses`, `metadata` and `vulnerability_alerts` read (the
@@ -846,6 +861,30 @@ DESIGN-0005 OQ9 already leaves them out of the sandbox.
 - **b**: keep them for ordinary runs in `report` mode only, and remove
   them when the default moves to `enforce` (13.5).
 - **c**: keep them; document the lock-file side effect.
+- **other:**
+
+### OQ13: How do sandboxed runs reach an in-cluster registry?
+
+Found checking the homelab prerequisites (2026-11-09). The homelab's
+global Renovate config has `hostRules = [{matchHost =
+"registry.fartlab.dev", allowInternal = true}]`, and a homelab
+`CiliumNetworkPolicy`, `boopd-runs-registry`, lets run pods reach
+`zot` in namespace `zot` on 5000. The sandbox policy (10.3) allows only
+DNS and 443 to named external hosts and denies cluster and private
+addresses, so a sandboxed repository with images in that registry
+would fail its lookups. The registry is read-only to run pods and
+receives no boopd token; a compromised run could still read whatever
+the registry serves to anonymous pulls.
+
+- **a** (recommended): a `sandbox.egress_endpoints` list (namespace,
+  pod labels, port), empty by default, rendered as `toEndpoints` in the
+  `cilium` policy and as a `namespaceSelector`/`podSelector` peer in
+  the `kubernetes` and `vpc-cni` ones; the homelab lists `zot`. Tasks
+  3.8 and 10.10.
+- **b**: no in-cluster egress from the sandbox; repositories that need
+  the internal registry stay ordinary, or the registry is exposed on an
+  external name and allowed by `egress_allow`.
+- **c**: allow the cluster's whole service CIDR to sandboxed pods.
 - **other:**
 
 <!--docz:references:start-->
