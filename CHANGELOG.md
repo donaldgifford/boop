@@ -5,9 +5,22 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Bug Fixes
+
+- *(scripts)* Sandbox-token-check revokes its token and shows progress
+
 ### Documentation
 
 - Record the homelab Kata checks (IMPL-0006 1.2, 1.3)
+- *(impl)* IMPL-0006 prerequisite check: token set and in-cluster egress
+- *(impl)* IMPL-0006 OQ13 answered b: no in-cluster egress from the sandbox
+- *(impl)* IMPL-0006 1.4 done for the mint; live run moves to 13.4
+- *(impl)* IMPL-0006 1.5 first run: Gateway answers 403 to in-cluster sources
+- *(impl)* IMPL-0006 1.5 resolved: Gateway checks the client's egress to the backend
+
+### Miscellaneous Tasks
+
+- *(scripts)* Sandbox-token-check.sh for IMPL-0006 1.4
 
 ## [0.5.5] - 2026-10-26
 

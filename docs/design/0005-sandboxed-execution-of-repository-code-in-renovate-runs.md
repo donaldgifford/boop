@@ -483,8 +483,10 @@ design bounds it rather than hides it (OQ4):
 - **Narrowed on mint** (OQ5): sandboxed runs request explicit
   permissions instead of everything the App has:
   `contents: write`, `pull_requests: write`, `issues: write`,
-  `checks: read`, `statuses: read`, `metadata: read`, and **no
-  `workflows`**. A stolen token cannot add or change workflow files. A
+  `checks: write`, `statuses: write`, `metadata: read`,
+  `vulnerability_alerts: read`, and **no `workflows`** (amended
+  2026-11-09: Renovate writes branch statuses such as
+  `renovate/stability-days`, so `checks` and `statuses` need write). A stolen token cannot add or change workflow files. A
   sandboxed repository's GitHub Actions updates then fail with a clear
   artifact problem; the operator can route those to an ordinary profile
   by splitting the repository's Renovate config, or accept it.
