@@ -257,6 +257,9 @@ and one commit per numbered task. The PR split is OQ1.
   dashboard; a change under `.github/workflows/` is refused; a
   `minimumReleaseAge` update sets `renovate/stability-days`. Record
   which permission each Renovate step needed.
+  `scripts/sandbox-token-check.sh` does the run against
+  `boop-fixture-sandbox-token`, which has no Renovate config file so
+  boopd never onboards it.
 - [ ] 1.5 **Deferred, human required.** (OQ13 b) Under 1.3's sandbox
   `CiliumNetworkPolicy` with `registry.fartlab.dev` in `toFQDNs`, a Kata
   pod pulls a manifest from `https://registry.fartlab.dev/v2/` by name.
