@@ -230,6 +230,8 @@ and one commit per numbered task. The PR split is OQ1.
   `dryRun: extract` run over `boop-fixture-python-sdist` with the forced
   object, sanitized like the 4.5 fixtures, with the command in the
   testdata README.
+  **Deferred - human required (2026-11-09):** the run needs Docker, and
+  Docker Desktop's daemon on the dev machine did not start.
 - [x] 1.2 **Deferred, human required.** In the homelab, run a pod with
   the boopd Job's exact posture (`internal/jobspec` output for a
   sandboxed profile, applied by hand) under `runtimeClassName: kata`:
@@ -298,23 +300,37 @@ and one commit per numbered task. The PR split is OQ1.
 
 #### Tasks
 
-- [ ] 2.1 `internal/renovate/unsafe`: `Floor` (the ungated managers:
+- [x] 2.1 `internal/renovate/unsafe`: `Floor` (the ungated managers:
   `maven-wrapper`, `pip-compile`, `pipenv`, `poetry`, `pep621`, `bundler`,
   `cocoapods`, `mix`, `nuget`, `conan`), `Gated` (Renovate's `allowedValues`), and
   `DefaultFilePatterns(manager)`; the data in a generated
-  `zz_generated.go` with the image digest it came from.
-- [ ] 2.2 `cmd/renovate-unsafe-gen` (or a `go:generate` program):
+  `zz_generated.go` with the image digest it came from. Also
+  `IsGated`, `IsManager`, `ExecManagers`, and the managers whose
+  defaults are built at run time (`flux`, `gradle`, `hermit`,
+  `renovate-config`), which have no static patterns. `pip-compile`'s
+  default list is empty, so the forced object carries `[]`.
+- [x] 2.2 `cmd/renovate-unsafe-gen` (or a `go:generate` program):
   extracts `dist/config/options/index.js` and each floor manager's
   `index.js` from the image named in `charts/boopd/values.yaml`, and
-  writes `zz_generated.go`. `just generate-unsafe` runs it.
+  writes `zz_generated.go`. `just generate-unsafe` runs it. The reader
+  is `internal/renovate/unsafe/distscan`, which reads the JavaScript as
+  text and follows relative imports transitively (poetry, pep621 and
+  conan reach `util/exec` only through helpers). The committed file was
+  generated on 2026-11-09 from Renovate 44.149.2's published npm
+  `dist`, the code the pinned image ships, because Docker was down; the
+  drift test checks it against the image.
 - [ ] 2.3 The drift test (OQ3): under the `renovate` build tag, it
   re-reads the pinned image and fails when `allowedValues`, the set of
   managers whose artifact code imports `util/exec`, or any floor
   manager's default patterns differ from `zz_generated.go`. The message
   names the new or changed entries and the decision to make.
-- [ ] 2.4 CI: a `renovate-drift` job running the tagged test, required
+  Written (`drift_test.go`, `just test-renovate`); not yet run against
+  the image, which needs Docker locally or CI's `renovate-drift` job.
+- [x] 2.4 CI: a `renovate-drift` job running the tagged test, required
   when `charts/boopd/values.yaml` or `internal/renovate/unsafe` change.
-- [ ] 2.5 DESIGN-0005's upstream tracking table points at
+  The job runs on those paths; marking it a required check in branch
+  protection is **deferred - human required**.
+- [x] 2.5 DESIGN-0005's upstream tracking table points at
   `internal/renovate/unsafe` as the source of truth.
 
 #### Success Criteria
