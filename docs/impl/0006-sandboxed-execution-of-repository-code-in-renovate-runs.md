@@ -431,33 +431,44 @@ and one commit per numbered task. The PR split is OQ1.
 
 #### Tasks
 
-- [ ] 5.1 `jobspec.BuildInput.Sandbox` (`*Sandbox`: runtime class,
+- [x] 5.1 `jobspec.BuildInput.Sandbox` (`*Sandbox`: runtime class,
   ServiceAccount, optional node selector and tolerations, unsafe
   executions). With it, `podTemplate` sets `runtimeClassName`, the
   placement when given, `serviceAccountName`, an ephemeral-storage
   request and limit, and the `boopd.dev/sandbox: "true"` label.
-- [ ] 5.2 Sandboxed: `RENOVATE_REDIS_URL` is not set;
+- [x] 5.2 Sandboxed: `RENOVATE_REDIS_URL` is not set;
   `allowedUnsafeExecutions` is written into `RENOVATE_CONFIG` from the
   profile, after `ValidateOptions` (it stays forbidden as raw input).
-- [ ] 5.3 Ordinary with `floor_mode = "enforce"`: `RENOVATE_CONFIG`
+- [x] 5.3 Ordinary with `floor_mode = "enforce"`: `RENOVATE_CONFIG`
   gains `force` with `{ "<manager>": { enabled: false,
   managerFilePatterns: <default> } }` for every floor manager.
-- [ ] 5.4 `force` joins `forbiddenOptions`: the builder owns it, so
+- [x] 5.4 `force` joins `forbiddenOptions`: the builder owns it, so
   neither global config nor a profile can set it.
-- [ ] 5.5 `ErrNeedsSandbox` when a profile has `unsafe_executions` and
+- [x] 5.5 `ErrNeedsSandbox` when a profile has `unsafe_executions` and
   no `Sandbox` is given.
-- [ ] 5.6 Tests: the env table and golden Job for an ordinary run, an
+- [x] 5.6 Tests: the env table and golden Job for an ordinary run, an
   ordinary run in `enforce` mode, a sandboxed run with and without
   dedicated placement, `force` rejected in global and profile config.
-- [ ] 5.7 `BuildInput.HostUsers`: when `false` and the run is not
+- [x] 5.7 `BuildInput.HostUsers`: when `false` and the run is not
   sandboxed, `podTemplate` sets `hostUsers: false`; a sandboxed run
   never sets it (Kata rejects it). A golden Job for each case.
-- [ ] 5.8 Sandboxed: the pod template carries the annotation
+- [x] 5.8 Sandboxed: the pod template carries the annotation
   `io.katacontainers.config.runtime.disable_guest_seccomp: "false"`
   next to `RuntimeDefault`, so the profile applies inside the guest
   (Findings, 2026-11-04/05). The sandboxed golden Jobs include it;
   ordinary Jobs don't. `docs/sandbox.md` (12.1) says that the cluster's
   CRI config must allow `io.katacontainers.*` pod annotations.
+
+  Landed together. The unsafe executions live on `jobspec.Profile`
+  (with `Sandboxed`), not on `Sandbox`, so 5.5's check needs no Sandbox
+  to read them. `ErrNeedsSandbox` covers a sandboxed profile as well as
+  one with unsafe executions. Sandboxed pods default to 2Gi/10Gi
+  ephemeral storage unless the profile sets it. A forced manager whose
+  default patterns are built at run time is `ErrNoDefaultPatterns`, and
+  config rejects it in `floor_add` under `enforce`. The golden Jobs are
+  `internal/jobspec/testdata/*.yaml` (`-update` rewrites them); the
+  comparison with the Phase 1.1 fixture waits on 1.1. The
+  `docs/sandbox.md` note is 12.1's.
 
 #### Success Criteria
 

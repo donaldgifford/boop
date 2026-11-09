@@ -20,9 +20,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+
+	"github.com/donaldgifford/boop/internal/renovate/unsafe"
 )
 
 // Renovate env var names (DESIGN-0001 § Process builder).
@@ -57,23 +60,28 @@ const (
 	cacheDir         = workDir + "/cache"
 	homeDir          = workDir + "/home"
 	reportTypeLog    = "logging"
+	valueFalse       = "false"
 	binarySourceGlob = "global"
 
-	optExtends            = "extends"
-	optDryRun             = "dryRun"
-	optCustomEnvVariables = "customEnvVariables"
-	presetGitHubPrefix    = "github>"
-	presetJSONSuffix      = ".json"
-	presetJSON5Suffix     = ".json5"
+	optExtends                 = "extends"
+	optDryRun                  = "dryRun"
+	optCustomEnvVariables      = "customEnvVariables"
+	optAllowedUnsafeExecutions = "allowedUnsafeExecutions"
+	optForce                   = "force"
+	presetGitHubPrefix         = "github>"
+	presetJSONSuffix           = ".json"
+	presetJSON5Suffix          = ".json5"
 )
 
 // forbiddenOptions are rejected in global config and in profile overrides:
 // Renovate's script, execution and env controls (ADR-0003 rules, carried
 // over; allowedUnsafeExecutions since Renovate 44 gates repository code
-// such as the Gradle wrapper), and options the builder owns through the
+// such as the Gradle wrapper, and the builder sets it only from a
+// sandboxed profile), force (the builder owns it for the floor,
+// DESIGN-0005 OQ14), and options the builder owns through the
 // environment, so there is one source for each.
 var forbiddenOptions = []string{
-	"exposeAllEnv", "allowScripts", "allowedCommands", "allowedUnsafeExecutions", "logLevel",
+	"exposeAllEnv", "allowScripts", "allowedCommands", optAllowedUnsafeExecutions, optForce, "logLevel",
 	"platform", "endpoint", "token", "autodiscover", "repositories",
 	"requireConfig", "onboarding", "baseDir", "cacheDir", "binarySource",
 	"redisUrl", "reportType", "reportPath", "exitCodeForErrors", "gitAuthor",
@@ -112,15 +120,17 @@ func BuildEnv(in *BuildInput) ([]corev1.EnvVar, error) {
 				},
 			},
 		},
-		corev1.EnvVar{Name: envAutodiscover, Value: "false"},
+		corev1.EnvVar{Name: envAutodiscover, Value: valueFalse},
 		corev1.EnvVar{Name: envRepositories, Value: in.Repo.Slug},
 		corev1.EnvVar{Name: envRequireConfig, Value: "required"},
-		corev1.EnvVar{Name: envOnboarding, Value: "false"},
+		corev1.EnvVar{Name: envOnboarding, Value: valueFalse},
 		corev1.EnvVar{Name: envBaseDir, Value: baseDir},
 		corev1.EnvVar{Name: envCacheDir, Value: cacheDir},
 		corev1.EnvVar{Name: envBinarySource, Value: binarySourceGlob},
 	)
-	if in.App.RedisURL != "" {
+	// A sandboxed run gets no shared cache: what it writes there, every
+	// other run would read (DESIGN-0005 § Cache).
+	if in.App.RedisURL != "" && in.Sandbox == nil {
 		out = append(out, corev1.EnvVar{Name: envRedisURL, Value: in.App.RedisURL})
 	}
 	out = append(out,
@@ -153,8 +163,13 @@ func endpointFor(endpoint string) string {
 
 // renovateConfig merges, in order, the App's global config, the profile's
 // overrides and the run's dryRun, then prepends the shared preset to
-// extends. Later entries win. Returns "" when there is nothing to pass.
+// extends. Later entries win. A sandboxed run then gets the profile's
+// allowedUnsafeExecutions, and an ordinary one the floor forced off.
+// Returns "" when there is nothing to pass.
 func renovateConfig(in *BuildInput) (string, error) {
+	if (in.Profile.Sandboxed || len(in.Profile.UnsafeExecutions) > 0) && in.Sandbox == nil {
+		return "", fmt.Errorf("%w: profile %s", ErrNeedsSandbox, in.Profile.Name)
+	}
 	if err := ValidatePreset(in.App.SharedPreset); err != nil {
 		return "", err
 	}
@@ -178,6 +193,9 @@ func renovateConfig(in *BuildInput) (string, error) {
 		}
 		merged[optExtends] = append([]any{in.App.SharedPreset}, extends...)
 	}
+	if err := addTierOptions(merged, in); err != nil {
+		return "", err
+	}
 	if len(merged) == 0 {
 		return "", nil
 	}
@@ -187,6 +205,45 @@ func renovateConfig(in *BuildInput) (string, error) {
 		return "", fmt.Errorf("jobspec: marshal %s: %w", envConfig, err)
 	}
 	return string(out), nil
+}
+
+// addTierOptions sets what only the builder may: a sandboxed run's
+// allowedUnsafeExecutions, or the floor forced off in an ordinary run.
+func addTierOptions(merged map[string]any, in *BuildInput) error {
+	if in.Sandbox != nil {
+		if len(in.Profile.UnsafeExecutions) > 0 {
+			merged[optAllowedUnsafeExecutions] = slices.Clone(in.Profile.UnsafeExecutions)
+		}
+		return nil
+	}
+	if len(in.ForceDisable) == 0 {
+		return nil
+	}
+	force, err := forceDisable(in.ForceDisable)
+	if err != nil {
+		return err
+	}
+	merged[optForce] = force
+	return nil
+}
+
+// forceDisable is Renovate's force object turning managers off. Each
+// carries its default managerFilePatterns: force replaces the manager's
+// whole config, and without them Renovate fails the repository
+// ("managerFilePatterns is not iterable", DESIGN-0005 OQ14).
+func forceDisable(managers []string) (map[string]any, error) {
+	out := make(map[string]any, len(managers))
+	for _, m := range managers {
+		patterns, ok := unsafe.DefaultFilePatterns(m)
+		if !ok {
+			return nil, fmt.Errorf("%w: %s", ErrNoDefaultPatterns, m)
+		}
+		if patterns == nil {
+			patterns = []string{}
+		}
+		out[m] = map[string]any{"enabled": false, "managerFilePatterns": patterns}
+	}
+	return out, nil
 }
 
 // ValidatePreset enforces the .json rule for GitHub-hosted presets: Renovate

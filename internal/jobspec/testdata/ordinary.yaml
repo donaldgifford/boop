@@ -1,0 +1,101 @@
+metadata:
+  annotations:
+    boopd.dev/run-id: 0199c0de-0000-7000-8000-000000000000
+    boopd.dev/workflow-id: repo/github/101
+  labels:
+    app.kubernetes.io/component: renovate-run
+    app.kubernetes.io/managed-by: boopd
+    app.kubernetes.io/name: boopd
+    boopd.dev/installation-id: "55"
+    boopd.dev/profile: baseline
+    boopd.dev/repo-id: "101"
+  name: run-101-0
+  namespace: boopd
+spec:
+  activeDeadlineSeconds: 3300
+  backoffLimit: 0
+  suspend: true
+  template:
+    metadata:
+      annotations:
+        boopd.dev/run-id: 0199c0de-0000-7000-8000-000000000000
+        boopd.dev/workflow-id: repo/github/101
+      labels:
+        app.kubernetes.io/component: renovate-run
+        app.kubernetes.io/managed-by: boopd
+        app.kubernetes.io/name: boopd
+        boopd.dev/installation-id: "55"
+        boopd.dev/profile: baseline
+        boopd.dev/repo-id: "101"
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - env:
+        - name: RENOVATE_PLATFORM
+          value: github
+        - name: LOG_LEVEL
+          value: info
+        - name: LOG_FORMAT
+          value: json
+        - name: RENOVATE_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: token
+              name: run-101-0
+        - name: RENOVATE_AUTODISCOVER
+          value: "false"
+        - name: RENOVATE_REPOSITORIES
+          value: donaldgifford/boop
+        - name: RENOVATE_REQUIRE_CONFIG
+          value: required
+        - name: RENOVATE_ONBOARDING
+          value: "false"
+        - name: RENOVATE_BASE_DIR
+          value: /work/base
+        - name: RENOVATE_CACHE_DIR
+          value: /work/cache
+        - name: RENOVATE_BINARY_SOURCE
+          value: global
+        - name: RENOVATE_REDIS_URL
+          value: redis://:pw@boopd-redis:6379/0
+        - name: RENOVATE_REPORT_TYPE
+          value: logging
+        - name: RENOVATE_EXIT_CODE_FOR_ERRORS
+          value: "true"
+        - name: RENOVATE_GIT_AUTHOR
+          value: boop-bot <boop-bot[bot]@users.noreply.github.com>
+        - name: RENOVATE_CONFIG
+          value: '{"automerge":false,"extends":["github\u003eboop-bot/renovate-config:default.json"],"prHourlyLimit":2}'
+        - name: HOME
+          value: /work/home
+        - name: TMPDIR
+          value: /tmp
+        image: ghcr.io/renovatebot/renovate:44-full@sha256:0000000000000000000000000000000000000000000000000000000000000000
+        name: renovate
+        resources: {}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - mountPath: /work
+          name: work
+        - mountPath: /tmp
+          name: tmp
+      enableServiceLinks: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 12021
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - emptyDir: {}
+        name: work
+      - emptyDir: {}
+        name: tmp
+  ttlSecondsAfterFinished: 3600
+status: {}

@@ -261,6 +261,13 @@ func TestValidation(t *testing.T) {
 			at:      `"-bad"`,
 		},
 		{
+			name:    "sandbox floor_add dynamic in enforce",
+			old:     sandboxAt,
+			new:     sandbox("floor_mode = \"enforce\"\n  floor_add = [\"gradle\"]"),
+			summary: "Floor manager cannot be forced off",
+			at:      `["gradle"]`,
+		},
+		{
 			name:    "sandbox token workflows",
 			old:     sandboxAt,
 			new:     sandbox(`token_permissions = { contents = "write", workflows = "write" }`),

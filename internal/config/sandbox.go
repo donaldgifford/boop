@@ -150,7 +150,7 @@ var forbiddenTokenPermissions = []string{"administration", "secrets", "workflows
 // attributes (IMPL-0006 task 3.3).
 func (b *builder) validateSandbox(cfg *Config, raw *fileSchema) {
 	if s := raw.Sandbox; s != nil {
-		b.validateSandboxBlock(s)
+		b.validateSandboxBlock(s, cfg.FloorMode())
 		if len(cfg.SandboxedProfiles()) == 0 {
 			b.errorf(s.DefRange, "Sandbox without a sandboxed profile",
 				"The floor raises repositories to the least strict sandboxed profile; set sandboxed = true on at least one profile.")
@@ -166,7 +166,7 @@ func (b *builder) validateSandbox(cfg *Config, raw *fileSchema) {
 	}
 }
 
-func (b *builder) validateSandboxBlock(s *sandboxBlock) {
+func (b *builder) validateSandboxBlock(s *sandboxBlock, mode string) {
 	if errs := validation.IsDNS1123Subdomain(s.RuntimeClass); len(errs) > 0 {
 		b.errorf(s.RuntimeClassRange, "Invalid runtime_class", "sandbox.runtime_class %q: %s.", s.RuntimeClass, strings.Join(errs, "; "))
 	}
@@ -181,6 +181,13 @@ func (b *builder) validateSandboxBlock(s *sandboxBlock) {
 		if !unsafe.IsManager(e.name) {
 			b.errorf(e.rng, "Unknown Renovate manager",
 				"sandbox.floor_add: %q is not a manager of Renovate %s.", e.name, unsafe.RenovateVersion)
+		} else if _, static := unsafe.DefaultFilePatterns(e.name); !static && mode == FloorEnforce {
+			b.errorf(
+				e.rng,
+				"Floor manager cannot be forced off",
+				"sandbox.floor_add: Renovate builds %q's default managerFilePatterns at run time, so enforce mode cannot force it off in ordinary runs.",
+				e.name,
+			)
 		}
 	}
 	for _, k := range slices.Sorted(maps.Keys(s.TokenPermissions)) {
