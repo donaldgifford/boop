@@ -257,11 +257,19 @@ and one commit per numbered task. The PR split is OQ1.
   dashboard; a change under `.github/workflows/` is refused; a
   `minimumReleaseAge` update sets `renovate/stability-days`. Record
   which permission each Renovate step needed.
+- [ ] 1.5 **Deferred, human required.** (OQ13 b) Under 1.3's sandbox
+  `CiliumNetworkPolicy` with `registry.fartlab.dev` in `toFQDNs`, a Kata
+  pod pulls a manifest from `https://registry.fartlab.dev/v2/` by name.
+  If the name resolves to one of the cluster's LoadBalancer addresses,
+  kube-proxy replacement may hand the connection to the in-cluster
+  backend before the FQDN rule sees it, and it is denied. Record the
+  resolved address and the result; if it is denied, the choice is the
+  registry's external route or OQ13 a, back to the user.
 
 #### Success Criteria
 
 - The forced-disable fixture is committed and its test passes.
-- 1.2–1.4 results are written into this document's Findings, with any
+- 1.2–1.5 results are written into this document's Findings, with any
   change they force to DESIGN-0005 made there first.
 
 ### Phase 2: The floor list and the Renovate drift test
@@ -328,9 +336,6 @@ and one commit per numbered task. The PR split is OQ1.
 - [x] 3.7 (OQ12) Remove `PIP_ONLY_BINARY` and `UV_NO_BUILD` from the
   python profile in `charts/boopd/values.yaml` and `examples/boopd.hcl`;
   `docs/config.md` says why (Findings, 2026-10-26).
-- [ ] 3.8 (OQ13) `sandbox.egress_endpoints`: a list of `{ namespace,
-  labels, port }`, validated (DNS-label namespace, non-empty labels,
-  port 1–65535), empty by default.
 
 #### Success Criteria
 
@@ -537,10 +542,6 @@ and one commit per numbered task. The PR split is OQ1.
 - [ ] 10.9 `runs.hostUsers` (default `true`) rendered into `boopd.hcl`;
   `NOTES.txt` names the node requirements when it is `false`
   (Kubernetes 1.33+, containerd 2.x, Linux 6.3+).
-- [ ] 10.10 (OQ13) `sandbox.egressEndpoints` rendered into each
-  provider's sandbox policy: `toEndpoints` with the namespace label for
-  `cilium`, a `namespaceSelector` and `podSelector` peer for
-  `kubernetes` and `vpc-cni`; a unittest per provider.
 
 #### Success Criteria
 
@@ -578,7 +579,8 @@ and one commit per numbered task. The PR split is OQ1.
 
 - [ ] 12.1 `docs/sandbox.md`: what the sandbox is for, prerequisites
   (Kata and its RuntimeClass; Cilium, standard NetworkPolicy or VPC
-  CNI), the `boopd.hcl` and chart settings, the token and default-branch
+  CNI), the `boopd.hcl` and chart settings, no in-cluster egress (an
+  internal registry by its external name through `egress_allow`, OQ13), the token and default-branch
   protection, `report` to `enforce`, troubleshooting `needs-sandbox`.
 - [ ] 12.2 `docs/config.md` and the chart README (helm-docs).
 - [ ] 12.3 CLAUDE.md: the layout line for `internal/renovate/unsafe`,
@@ -865,6 +867,11 @@ DESIGN-0005 OQ9 already leaves them out of the sandbox.
 
 ### OQ13: How do sandboxed runs reach an in-cluster registry?
 
+**Answer (2026-11-09): b.** No in-cluster egress from the sandbox. A
+sandboxed repository reaches the registry by its external name through
+`egress_allow`, even if that leaves the cluster and comes back. Task
+1.5 checks that it works under Cilium; `docs/sandbox.md` says so (12.1).
+
 Found checking the homelab prerequisites (2026-11-09). The homelab's
 global Renovate config has `hostRules = [{matchHost =
 "registry.fartlab.dev", allowInternal = true}]`, and a homelab
@@ -879,8 +886,7 @@ the registry serves to anonymous pulls.
 - **a** (recommended): a `sandbox.egress_endpoints` list (namespace,
   pod labels, port), empty by default, rendered as `toEndpoints` in the
   `cilium` policy and as a `namespaceSelector`/`podSelector` peer in
-  the `kubernetes` and `vpc-cni` ones; the homelab lists `zot`. Tasks
-  3.8 and 10.10.
+  the `kubernetes` and `vpc-cni` ones; the homelab lists `zot`.
 - **b**: no in-cluster egress from the sandbox; repositories that need
   the internal registry stay ordinary, or the registry is exposed on an
   external name and allowed by `egress_allow`.
