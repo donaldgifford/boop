@@ -98,6 +98,8 @@ type Config struct {
 	DefaultProfile string
 	UnknownProfile string
 	ProfileRules   []ProfileRule
+	// Sandbox is the sandbox block; nil when the file has none.
+	Sandbox *Sandbox
 	// Ingest is the ingest block, defaulted when absent.
 	Ingest Ingest
 	Apps   []*App
@@ -169,6 +171,9 @@ type Runs struct {
 	PendingTimeout time.Duration
 	// MaxConcurrent caps runs across all installations (OQ12); 0 is no cap.
 	MaxConcurrent int
+	// HostUsers is false to give ordinary runs a user namespace
+	// (IMPL-0006 OQ8). runc only: a sandboxed run never gets one.
+	HostUsers bool
 }
 
 // Profile is one ecosystem profile with inheritance resolved.
@@ -176,6 +181,14 @@ type Profile struct {
 	Name     string
 	Pod      jobspec.PodOverlay
 	Renovate map[string]any
+	// Sandboxed runs the profile's repositories in the sandbox.
+	Sandboxed bool
+	// UnsafeExecutions are the allowedUnsafeExecutions values a
+	// sandboxed profile grants.
+	UnsafeExecutions []string
+	// EgressAllow are host names the profile's sandboxed runs may reach,
+	// in addition to the sandbox's.
+	EgressAllow []string
 }
 
 // ProfileRule maps presets and managers to a profile; every matching rule
@@ -331,6 +344,7 @@ func (b *builder) build(raw *fileSchema) *Config {
 	}
 	cfg.SecretsDir = derefOr(raw.SecretsDir, DefaultSecretsDir)
 	cfg.Ingest = b.ingest(raw.Ingest)
+	cfg.Sandbox = b.sandbox(raw.Sandbox, &cfg.Runs)
 	cfg.Profiles = b.profiles(raw.Profiles)
 	for i := range raw.ProfileRules {
 		r := &raw.ProfileRules[i]
@@ -375,6 +389,7 @@ func (b *builder) runs(r *runsBlock) Runs {
 	out := Runs{
 		Namespace:      r.Namespace,
 		PendingTimeout: b.duration(r.PendingTimeout, DefaultPendingTimeout),
+		HostUsers:      derefOr(r.HostUsers, true),
 	}
 	if r.MaxConcurrent != nil {
 		out.MaxConcurrent = *r.MaxConcurrent

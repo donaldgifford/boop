@@ -76,7 +76,7 @@ renovate {
 
 runs {
   namespace = "boopd"
-  # pending_timeout, max_concurrent
+  # pending_timeout, max_concurrent, host_users
 }
 
 profile "baseline" { … } # one or more
@@ -86,6 +86,8 @@ order           = ["baseline", "python"]
 default_profile = "baseline"
 unknown_profile = "python"
 profile_rule { … } # zero or more
+
+sandbox { … } # optional: the sandboxed tier (DESIGN-0005)
 
 ingest { … } # optional: webhook ingest timings
 
@@ -104,6 +106,7 @@ app "boop-bot" { … } # one or more; webhook { … } inside enables ingest for 
 | `default_profile` | string | required | The profile for a repository whose config extends presets no rule matches. |
 | `unknown_profile` | string | required | The profile for a repository whose config has no `extends`. |
 | `profile_rule` | block | none | Maps presets and managers to a profile. |
+| `sandbox` | block | none | The sandboxed tier: where runs of repository code execute (DESIGN-0005). |
 | `ingest` | block | defaults | Webhook ingest's path and the timings webhook events run by. |
 | `app` | block, labelled | at least one | A GitHub App whose installations are discovered. |
 
@@ -208,6 +211,7 @@ does.
 | `namespace` | string | required | Where Jobs and their token Secrets are created (a DNS label). The worker's Role must cover it; the chart's does for the namespace it renders. |
 | `pending_timeout` | duration | `10m` | How long a run's pod may take to reach `Running`. Past it the Job is deleted and the attempt counts as pending (`boopd_run_pending_timeouts_total`); the repository tries again later. |
 | `max_concurrent` | number | `0` (no cap) | The cluster-wide cap on concurrent runs across installations (DESIGN-0001 OQ12). A run takes a lease from the `CapacityWorkflow` after its installation's budget lease and before a token is minted or a Job created. When the cap is full it gives the installation lease back and waits, 1m doubling to 30m. The chart also renders a ResourceQuota on `pods` from it as a backstop. A pod past the quota is refused, and its Job waits `pending_timeout`. |
+| `host_users` | bool | `true` | `false` runs ordinary Jobs in a user namespace (`hostUsers: false`, IMPL-0006 OQ8): root in the pod is an unprivileged user on the node. runc only, and the nodes need a kernel and runtime that support it (Kubernetes 1.33+). Sandboxed runs never get one: Kata rejects it, and the VM already separates them. |
 
 ## profile
 
@@ -225,6 +229,9 @@ must appear in `order`.
 | Setting | Type | Default | Description |
 | - | - | - | - |
 | `inherit` | string | none | A profile whose `pod` and `renovate` this one starts from. |
+| `sandboxed` | bool | `false` | Runs this profile's repositories in the [sandbox](#sandbox). Its `pod` may not set `runtime_class_name`, `node_selector` or `toleration`: the sandbox owns placement. |
+| `unsafe_executions` | list of strings | none | Renovate's `allowedUnsafeExecutions` for this profile's runs: `bazelModDeps`, `goGenerate`, `gradleWrapper`, `mise`, `pixi`. Only on a sandboxed profile; the option stays forbidden in every `renovate` block. |
+| `egress_allow` | list of strings | none | Host names this profile's sandboxed runs may reach, in addition to `sandbox.egress_allow`. |
 | `pod` | block | none | Overrides for the run's pod. |
 | `renovate` | block | none | Renovate options for runs on this profile, with the same rules as [`global`](#global). |
 
@@ -232,7 +239,7 @@ must appear in `order`.
 
 | Setting | Type | Default | Description |
 | - | - | - | - |
-| `runtime_class_name` | string | none | The pod's RuntimeClass, e.g. a sandboxing runtime (gVisor, Kata) for the Python profile (DESIGN-0001 OQ9). |
+| `runtime_class_name` | string | none | The pod's RuntimeClass. Not on a sandboxed profile, whose runtime class is `sandbox.runtime_class`. |
 | `labels` | map of strings | none | Pod labels, e.g. `boopd.dev/egress` to select one of the chart's NetworkPolicies. |
 | `annotations` | map of strings | none | Pod annotations. |
 | `node_selector` | map of strings | none | The pod's node selector. |
@@ -250,6 +257,9 @@ A child's settings lay over its parent's, which may itself inherit:
 - `runtime_class_name`, `termination_grace_period_seconds` and
   `work_size_limit`: the child's value replaces the parent's.
 - `toleration`: the child's list, if it has any, replaces the parent's.
+- `sandboxed`: the child's value, if set, replaces the parent's.
+- `unsafe_executions` and `egress_allow`: the child's list, if set (even
+  `[]`), replaces the parent's.
 - `renovate` options merge deeply. Nested objects merge; any other value in
   the child replaces the parent's.
 
@@ -293,6 +303,50 @@ profile_rule {
 | `profile` | string | required | The profile this rule selects. |
 
 A rule needs `extends`, `managers` or both. Every matching rule counts.
+
+## sandbox
+
+```hcl
+sandbox {
+  runtime_class = "kata"
+  egress_allow  = ["github.com", "api.github.com", "codeload.github.com"]
+  floor_mode    = "report"
+}
+```
+
+The sandboxed tier (DESIGN-0005). A run executes there when its profile
+is `sandboxed`, or when the repository uses a floor manager: one that
+runs repository code with no Renovate gate (`bundler`, `cocoapods`,
+`conan`, `maven-wrapper`, `mix`, `nuget`, `pep621`, `pip-compile`,
+`pipenv`, `poetry`; `internal/renovate/unsafe`). Without the block a
+sandboxed run fails closed with `NeedsSandbox`; a sandboxed profile with
+no `sandbox` block is a warning.
+
+| Setting | Type | Default | Description |
+| - | - | - | - |
+| `runtime_class` | string | required | The RuntimeClass sandboxed pods run under (Kata). Placement comes from it. |
+| `service_account` | string | `boopd-sandbox` | The sandboxed Job's ServiceAccount; the chart creates it with no bindings. |
+| `node_selector` | map of strings | none | Optional dedicated nodes for sandboxed Jobs, on top of the RuntimeClass's scheduling. |
+| `toleration` | block, repeated | none | Tolerations for those nodes, as in [`pod`](#pod). |
+| `egress_allow` | list of strings | none | Host names every sandboxed run may reach; a profile's `egress_allow` adds to them. `*.` wildcards allowed. The chart turns them into the egress policy. |
+| `floor_mode` | string | `report` | `report`: a repository the floor would sandbox runs as an ordinary Job and is logged with `would_sandbox=true`. `enforce`: it runs sandboxed, and ordinary runs force the floor managers off (DESIGN-0005 OQ13). |
+| `floor_add` | list of strings | none | Renovate managers to sandbox in addition to the floor. Each must be a manager of the pinned Renovate. |
+| `token_permissions` | map of strings | see below | The sandboxed run's token, by GitHub App permission, each `read` or `write`. `workflows`, `administration` and `secrets` are refused. The App must hold every permission named. |
+| `pending_timeout` | duration | `runs.pending_timeout` + `60s` | How long a sandboxed pod may take to reach `Running`, VM boot included. |
+
+The default `token_permissions` (IMPL-0006 OQ5):
+
+```hcl
+token_permissions = {
+  contents             = "write"
+  pull_requests        = "write"
+  issues               = "write"
+  checks               = "write"
+  statuses             = "write"
+  metadata             = "read"
+  vulnerability_alerts = "read"
+}
+```
 
 ## app
 

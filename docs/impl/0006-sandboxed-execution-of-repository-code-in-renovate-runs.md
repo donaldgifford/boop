@@ -319,13 +319,14 @@ and one commit per numbered task. The PR split is OQ1.
   generated on 2026-11-09 from Renovate 44.149.2's published npm
   `dist`, the code the pinned image ships, because Docker was down; the
   drift test checks it against the image.
-- [ ] 2.3 The drift test (OQ3): under the `renovate` build tag, it
+- [x] 2.3 The drift test (OQ3): under the `renovate` build tag, it
   re-reads the pinned image and fails when `allowedValues`, the set of
   managers whose artifact code imports `util/exec`, or any floor
   manager's default patterns differ from `zz_generated.go`. The message
   names the new or changed entries and the decision to make.
-  Written (`drift_test.go`, `just test-renovate`); not yet run against
-  the image, which needs Docker locally or CI's `renovate-drift` job.
+  `drift_test.go`, `just test-renovate`. CI's `renovate-drift` job ran
+  it against the pinned image on PR #40 and passed: the file generated
+  from the npm `dist` matches the image's.
 - [x] 2.4 CI: a `renovate-drift` job running the tagged test, required
   when `charts/boopd/values.yaml` or `internal/renovate/unsafe` change.
   The job runs on those paths; marking it a required check in branch
@@ -343,12 +344,12 @@ and one commit per numbered task. The PR split is OQ1.
 
 #### Tasks
 
-- [ ] 3.1 `internal/config/schema.go`: a top-level `sandbox` block
+- [x] 3.1 `internal/config/schema.go`: a top-level `sandbox` block
   (`runtime_class`, `service_account`, optional `node_selector` and
   `toleration`, `egress_allow`, `floor_mode` = `report` | `enforce`,
   `floor_add`, `token_permissions`, `pending_timeout`); profile
   attributes `sandboxed`, `unsafe_executions`, `egress_allow`.
-- [ ] 3.2 Decoding into `config.Sandbox` and `config.Profile` fields,
+- [x] 3.2 Decoding into `config.Sandbox` and `config.Profile` fields,
   with defaults: `floor_mode = "report"` (DESIGN-0005 OQ13),
   `service_account = "boopd-sandbox"`, OQ5's permission set.
 - [ ] 3.3 Validation with HCL positions:
