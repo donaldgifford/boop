@@ -5,6 +5,10 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Bug Fixes
+
+- *(scripts)* Sandbox-token-check revokes its token and shows progress
+
 ### Documentation
 
 - Record the homelab Kata checks (IMPL-0006 1.2, 1.3)
