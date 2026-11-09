@@ -8,6 +8,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Documentation
 
 - Record the homelab Kata checks (IMPL-0006 1.2, 1.3)
+- *(impl)* IMPL-0006 prerequisite check: token set and in-cluster egress
 
 ## [0.5.5] - 2026-10-26
 
