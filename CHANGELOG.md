@@ -14,6 +14,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Record the homelab Kata checks (IMPL-0006 1.2, 1.3)
 - *(impl)* IMPL-0006 prerequisite check: token set and in-cluster egress
 - *(impl)* IMPL-0006 OQ13 answered b: no in-cluster egress from the sandbox
+- *(impl)* IMPL-0006 1.4 done for the mint; live run moves to 13.4
 
 ### Miscellaneous Tasks
 
