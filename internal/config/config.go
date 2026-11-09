@@ -334,6 +334,15 @@ func (b *builder) errorf(subject hcl.Range, summary, format string, args ...any)
 	})
 }
 
+func (b *builder) warnf(subject hcl.Range, summary, format string, args ...any) {
+	b.diags = append(b.diags, &hcl.Diagnostic{
+		Severity: hcl.DiagWarning,
+		Summary:  summary,
+		Detail:   fmt.Sprintf(format, args...),
+		Subject:  subject.Ptr(),
+	})
+}
+
 func (b *builder) build(raw *fileSchema) *Config {
 	cfg := &Config{
 		Renovate:       b.renovate(&raw.Renovate),

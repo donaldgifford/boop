@@ -34,8 +34,24 @@ func TestLoad_Example(t *testing.T) {
 		app.Discovery.Every != 6*time.Hour || app.Discovery.Probe != config.ProbeGraphQL {
 		t.Errorf("app = %+v, want the example's boop-bot", app)
 	}
-	if got := cfg.Profiles["python"]; got == nil || *got.Pod.RuntimeClassName != "gvisor" {
-		t.Errorf("profile python = %+v, want gvisor", got)
+	if got := cfg.Profiles["python"]; got == nil || !got.Sandboxed || got.Pod.RuntimeClassName != nil {
+		t.Errorf("profile python = %+v, want sandboxed with no runtime class of its own", got)
+	}
+	if got := cfg.Profiles["jvm"]; got == nil || !slices.Equal(got.UnsafeExecutions, []string{"gradleWrapper"}) {
+		t.Errorf("profile jvm = %+v, want unsafe_executions gradleWrapper", got)
+	}
+	// The sandbox block is commented out: sandboxed profiles warn.
+	if cfg.Sandbox != nil || cfg.FloorMode() != config.FloorReport {
+		t.Errorf("sandbox = %+v, floor mode %q; want none and report", cfg.Sandbox, cfg.FloorMode())
+	}
+	var warned []string
+	for _, d := range diags.Diagnostics {
+		if d.Summary == "Sandboxed profile without a sandbox" {
+			warned = append(warned, d.Detail)
+		}
+	}
+	if len(warned) != 3 { // jvm, python and strict, which inherits python
+		t.Errorf("sandbox warnings = %q, want one each for jvm, python and strict", warned)
 	}
 }
 

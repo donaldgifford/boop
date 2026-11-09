@@ -18,10 +18,16 @@ package config
 
 import (
 	"maps"
+	"slices"
+	"strings"
 	"time"
 
+	"github.com/hashicorp/hcl/v2"
+	"github.com/zclconf/go-cty/cty"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/validation"
 
+	"github.com/donaldgifford/boop/internal/renovate/unsafe"
 	"github.com/donaldgifford/hclkit/pkg/hclkit/ctytypes"
 )
 
@@ -132,6 +138,124 @@ func tolerations(in []tolerationBlock) []corev1.Toleration {
 			Effect:            corev1.TaintEffect(deref(t.Effect)),
 			TolerationSeconds: t.TolerationSeconds,
 		})
+	}
+	return out
+}
+
+// forbiddenTokenPermissions are never granted to a sandboxed run: they
+// reach past the repository's content into its automation and settings.
+var forbiddenTokenPermissions = []string{"administration", "secrets", "workflows"}
+
+// validateSandbox checks the sandbox block and every profile's sandbox
+// attributes (IMPL-0006 task 3.3).
+func (b *builder) validateSandbox(cfg *Config, raw *fileSchema) {
+	if s := raw.Sandbox; s != nil {
+		b.validateSandboxBlock(s)
+	}
+	for i := range raw.Profiles {
+		rp := &raw.Profiles[i]
+		p, ok := cfg.Profiles[rp.Name]
+		if !ok {
+			continue
+		}
+		b.validateProfileSandbox(cfg, rp, p)
+	}
+}
+
+func (b *builder) validateSandboxBlock(s *sandboxBlock) {
+	if errs := validation.IsDNS1123Subdomain(s.RuntimeClass); len(errs) > 0 {
+		b.errorf(s.RuntimeClassRange, "Invalid runtime_class", "sandbox.runtime_class %q: %s.", s.RuntimeClass, strings.Join(errs, "; "))
+	}
+	if s.ServiceAccount != nil {
+		if errs := validation.IsDNS1123Subdomain(*s.ServiceAccount); len(errs) > 0 {
+			b.errorf(s.ServiceAccountRange, "Invalid service_account",
+				"sandbox.service_account %q: %s.", *s.ServiceAccount, strings.Join(errs, "; "))
+		}
+	}
+	b.validateHosts(s.EgressAllow, "sandbox.egress_allow")
+	for _, e := range b.exprElems(s.FloorAdd) {
+		if !unsafe.IsManager(e.name) {
+			b.errorf(e.rng, "Unknown Renovate manager",
+				"sandbox.floor_add: %q is not a manager of Renovate %s.", e.name, unsafe.RenovateVersion)
+		}
+	}
+	for _, k := range slices.Sorted(maps.Keys(s.TokenPermissions)) {
+		switch v := s.TokenPermissions[k]; {
+		case slices.Contains(forbiddenTokenPermissions, k):
+			b.errorf(s.TokenPermissionsRange, "Forbidden token permission",
+				"sandbox.token_permissions may not grant %q: a sandboxed run must not reach %s.", k, strings.Join(forbiddenTokenPermissions, ", "))
+		case v != PermissionRead && v != PermissionWrite:
+			b.errorf(s.TokenPermissionsRange, "Invalid token permission",
+				"sandbox.token_permissions.%s is %q; use %q or %q.", k, v, PermissionRead, PermissionWrite)
+		}
+	}
+}
+
+func (b *builder) validateProfileSandbox(cfg *Config, rp *profileBlock, p *Profile) {
+	where := "profile " + rp.Name
+	for _, e := range b.exprElems(rp.UnsafeExecutions) {
+		if !unsafe.IsGated(e.name) {
+			b.errorf(e.rng, "Invalid unsafe_executions",
+				"%s: %q is not an allowedUnsafeExecutions value; Renovate %s has %s.",
+				where, e.name, unsafe.RenovateVersion, strings.Join(unsafe.Gated(), ", "))
+		}
+	}
+	b.validateHosts(rp.EgressAllow, where+" egress_allow")
+	if len(p.UnsafeExecutions) > 0 && !p.Sandboxed {
+		b.errorf(rp.DefRange, "unsafe_executions on an ordinary profile",
+			"%s grants unsafe_executions but is not sandboxed; set sandboxed = true or drop them.", where)
+	}
+	if !p.Sandboxed {
+		return
+	}
+	if p.Pod.RuntimeClassName != nil || len(p.Pod.NodeSelector) > 0 || len(p.Pod.Tolerations) > 0 {
+		b.errorf(rp.DefRange, "Placement on a sandboxed profile",
+			"%s is sandboxed, so the sandbox block owns its runtime class and placement; "+
+				"drop pod runtime_class_name, node_selector and toleration.", where)
+	}
+	if cfg.Sandbox == nil {
+		summary := "Sandboxed profile without a sandbox"
+		detail := where + " is sandboxed but the file has no sandbox block; its runs fail closed with NeedsSandbox."
+		if cfg.FloorMode() == FloorEnforce {
+			b.errorf(rp.DefRange, summary, "%s", detail)
+		} else {
+			b.warnf(rp.DefRange, summary, "%s", detail)
+		}
+	}
+}
+
+// validateHosts checks a list of egress host names, each a DNS name with
+// an optional leading "*." wildcard.
+func (b *builder) validateHosts(expr hcl.Expression, where string) {
+	for _, e := range b.exprElems(expr) {
+		if errs := validation.IsDNS1123Subdomain(strings.TrimPrefix(e.name, "*.")); len(errs) > 0 {
+			b.errorf(e.rng, "Invalid host name", "%s: %q: %s.", where, e.name, strings.Join(errs, "; "))
+		}
+	}
+}
+
+type namedElem struct {
+	name string
+	rng  hcl.Range
+}
+
+// exprElems returns a list attribute's string elements with their
+// ranges, quietly: build has already reported their shape.
+func (b *builder) exprElems(expr hcl.Expression) []namedElem {
+	if isNull(expr, b.ctx) {
+		return nil
+	}
+	elems, diags := hcl.ExprList(expr)
+	if diags.HasErrors() {
+		return nil
+	}
+	out := make([]namedElem, 0, len(elems))
+	for _, e := range elems {
+		v, vd := e.Value(b.ctx)
+		if vd.HasErrors() || v.IsNull() || !v.IsKnown() || v.Type() != cty.String {
+			continue
+		}
+		out = append(out, namedElem{name: v.AsString(), rng: e.Range()})
 	}
 	return out
 }

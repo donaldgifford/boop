@@ -57,11 +57,23 @@ profile "node" {
   inherit = "baseline" # scripts are already ignored by default
 }
 
+# Sandboxed profiles run in the sandbox block's runtime class
+# (DESIGN-0005): their builds execute repository code. The sandbox owns
+# placement, so their pods set no runtime_class_name, node_selector or
+# toleration.
+profile "jvm" {
+  inherit           = "baseline"
+  sandboxed         = true
+  unsafe_executions = ["gradleWrapper"] # Renovate's allowedUnsafeExecutions, sandbox only
+  egress_allow      = ["repo1.maven.org", "services.gradle.org", "plugins.gradle.org"]
+}
+
 profile "python" {
-  inherit = "baseline"
+  inherit      = "baseline"
+  sandboxed    = true
+  egress_allow = ["pypi.org", "files.pythonhosted.org"]
   pod {
-    runtime_class_name = "gvisor" # omit if the cluster has no sandboxing runtime
-    labels             = { "boopd.dev/egress" = "python" }
+    labels = { "boopd.dev/egress" = "python" }
     resources {
       limits = { memory = "6Gi" }
     }
@@ -75,7 +87,7 @@ profile "strict" {
   inherit = "python" # the posture for an ecosystem not yet classified
 }
 
-order           = ["baseline", "node", "python", "strict"] # ascending strictness
+order           = ["baseline", "node", "jvm", "python", "strict"] # ascending strictness
 default_profile = "baseline"
 unknown_profile = "strict"
 
@@ -87,10 +99,41 @@ profile_rule {
 }
 
 profile_rule {
+  extends  = ["github>boop-bot/renovate-config:jvm"]
+  managers = ["gradle", "gradle-wrapper", "maven", "maven-wrapper"]
+  profile  = "jvm"
+}
+
+profile_rule {
   extends  = ["github>boop-bot/renovate-config:node"]
   managers = ["npm", "bun"]
   profile  = "node"
 }
+
+# The sandboxed tier (DESIGN-0005). Without it, sandboxed profiles and
+# repositories with a floor manager fail closed with NeedsSandbox; with
+# it, they run under the RuntimeClass with the narrowed token and egress.
+# sandbox {
+#   runtime_class   = "kata"          # placement comes from the RuntimeClass
+#   service_account = "boopd-sandbox" # no RBAC; the chart creates it
+#
+#   # Optional: dedicated nodes for sandboxed Jobs only.
+#   # node_selector = { "boopd.dev/sandbox" = "true" }
+#   # toleration {
+#   #   key    = "boopd.dev/sandbox"
+#   #   value  = "true"
+#   #   effect = "NoSchedule"
+#   # }
+#
+#   egress_allow = [
+#     "github.com", "api.github.com", "codeload.github.com",
+#     "objects.githubusercontent.com", "release-assets.githubusercontent.com",
+#     "ghcr.io",
+#   ]
+#   floor_mode      = "report" # "enforce" sandboxes floor managers and forces them off elsewhere
+#   floor_add       = []       # managers to sandbox in addition to the built-in floor
+#   pending_timeout = "11m"    # VM boot included; runs.pending_timeout + 60s by default
+# }
 
 # Webhook ingest (DESIGN-0003): `boopd ingest` serves GitHub's deliveries
 # for every app with a webhook block. Omit the block for the defaults.

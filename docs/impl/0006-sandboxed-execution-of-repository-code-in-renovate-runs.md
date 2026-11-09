@@ -352,7 +352,7 @@ and one commit per numbered task. The PR split is OQ1.
 - [x] 3.2 Decoding into `config.Sandbox` and `config.Profile` fields,
   with defaults: `floor_mode = "report"` (DESIGN-0005 OQ13),
   `service_account = "boopd-sandbox"`, OQ5's permission set.
-- [ ] 3.3 Validation with HCL positions:
+- [x] 3.3 Validation with HCL positions:
   - `unsafe_executions` only on a sandboxed profile, values from
     `unsafe.Gated`;
   - a sandboxed profile with `pod.runtime_class_name`, `node_selector`
@@ -362,6 +362,11 @@ and one commit per numbered task. The PR split is OQ1.
     `report` mode and an error in `enforce` mode;
   - `token_permissions` may not include `workflows`, `administration`
     or `secrets`.
+
+  Also: `runtime_class` and `service_account` are DNS names, egress
+  hosts are DNS names with an optional `*.`, and token levels are `read`
+  or `write`. Without a `sandbox` block `floor_mode` is `report`, so a
+  sandboxed profile there is always the warning.
 - [ ] 3.4 `config.BuildInput` carries the sandbox and the profile's
   sandbox fields to `jobspec`.
 - [ ] 3.5 Golden HCL (`internal/config/testdata/golden.hcl`) and one
