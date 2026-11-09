@@ -16,6 +16,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(impl)* IMPL-0006 OQ13 answered b: no in-cluster egress from the sandbox
 - *(impl)* IMPL-0006 1.4 done for the mint; live run moves to 13.4
 - *(impl)* IMPL-0006 1.5 first run: Gateway answers 403 to in-cluster sources
+- *(impl)* IMPL-0006 1.5 resolved: Gateway checks the client's egress to the backend
 
 ### Miscellaneous Tasks
 
