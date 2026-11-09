@@ -171,8 +171,10 @@ type Client interface {
 // Transit can sit behind the same seam later.
 type Minter interface {
 	// Mint returns an installation token restricted to repoIDs and its
-	// expiry. Callers must not assume a token length.
-	Mint(ctx context.Context, installationID int64, repoIDs []int64) (token string, expiresAt time.Time, err error)
+	// expiry. perms, when not nil, narrows the token to those GitHub App
+	// permissions ("contents": "write", ...); nil keeps the App's full
+	// set. Callers must not assume a token length.
+	Mint(ctx context.Context, installationID int64, repoIDs []int64, perms map[string]string) (token string, expiresAt time.Time, err error)
 
 	// Revoke ends token before its expiry.
 	Revoke(ctx context.Context, token string) error
@@ -224,6 +226,11 @@ var (
 	// the installation was deleted, so every repository it held is gone
 	// (DESIGN-0003 § CheckRepo returns extends).
 	ErrInstallationGone = errors.New("platform: installation gone")
+
+	// ErrTokenPermissions means GitHub refused a mint's permissions (422):
+	// the set names a permission the App does not hold. Retrying cannot
+	// help; the config or the App's settings must change.
+	ErrTokenPermissions = errors.New("platform: token permissions refused")
 )
 
 // RateLimitedError is returned when the upstream platform asked us to slow

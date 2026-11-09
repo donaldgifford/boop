@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"testing"
@@ -222,10 +223,47 @@ func TestMint_InstallationDeleted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := app.Mint(context.Background(), 1, []int64{5}); !errors.Is(err, platform.ErrInstallationGone) {
+	if _, _, err := app.Mint(context.Background(), 1, []int64{5}, nil); !errors.Is(err, platform.ErrInstallationGone) {
 		t.Errorf("Mint() err = %v, want ErrInstallationGone", err)
 	}
-	if _, _, err := app.Mint(context.Background(), 2, []int64{5}); err != nil {
+	if _, _, err := app.Mint(context.Background(), 2, []int64{5}, nil); err != nil {
 		t.Errorf("Mint() for a live installation err = %v", err)
+	}
+}
+
+// TestMint_FakeGitHubPermissions: the fake records the requested set,
+// none for an ordinary mint, and answers a permission the App lacks
+// with 422, which is ErrTokenPermissions (IMPL-0006 tasks 6.3, 6.4).
+func TestMint_FakeGitHubPermissions(t *testing.T) {
+	t.Parallel()
+	gh := fakegithub.New(t)
+	app, err := ghclient.NewAppClient(1, gh.PEM, gh.BaseURL())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, _, err := app.Mint(ctx, 1, []int64{5}, nil); err != nil {
+		t.Fatal(err)
+	}
+	sandbox := fakegithub.GrantedPermissions()
+	if _, _, err := app.Mint(ctx, 1, []int64{5}, sandbox); err != nil {
+		t.Fatalf("Mint(granted set) = %v", err)
+	}
+	mints := gh.Mints()
+	if mints[0].Permissions != nil || !maps.Equal(mints[1].Permissions, sandbox) {
+		t.Errorf("recorded permissions = %v, %v; want none, then the set", mints[0].Permissions, mints[1].Permissions)
+	}
+
+	granted := fakegithub.GrantedPermissions()
+	granted["checks"] = "read"
+	gh.SetGrantedPermissions(granted)
+	if _, _, err := app.Mint(ctx, 1, []int64{5}, sandbox); !errors.Is(err, platform.ErrTokenPermissions) {
+		t.Errorf("Mint(checks write, App has read) = %v, want ErrTokenPermissions", err)
+	}
+	if _, _, err := app.Mint(ctx, 1, []int64{5}, map[string]string{"workflows": "write"}); !errors.Is(err, platform.ErrTokenPermissions) {
+		t.Errorf("Mint(workflows) = %v, want ErrTokenPermissions", err)
+	}
+	if len(gh.Mints()) != 2 {
+		t.Errorf("mints = %d, want the refused ones unrecorded", len(gh.Mints()))
 	}
 }

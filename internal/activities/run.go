@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -33,6 +34,7 @@ import (
 	"github.com/donaldgifford/boop/internal/config"
 	"github.com/donaldgifford/boop/internal/jobspec"
 	"github.com/donaldgifford/boop/internal/kube"
+	"github.com/donaldgifford/boop/internal/platform"
 	"github.com/donaldgifford/boop/internal/renovate"
 	"github.com/donaldgifford/boop/internal/workflows"
 )
@@ -203,6 +205,9 @@ func (r *run) execute(ctx context.Context) (*workflows.RunResult, error) {
 	}()
 
 	if err := r.mint(ctx); err != nil {
+		if errors.Is(err, platform.ErrTokenPermissions) {
+			return nil, temporal.NewNonRetryableApplicationError("mint token: "+err.Error(), workflows.ErrTypeTokenPermissions, err)
+		}
 		return nil, infraError("mint token: "+err.Error(), nil)
 	}
 	r.res.RateBefore = r.readRate(ctx)
@@ -246,7 +251,8 @@ func (r *run) execute(ctx context.Context) (*workflows.RunResult, error) {
 }
 
 // mint mints the run's token, scoped to the repository and the shared
-// preset's repository (DESIGN-0001 OQ2).
+// preset's repository (DESIGN-0001 OQ2), and for a sandboxed run to
+// sandbox.token_permissions (DESIGN-0005 § The token).
 func (r *run) mint(ctx context.Context) error {
 	ids := []int64{r.in.RepoID}
 	if preset, err := r.a.presetRepoID(ctx, r.app, r.in.InstallationID); err != nil {
@@ -260,7 +266,7 @@ func (r *run) mint(ctx context.Context) error {
 		r.a.metrics.TokenMint(resultFailure)
 		return err
 	}
-	tok, exp, err := minter.Mint(ctx, r.in.InstallationID, ids)
+	tok, exp, err := minter.Mint(ctx, r.in.InstallationID, ids, r.tokenPermissions())
 	if err != nil {
 		r.a.metrics.TokenMint(resultFailure)
 		return err
@@ -273,6 +279,16 @@ func (r *run) mint(ctx context.Context) error {
 		r.log.WarnContext(ctx, "no rate reader for the run token", "error", err)
 	}
 	return nil
+}
+
+// tokenPermissions is the narrowed set for a sandboxed run, nil for an
+// ordinary one.
+func (r *run) tokenPermissions() map[string]string {
+	p := r.a.cfg.Profiles[r.in.Profile]
+	if p == nil || !p.Sandboxed || r.a.cfg.Sandbox == nil {
+		return nil
+	}
+	return maps.Clone(r.a.cfg.Sandbox.TokenPermissions)
 }
 
 // Metric result labels.

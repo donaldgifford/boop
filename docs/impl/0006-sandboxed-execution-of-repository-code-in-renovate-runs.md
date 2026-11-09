@@ -480,17 +480,25 @@ and one commit per numbered task. The PR split is OQ1.
 
 #### Tasks
 
-- [ ] 6.1 `platform.Minter.Mint(ctx, installationID, repoIDs, perms)`
+- [x] 6.1 `platform.Minter.Mint(ctx, installationID, repoIDs, perms)`
   with `perms map[string]string` (nil keeps today's behaviour);
   `internal/platform/github` sends `permissions` in the access-token
   request.
-- [ ] 6.2 `RunRenovate` passes `sandbox.token_permissions` for sandboxed
+- [x] 6.2 `RunRenovate` passes `sandbox.token_permissions` for sandboxed
   runs; ordinary runs pass nil.
-- [ ] 6.3 `test/fakegithub` records the requested permissions per token
+- [x] 6.3 `test/fakegithub` records the requested permissions per token
   and rejects a permission the fake App was not granted (GitHub answers
   422).
-- [ ] 6.4 A 422 on mint is a non-retryable `TokenPermissions` error with
+- [x] 6.4 A 422 on mint is a non-retryable `TokenPermissions` error with
   the missing permission named, so a misconfigured set fails loudly.
+
+  Landed together. The GitHub client builds the access-token request by
+  hand so an unknown permission name reaches GitHub rather than being
+  dropped by go-github's struct. GitHub's 422 does not say which
+  permission it refused, so the error names the requested set; the fake
+  names the permission in its body. The error type is
+  `workflows.ErrTypeTokenPermissions` (`token-permissions`); until
+  Phase 8, RepoWorkflow treats it like any other failed run.
 
 #### Success Criteria
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -163,7 +164,7 @@ func TestMint_ScopesToRepositoryIDs(t *testing.T) {
 		_, _ = w.Write([]byte(`{"token":"` + longToken + `","expires_at":"2026-10-10T13:00:00Z"}`))
 	})
 
-	tok, exp, err := newTestAppClient(t, srv).Mint(context.Background(), 42, []int64{1001, 2002})
+	tok, exp, err := newTestAppClient(t, srv).Mint(context.Background(), 42, []int64{1001, 2002}, nil)
 	if err != nil {
 		t.Fatalf("Mint() err = %v", err)
 	}
@@ -197,6 +198,44 @@ func TestMint_ScopesToRepositoryIDs(t *testing.T) {
 	}
 }
 
+// TestMint_SendsPermissions: a sandboxed run's set travels as
+// permissions, and GitHub's 422 for one the App lacks is
+// ErrTokenPermissions naming the set (IMPL-0006 tasks 6.1, 6.4).
+func TestMint_SendsPermissions(t *testing.T) {
+	t.Parallel()
+	s, srv := newAppServer(t, func(w http.ResponseWriter, r *http.Request, _ string) {
+		if r.URL.Path == "/api/v3/app/installations/7/access_tokens" {
+			http.Error(w, `{"message":"The permissions requested are not granted to this installation."}`, http.StatusUnprocessableEntity)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"token":"ghs_x","expires_at":"2026-10-10T13:00:00Z"}`))
+	})
+	c := newTestAppClient(t, srv)
+	perms := map[string]string{"contents": "write", "metadata": "read"}
+
+	if _, _, err := c.Mint(context.Background(), 42, []int64{1}, perms); err != nil {
+		t.Fatalf("Mint() err = %v", err)
+	}
+	var body struct {
+		Permissions map[string]string `json:"permissions"`
+	}
+	if err := json.Unmarshal([]byte(s.log()[0].Body), &body); err != nil {
+		t.Fatal(err)
+	}
+	if !maps.Equal(body.Permissions, perms) {
+		t.Errorf("mint body permissions = %v, want %v", body.Permissions, perms)
+	}
+
+	_, _, err := c.Mint(context.Background(), 7, []int64{1}, perms)
+	if !errors.Is(err, platform.ErrTokenPermissions) || !strings.Contains(err.Error(), "contents:write,metadata:read") {
+		t.Errorf("Mint() refused = %v, want ErrTokenPermissions naming the set", err)
+	}
+	if _, _, err := c.Mint(context.Background(), 7, []int64{1}, nil); errors.Is(err, platform.ErrTokenPermissions) {
+		t.Errorf("Mint(nil perms) 422 = %v, want no ErrTokenPermissions", err)
+	}
+}
+
 func TestMint_Rejects(t *testing.T) {
 	t.Parallel()
 	_, srv := newAppServer(t, func(w http.ResponseWriter, _ *http.Request, _ string) {
@@ -217,7 +256,7 @@ func TestMint_Rejects(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			_, _, err := c.Mint(context.Background(), tt.inst, tt.repoIDs)
+			_, _, err := c.Mint(context.Background(), tt.inst, tt.repoIDs, nil)
 			if err == nil {
 				t.Fatalf("Mint(%d, %v) err = nil, want error", tt.inst, tt.repoIDs)
 			}

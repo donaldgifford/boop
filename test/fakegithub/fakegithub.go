@@ -31,8 +31,10 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -74,7 +76,29 @@ type Installation struct {
 type Mint struct {
 	InstallationID int64
 	RepoIDs        []int64
-	Token          string
+	// Permissions is the requested set; nil when the request named none.
+	Permissions map[string]string
+	Token       string
+}
+
+// GitHub App permission levels.
+const (
+	permRead  = "read"
+	permWrite = "write"
+)
+
+// GrantedPermissions is the fake App's permission set by default:
+// boop-bot's (IMPL-0006 OQ5 as amended 2026-11-09).
+func GrantedPermissions() map[string]string {
+	return map[string]string{
+		"contents":             permWrite,
+		"pull_requests":        permWrite,
+		"issues":               permWrite,
+		"checks":               permWrite,
+		"statuses":             permWrite,
+		"metadata":             permRead,
+		"vulnerability_alerts": permRead,
+	}
 }
 
 // Rate is one /rate_limit resource.
@@ -164,6 +188,7 @@ type Server struct {
 	webhookSecret string
 	deliveries    []Delivery
 	deleted       map[int64]bool
+	granted       map[string]string
 }
 
 // NewFake returns a fake GitHub with one installation (id 1) and
@@ -190,6 +215,7 @@ func NewFake() (*Server, error) {
 		secondary:    make(map[SecondaryScope]secondaryLimit),
 		appID:        1,
 		deleted:      make(map[int64]bool),
+		granted:      GrantedPermissions(),
 	}, nil
 }
 
@@ -238,6 +264,14 @@ func (s *Server) SetTokenTTL(d time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.tokenTTL = d
+}
+
+// SetGrantedPermissions replaces the App's permission set. A mint
+// asking for more answers 422, as GitHub does.
+func (s *Server) SetGrantedPermissions(perms map[string]string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.granted = maps.Clone(perms)
 }
 
 // SetRevokeStatus sets the status DELETE /installation/token answers.
@@ -420,7 +454,10 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 }
 
 // message is GitHub's error body.
-func message(m string) map[string]string { return map[string]string{"message": m} }
+// messageKey is the key of GitHub's error message.
+const messageKey = "message"
+
+func message(m string) map[string]string { return map[string]string{messageKey: m} }
 
 // queryInt is a positive integer query parameter, or def.
 func queryInt(r *http.Request, name string, def int) int {
@@ -473,7 +510,8 @@ func (s *Server) mint(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 	var body struct {
-		RepositoryIDs []int64 `json:"repository_ids"`
+		RepositoryIDs []int64           `json:"repository_ids"`
+		Permissions   map[string]string `json:"permissions"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, message(err.Error()))
@@ -485,12 +523,35 @@ func (s *Server) mint(w http.ResponseWriter, r *http.Request, id string) {
 		notFound(w)
 		return
 	}
+	for _, name := range slices.Sorted(maps.Keys(body.Permissions)) {
+		if !grants(s.granted[name], body.Permissions[name]) {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				messageKey:          "The permissions requested are not granted to this installation.",
+				"documentation_url": "https://docs.github.com/rest/apps/apps#create-an-installation-access-token-for-an-app",
+				"permission":        name, // the fake names it; GitHub does not
+			})
+			return
+		}
+	}
 	tok := fmt.Sprintf("ghs_fake_%d_%d", instID, len(s.mints)+1)
-	s.mints = append(s.mints, Mint{InstallationID: instID, RepoIDs: body.RepositoryIDs, Token: tok})
+	s.mints = append(s.mints, Mint{InstallationID: instID, RepoIDs: body.RepositoryIDs, Permissions: body.Permissions, Token: tok})
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"token":      tok,
 		"expires_at": time.Now().Add(s.tokenTTL).UTC().Format(time.RFC3339),
 	})
+}
+
+// grants reports whether a granted level covers the wanted one: write
+// covers read.
+func grants(granted, want string) bool {
+	switch want {
+	case permRead:
+		return granted == permRead || granted == permWrite
+	case permWrite:
+		return granted == permWrite
+	default:
+		return false
+	}
 }
 
 func (s *Server) revoke(w http.ResponseWriter, r *http.Request) {

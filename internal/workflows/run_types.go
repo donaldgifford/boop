@@ -32,6 +32,10 @@ const (
 	// repository's fault (token mint, API server, a run that ended
 	// without a result).
 	ErrTypeInfrastructure = "infrastructure"
+	// ErrTypeTokenPermissions: GitHub refused the sandboxed run's token
+	// permissions; the App lacks one. Non-retryable: the config or the
+	// App's settings must change (IMPL-0006 task 6.4).
+	ErrTypeTokenPermissions = "token-permissions"
 )
 
 // ErrTypeGitHubRateLimited is the type of a GitHub rate limit returned
