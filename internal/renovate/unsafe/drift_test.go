@@ -81,23 +81,6 @@ func TestDrift(t *testing.T) {
 	}
 }
 
-// listDrift names entries added to or removed from a generated list,
-// with the decision each one needs.
-func listDrift(what string, generated, image []string, decision string) []string {
-	var out []string
-	for _, v := range image {
-		if !slices.Contains(generated, v) {
-			out = append(out, fmt.Sprintf("new %s %q: %s", what, v, decision))
-		}
-	}
-	for _, v := range generated {
-		if !slices.Contains(image, v) {
-			out = append(out, fmt.Sprintf("%s %q is gone: %s", what, v, decision))
-		}
-	}
-	return out
-}
-
 // extractDist copies the image's /usr/local/renovate/{dist,package.json}
 // out of a created, never started, container.
 func extractDist(t *testing.T, image string) string {
