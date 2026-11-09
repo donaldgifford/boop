@@ -270,6 +270,16 @@ and one commit per numbered task. The PR split is OQ1.
   resolved address and the result; if it is denied, the choice is the
   registry's external route or OQ13 a, back to the user.
 
+  First run 2026-11-09: the name resolves to 172.20.10.100,
+  `gateway/cilium-gateway-internal`. The FQDN rule did match (the
+  Gateway's Envoy, not zot, is the next hop), and `example.com` timed
+  out as it should. But the pod got HTTP 403 on `/v2/` where the
+  internet gets 200: the Gateway refuses in-cluster sources, most
+  likely by enforcing zot's policy against the pod's identity. Ordinary
+  runs avoid it by going to `zot:5000` directly. The homelab admits
+  pods labelled `boopd.dev/sandbox: "true"` (5.1) at the zot end; the
+  test passes when a pod with that label gets 200. OQ13 b stands.
+
 #### Success Criteria
 
 - The forced-disable fixture is committed and its test passes.
