@@ -333,7 +333,8 @@ and one commit per numbered task. The PR split is OQ1.
 - [x] 2.4 CI: a `renovate-drift` job running the tagged test, required
   when `charts/boopd/values.yaml` or `internal/renovate/unsafe` change.
   The job runs on those paths; marking it a required check in branch
-  protection is **deferred - human required**.
+  protection is **deferred - human required** until PR #40 is merged
+  and the job has been tested on `main` (decided 2026-11-09).
 - [x] 2.5 DESIGN-0005's upstream tracking table points at
   `internal/renovate/unsafe` as the source of truth.
 
