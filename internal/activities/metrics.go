@@ -48,6 +48,9 @@ type Metrics interface {
 	// boopd_discovery_repos_total{installation,config}, config being
 	// ConfigPresent, ConfigAbsent or ConfigUnparsed.
 	ConfigProbed(installationID int64, config string)
+	// FloorDetectionError is boopd_floor_detection_errors_total: a tree
+	// listing for floor detection that failed.
+	FloorDetectionError()
 }
 
 // Values of boopd_discovery_repos_total's config attribute.
@@ -93,3 +96,6 @@ func (NopMetrics) ProbeFallbacks(int64, int) {}
 
 // ConfigProbed implements Metrics.
 func (NopMetrics) ConfigProbed(int64, string) {}
+
+// FloorDetectionError implements Metrics.
+func (NopMetrics) FloorDetectionError() {}

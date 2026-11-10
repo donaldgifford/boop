@@ -45,11 +45,12 @@ type fakeApp struct {
 	installs []platform.Installation
 	listErr  error
 
-	mu      sync.Mutex
-	minted  [][]int64
-	revoked []string
-	mintErr error
-	revErr  error
+	mu        sync.Mutex
+	minted    [][]int64
+	mintPerms []map[string]string
+	revoked   []string
+	mintErr   error
+	revErr    error
 }
 
 func (f *fakeApp) ListInstallations(context.Context) ([]platform.Installation, error) {
@@ -60,13 +61,14 @@ func (*fakeApp) ListHookDeliveries(context.Context, string, int) ([]github.HookD
 	return nil, "", nil
 }
 
-func (f *fakeApp) Mint(_ context.Context, _ int64, ids []int64) (string, time.Time, error) {
+func (f *fakeApp) Mint(_ context.Context, _ int64, ids []int64, perms map[string]string) (string, time.Time, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.mintErr != nil {
 		return "", time.Time{}, f.mintErr
 	}
 	f.minted = append(f.minted, ids)
+	f.mintPerms = append(f.mintPerms, perms)
 	return "ghs_fake", time.Now().Add(time.Hour), nil
 }
 
@@ -157,6 +159,10 @@ func (f *fakeInstall) CheckRepo(context.Context, int64) (*github.RepoCheck, erro
 
 func (f *fakeInstall) RepoIDBySlug(_ context.Context, slug string) (int64, error) {
 	return f.ids[slug], nil
+}
+
+func (*fakeInstall) ListTree(context.Context, int64, string) (*github.Tree, error) {
+	return &github.Tree{}, nil
 }
 
 func (f *fakeInstall) SetDiscoveredLimit(limit int) {

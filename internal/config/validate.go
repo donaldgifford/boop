@@ -79,6 +79,7 @@ func (b *builder) validate(cfg *Config, raw *fileSchema) {
 			b.errorf(in.PathRange, "Invalid ingest path", "ingest.path %q must be a clean absolute URL path, such as %s.", p, DefaultIngestPath)
 		}
 	}
+	b.validateSandbox(cfg, raw)
 	b.validateApps(raw.Apps)
 }
 

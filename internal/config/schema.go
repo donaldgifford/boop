@@ -34,8 +34,26 @@ type fileSchema struct {
 	DefaultProfile  string             `hcl:"default_profile"`
 	UnknownProfile  string             `hcl:"unknown_profile"`
 	ProfileRules    []profileRuleBlock `hcl:"profile_rule,block"`
+	Sandbox         *sandboxBlock      `hcl:"sandbox,block"`
 	Ingest          *ingestBlock       `hcl:"ingest,block"`
 	Apps            []appBlock         `hcl:"app,block"`
+}
+
+// sandboxBlock is the sandboxed tier (DESIGN-0005 § boopd.hcl).
+type sandboxBlock struct {
+	RuntimeClass          string            `hcl:"runtime_class"`
+	RuntimeClassRange     hcl.Range         `hcl:"runtime_class,attr_value_range"`
+	ServiceAccount        *string           `hcl:"service_account,optional"`
+	ServiceAccountRange   hcl.Range         `hcl:"service_account,attr_value_range"`
+	NodeSelector          map[string]string `hcl:"node_selector,optional"`
+	Tolerations           []tolerationBlock `hcl:"toleration,block"`
+	EgressAllow           hcl.Expression    `hcl:"egress_allow,optional"`
+	FloorMode             hcl.Expression    `hcl:"floor_mode,optional"`
+	FloorAdd              hcl.Expression    `hcl:"floor_add,optional"`
+	TokenPermissions      map[string]string `hcl:"token_permissions,optional"`
+	TokenPermissionsRange hcl.Range         `hcl:"token_permissions,attr_value_range"`
+	PendingTimeout        hcl.Expression    `hcl:"pending_timeout,optional"`
+	DefRange              hcl.Range         `hcl:",def_range"`
 }
 
 // ingestBlock tunes webhook ingest and the delivery audit (DESIGN-0003).
@@ -89,16 +107,21 @@ type runsBlock struct {
 	PendingTimeout     hcl.Expression `hcl:"pending_timeout,optional"`
 	MaxConcurrent      *int           `hcl:"max_concurrent,optional"`
 	MaxConcurrentRange hcl.Range      `hcl:"max_concurrent,attr_value_range"`
+	HostUsers          *bool          `hcl:"host_users,optional"`
 	DefRange           hcl.Range      `hcl:",def_range"`
 }
 
 type profileBlock struct {
-	Name         string     `hcl:"name,label"`
-	Inherit      *string    `hcl:"inherit,optional"`
-	InheritRange hcl.Range  `hcl:"inherit,attr_value_range"`
-	Pod          *podBlock  `hcl:"pod,block"`
-	Renovate     *freeBlock `hcl:"renovate,block"`
-	DefRange     hcl.Range  `hcl:",def_range"`
+	Name             string         `hcl:"name,label"`
+	Inherit          *string        `hcl:"inherit,optional"`
+	InheritRange     hcl.Range      `hcl:"inherit,attr_value_range"`
+	Sandboxed        *bool          `hcl:"sandboxed,optional"`
+	SandboxedRange   hcl.Range      `hcl:"sandboxed,attr_value_range"`
+	UnsafeExecutions hcl.Expression `hcl:"unsafe_executions,optional"`
+	EgressAllow      hcl.Expression `hcl:"egress_allow,optional"`
+	Pod              *podBlock      `hcl:"pod,block"`
+	Renovate         *freeBlock     `hcl:"renovate,block"`
+	DefRange         hcl.Range      `hcl:",def_range"`
 }
 
 type podBlock struct {

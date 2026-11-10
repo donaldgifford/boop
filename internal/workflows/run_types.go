@@ -32,6 +32,15 @@ const (
 	// repository's fault (token mint, API server, a run that ended
 	// without a result).
 	ErrTypeInfrastructure = "infrastructure"
+	// ErrTypeTokenPermissions: GitHub refused the sandboxed run's token
+	// permissions; the App lacks one. Non-retryable: the config or the
+	// App's settings must change (IMPL-0006 task 6.4).
+	ErrTypeTokenPermissions = "token-permissions"
+	// ErrTypeNeedsSandbox: a sandboxed run had no sandbox to run in (no
+	// sandbox block, no RuntimeClass, or a pod the sandbox could not
+	// start). Non-retryable: the repository waits for its next cadence
+	// or a recheck (IMPL-0006 Phase 8).
+	ErrTypeNeedsSandbox = "needs-sandbox"
 )
 
 // ErrTypeGitHubRateLimited is the type of a GitHub rate limit returned
@@ -85,6 +94,12 @@ type RunResult struct {
 	ReportMissing    bool          // tuples rebuilt from branch and PR events
 	RateBefore       *Readings
 	RateAfter        *Readings
+	// Sandbox is the RuntimeClass a sandboxed run ran under; "" for an
+	// ordinary run.
+	Sandbox string
+	// UnsafeExecutions are the allowedUnsafeExecutions a sandboxed run
+	// was granted.
+	UnsafeExecutions []string
 }
 
 // UpdateTuple is one row per upgrade in the report's
@@ -275,6 +290,11 @@ type PlanRunInput struct {
 	InstallationID int64
 	Extends        []string
 	Managers       []string
+	// RepoID and DefaultBranch let PlanRun list the tree for floor
+	// files (DESIGN-0005 § Learning the managers safely). Histories from
+	// before them decode zero, and PlanRun then skips the listing.
+	RepoID        int64
+	DefaultBranch string
 }
 
 // RunPlan is PlanRun's answer from the config file, which never travels
@@ -290,6 +310,14 @@ type RunPlan struct {
 	// MinInterval is the least time from the last run's start to a run a
 	// normal-priority event asks for.
 	MinInterval time.Duration
+	// Sandboxed is true when Profile runs in the sandbox (DESIGN-0005).
+	Sandboxed bool
+	// FloorRaised is true when the floor moved the repository into a
+	// sandboxed profile, or would have in report mode, where Profile
+	// stays the ordinary one.
+	FloorRaised bool
+	// FloorManagers are the floor managers the tree listing found.
+	FloorManagers []string
 }
 
 // DiscoveryInput is DiscoveryWorkflow's input; the discovery/<app>

@@ -4,7 +4,10 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -143,6 +146,112 @@ func TestGolden_InheritedProfiles(t *testing.T) {
 	}
 }
 
+// TestGolden_Sandbox checks the sandbox block's defaults and what
+// BuildInput hands jobspec for a sandboxed and an ordinary profile.
+func TestGolden_Sandbox(t *testing.T) {
+	t.Parallel()
+	cfg := loadGolden(t)
+	want := &config.Sandbox{
+		RuntimeClass:   "kata",
+		ServiceAccount: config.DefaultSandboxServiceAccount,
+		NodeSelector:   map[string]string{"boopd.dev/sandbox": "true"},
+		Tolerations: []corev1.Toleration{
+			{Key: "boopd.dev/sandbox", Value: "true", Effect: corev1.TaintEffectNoSchedule},
+		},
+		EgressAllow:      []string{"github.com", "api.github.com"},
+		FloorMode:        config.FloorReport,
+		FloorAdd:         []string{"gomod"},
+		TokenPermissions: config.DefaultTokenPermissions(),
+		PendingTimeout:   11 * time.Minute,
+	}
+	if !reflect.DeepEqual(cfg.Sandbox, want) {
+		t.Errorf("Sandbox =\n%+v\nwant\n%+v", cfg.Sandbox, want)
+	}
+	if !slices.Contains(cfg.Floor(), "gomod") || !slices.Contains(cfg.Floor(), "poetry") {
+		t.Errorf("Floor() = %v, want the built-in floor plus gomod", cfg.Floor())
+	}
+
+	jvm, err := cfg.BuildInput(cfg.App("boop-bot"), "jvm", jobspec.Repo{ID: 1, Slug: "o/r"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantSandbox := &jobspec.Sandbox{
+		RuntimeClassName:   "kata",
+		ServiceAccountName: "boopd-sandbox",
+		NodeSelector:       want.NodeSelector,
+		Tolerations:        want.Tolerations,
+	}
+	if !reflect.DeepEqual(jvm.Sandbox, wantSandbox) || !jvm.Profile.Sandboxed ||
+		!slices.Equal(jvm.Profile.UnsafeExecutions, []string{"gradleWrapper"}) {
+		t.Errorf("jvm BuildInput sandbox = %+v, profile = %+v", jvm.Sandbox, jvm.Profile)
+	}
+	if jvm.ForceDisable != nil || jvm.HostUsers != nil {
+		t.Errorf("jvm ForceDisable = %v, HostUsers = %v; want neither on a sandboxed run", jvm.ForceDisable, jvm.HostUsers)
+	}
+	jvm.Sandbox.NodeSelector["changed"] = "x"
+	if _, shared := cfg.Sandbox.NodeSelector["changed"]; shared {
+		t.Error("BuildInput() shares the sandbox node selector with the config")
+	}
+
+	base, err := cfg.BuildInput(cfg.App("boop-bot"), "baseline", jobspec.Repo{ID: 1, Slug: "o/r"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if base.Sandbox != nil || base.ForceDisable != nil || base.HostUsers != nil {
+		t.Errorf("baseline in report mode = sandbox %+v, force %v, hostUsers %v; want none", base.Sandbox, base.ForceDisable, base.HostUsers)
+	}
+}
+
+// TestBuildInput_EnforceAndHostUsers: in enforce mode an ordinary run
+// forces the floor off, and runs.host_users = false reaches it; a
+// sandboxed profile with no sandbox block gets no Sandbox.
+func TestBuildInput_EnforceAndHostUsers(t *testing.T) {
+	t.Parallel()
+	src, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.NewReplacer(
+		`floor_add    = ["gomod"]`, `floor_add = ["gomod"]`+"\n  floor_mode = \"enforce\"",
+		`max_concurrent  = 20`, `max_concurrent = 20`+"\n  host_users = false",
+	).Replace(string(src))
+	cfg, diags := config.Parse("golden.hcl", []byte(text))
+	if diags.HasErrors() {
+		t.Fatal(diags.Error())
+	}
+	in, err := cfg.BuildInput(cfg.App("boop-bot"), "baseline", jobspec.Repo{ID: 1, Slug: "o/r"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(in.ForceDisable, cfg.Floor()) || in.HostUsers == nil || *in.HostUsers {
+		t.Errorf("baseline in enforce mode: ForceDisable = %v, HostUsers = %v; want the floor and false", in.ForceDisable, in.HostUsers)
+	}
+	jvm, err := cfg.BuildInput(cfg.App("boop-bot"), "jvm", jobspec.Repo{ID: 1, Slug: "o/r"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if jvm.HostUsers != nil || jvm.ForceDisable != nil {
+		t.Errorf("jvm: HostUsers = %v, ForceDisable = %v; want neither", jvm.HostUsers, jvm.ForceDisable)
+	}
+
+	before, rest, ok := strings.Cut(text, "sandbox {")
+	_, after, ok2 := strings.Cut(rest, "\n}\n")
+	if !ok || !ok2 {
+		t.Fatal("golden.hcl has no sandbox block")
+	}
+	noBlock, diags := config.Parse("golden.hcl", []byte(before+after))
+	if diags.HasErrors() {
+		t.Fatal(diags.Error())
+	}
+	jvm, err = noBlock.BuildInput(noBlock.App("boop-bot"), "jvm", jobspec.Repo{ID: 1, Slug: "o/r"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if jvm.Sandbox != nil || !jvm.Profile.Sandboxed {
+		t.Errorf("jvm without a sandbox block: Sandbox = %+v, Sandboxed = %v; want nil and true", jvm.Sandbox, jvm.Profile.Sandboxed)
+	}
+}
+
 func TestBuildInput_Errors(t *testing.T) {
 	t.Parallel()
 	cfg := loadGolden(t)
@@ -176,4 +285,30 @@ func quantitiesEqual(a, b corev1.ResourceList) bool {
 		}
 	}
 	return true
+}
+
+// TestValidation_SandboxNeedsASandboxedProfile: the floor raises to a
+// sandboxed profile, so a sandbox block with none is an error.
+func TestValidation_SandboxNeedsASandboxedProfile(t *testing.T) {
+	t.Parallel()
+	src, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.NewReplacer(
+		"  sandboxed         = true\n", "",
+		"  unsafe_executions = [\"gradleWrapper\"]\n", "",
+	).Replace(string(src))
+	_, diags := config.Parse("golden.hcl", []byte(text))
+	before, _, ok := strings.Cut(text, "sandbox {")
+	if !ok {
+		t.Fatal("golden.hcl has no sandbox block")
+	}
+	line := strings.Count(before, "\n") + 1
+	for _, d := range diags.Diagnostics {
+		if d.Summary == "Sandbox without a sandboxed profile" && d.Subject != nil && d.Subject.Start.Line == line {
+			return
+		}
+	}
+	t.Errorf("no sandbox diagnostic at line %d; got %v", line, diags.Error())
 }

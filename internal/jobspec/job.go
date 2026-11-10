@@ -56,6 +56,14 @@ const (
 	LabelRepoID         = "boopd.dev/repo-id"
 	LabelInstallationID = "boopd.dev/installation-id"
 	LabelProfile        = "boopd.dev/profile"
+	// LabelSandbox marks a sandboxed run's Job, pod and Secret; the
+	// chart's sandbox egress policy and quota select it.
+	LabelSandbox = "boopd.dev/sandbox"
+
+	// AnnotationKataGuestSeccomp turns on seccomp inside the Kata guest,
+	// so RuntimeDefault applies there too (IMPL-0006 Findings,
+	// 2026-11-04/05). The CRI must allow io.katacontainers.* annotations.
+	AnnotationKataGuestSeccomp = "io.katacontainers.config.runtime.disable_guest_seccomp"
 
 	AnnotationWorkflowID = "boopd.dev/workflow-id"
 	AnnotationRunID      = "boopd.dev/run-id"
@@ -102,6 +110,20 @@ var (
 	ErrForbiddenOption    = errors.New("jobspec: option is owned by boopd and cannot be set in config")
 	ErrInvalidOption      = errors.New("jobspec: option has an invalid value")
 	ErrJobNotCreated      = errors.New("jobspec: job must have a UID before its secret is built")
+	// ErrNeedsSandbox is a sandboxed profile, or one with unsafe
+	// executions, built without a Sandbox: the run must not happen.
+	ErrNeedsSandbox = errors.New("jobspec: profile runs only in the sandbox")
+	// ErrNoDefaultPatterns is a manager to force off whose default
+	// managerFilePatterns Renovate builds at run time.
+	ErrNoDefaultPatterns = errors.New("jobspec: manager has no static default managerFilePatterns to force it off")
+)
+
+// Sandboxed pods get ephemeral storage bounds unless the profile sets
+// them (DESIGN-0005 § Pod posture): a disk-filling dependency stops at
+// the pod.
+var (
+	SandboxEphemeralRequest = resource.MustParse("2Gi")
+	SandboxEphemeralLimit   = resource.MustParse("10Gi")
 )
 
 // App is the platform-level input: one configured GitHub App.
@@ -144,6 +166,11 @@ type Profile struct {
 	Name     string
 	Pod      PodOverlay
 	Renovate map[string]any
+	// Sandboxed profiles run only with a BuildInput.Sandbox.
+	Sandboxed bool
+	// UnsafeExecutions becomes Renovate's allowedUnsafeExecutions; a
+	// profile with any runs only with a BuildInput.Sandbox.
+	UnsafeExecutions []string
 }
 
 // PodOverlay is what a profile may change on the pod. The security context
@@ -183,6 +210,31 @@ type BuildInput struct {
 	// ActiveDeadline and TTLAfterFinished override the defaults when > 0.
 	ActiveDeadline   time.Duration
 	TTLAfterFinished time.Duration
+
+	// Sandbox, when set, runs the Job in the sandboxed tier (DESIGN-0005).
+	Sandbox *Sandbox
+
+	// ForceDisable are Renovate managers forced off, each with its
+	// default managerFilePatterns: the floor, for an ordinary run in
+	// enforce mode (DESIGN-0005 OQ14).
+	ForceDisable []string
+
+	// HostUsers false asks for a user namespace (hostUsers: false) on an
+	// ordinary run (IMPL-0006 OQ8); nil or true leaves the pod's default.
+	// A sandboxed run never gets one: Kata rejects it.
+	HostUsers *bool
+}
+
+// Sandbox is where a sandboxed run executes: the config's sandbox block.
+type Sandbox struct {
+	// RuntimeClassName is the sandbox's RuntimeClass (Kata).
+	RuntimeClassName string
+	// ServiceAccountName is the Job's ServiceAccount, with no RBAC.
+	ServiceAccountName string
+	// NodeSelector and Tolerations are the optional dedicated placement;
+	// empty runs on any node the RuntimeClass schedules to.
+	NodeSelector map[string]string
+	Tolerations  []corev1.Toleration
 }
 
 // JobName returns the Job name for a repository's run attempt. It is always
@@ -206,6 +258,9 @@ func Labels(in *BuildInput) map[string]string {
 	out[LabelRepoID] = strconv.FormatInt(in.Repo.ID, 10)
 	out[LabelInstallationID] = strconv.FormatInt(in.Repo.InstallationID, 10)
 	out[LabelProfile] = in.Profile.Name
+	if in.Sandbox != nil {
+		out[LabelSandbox] = "true"
+	}
 	return out
 }
 
@@ -221,6 +276,9 @@ func Annotations(in *BuildInput) map[string]string {
 	}
 	if in.RunID != "" {
 		out[AnnotationRunID] = in.RunID
+	}
+	if in.Sandbox != nil {
+		out[AnnotationKataGuestSeccomp] = valueFalse
 	}
 	return out
 }
@@ -319,8 +377,16 @@ func validateJobInput(in *BuildInput) error {
 
 // podTemplate assembles the pod: restricted security context, no service
 // account token, no service links, the profile overlay, and two emptyDirs.
+// A sandboxed run takes its runtime class, placement and ServiceAccount
+// from the Sandbox, and ephemeral storage bounds; an ordinary run may get
+// a user namespace.
 func podTemplate(in *BuildInput, env []corev1.EnvVar, labels, annotations map[string]string) corev1.PodTemplateSpec {
 	overlay := in.Profile.Pod
+	if sb := in.Sandbox; sb != nil {
+		overlay.RuntimeClassName = ptr.To(sb.RuntimeClassName)
+		overlay.NodeSelector = sb.NodeSelector
+		overlay.Tolerations = sb.Tolerations
+	}
 
 	grace := int64(DefaultTerminationGracePeriod.Seconds())
 	if overlay.TerminationGracePeriodSeconds != nil {
@@ -346,10 +412,14 @@ func podTemplate(in *BuildInput, env []corev1.EnvVar, labels, annotations map[st
 		},
 	}
 	if overlay.Resources != nil {
-		container.Resources = *overlay.Resources
+		container.Resources = *overlay.Resources.DeepCopy()
+	}
+	if in.Sandbox != nil {
+		setDefault(&container.Resources.Requests, corev1.ResourceEphemeralStorage, SandboxEphemeralRequest)
+		setDefault(&container.Resources.Limits, corev1.ResourceEphemeralStorage, SandboxEphemeralLimit)
 	}
 
-	return corev1.PodTemplateSpec{
+	tmpl := corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{Labels: labels, Annotations: annotations},
 		Spec: corev1.PodSpec{
 			RestartPolicy:                 corev1.RestartPolicyNever,
@@ -371,4 +441,22 @@ func podTemplate(in *BuildInput, env []corev1.EnvVar, labels, annotations map[st
 			},
 		},
 	}
+	switch {
+	case in.Sandbox != nil:
+		tmpl.Spec.ServiceAccountName = in.Sandbox.ServiceAccountName
+	case in.HostUsers != nil && !*in.HostUsers:
+		tmpl.Spec.HostUsers = ptr.To(false)
+	}
+	return tmpl
+}
+
+// setDefault sets name in *list to q unless it is already there.
+func setDefault(list *corev1.ResourceList, name corev1.ResourceName, q resource.Quantity) {
+	if _, ok := (*list)[name]; ok {
+		return
+	}
+	if *list == nil {
+		*list = corev1.ResourceList{}
+	}
+	(*list)[name] = q.DeepCopy()
 }

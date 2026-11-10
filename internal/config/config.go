@@ -98,6 +98,8 @@ type Config struct {
 	DefaultProfile string
 	UnknownProfile string
 	ProfileRules   []ProfileRule
+	// Sandbox is the sandbox block; nil when the file has none.
+	Sandbox *Sandbox
 	// Ingest is the ingest block, defaulted when absent.
 	Ingest Ingest
 	Apps   []*App
@@ -169,6 +171,9 @@ type Runs struct {
 	PendingTimeout time.Duration
 	// MaxConcurrent caps runs across all installations (OQ12); 0 is no cap.
 	MaxConcurrent int
+	// HostUsers is false to give ordinary runs a user namespace
+	// (IMPL-0006 OQ8). runc only: a sandboxed run never gets one.
+	HostUsers bool
 }
 
 // Profile is one ecosystem profile with inheritance resolved.
@@ -176,6 +181,14 @@ type Profile struct {
 	Name     string
 	Pod      jobspec.PodOverlay
 	Renovate map[string]any
+	// Sandboxed runs the profile's repositories in the sandbox.
+	Sandboxed bool
+	// UnsafeExecutions are the allowedUnsafeExecutions values a
+	// sandboxed profile grants.
+	UnsafeExecutions []string
+	// EgressAllow are host names the profile's sandboxed runs may reach,
+	// in addition to the sandbox's.
+	EgressAllow []string
 }
 
 // ProfileRule maps presets and managers to a profile; every matching rule
@@ -237,13 +250,30 @@ type Budget struct {
 }
 
 // Resolver builds the profile resolver from the file's order, rules and
-// fallbacks.
+// fallbacks. With a sandbox block or a sandboxed profile it carries the
+// floor (Config.Floor); without either, profiles resolve as before the
+// sandbox existed.
 func (c *Config) Resolver() (*profiles.Resolver, error) {
 	rules := make([]profiles.Rule, 0, len(c.ProfileRules))
 	for _, r := range c.ProfileRules {
 		rules = append(rules, profiles.Rule{Profile: r.Profile, Extends: r.Extends, Managers: r.Managers})
 	}
-	return profiles.New(c.Order, rules, c.DefaultProfile, c.UnknownProfile)
+	var floor *profiles.Floor
+	if sandboxed := c.SandboxedProfiles(); c.Sandbox != nil || len(sandboxed) > 0 {
+		floor = &profiles.Floor{Managers: c.Floor(), Sandboxed: sandboxed, Configured: c.Sandbox != nil}
+	}
+	return profiles.New(c.Order, rules, c.DefaultProfile, c.UnknownProfile, floor)
+}
+
+// SandboxedProfiles returns the sandboxed profiles' names in order.
+func (c *Config) SandboxedProfiles() []string {
+	var out []string
+	for _, name := range c.Order {
+		if p := c.Profiles[name]; p != nil && p.Sandboxed {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 // Option tunes Load and Parse.
@@ -321,6 +351,15 @@ func (b *builder) errorf(subject hcl.Range, summary, format string, args ...any)
 	})
 }
 
+func (b *builder) warnf(subject hcl.Range, summary, format string, args ...any) {
+	b.diags = append(b.diags, &hcl.Diagnostic{
+		Severity: hcl.DiagWarning,
+		Summary:  summary,
+		Detail:   fmt.Sprintf(format, args...),
+		Subject:  subject.Ptr(),
+	})
+}
+
 func (b *builder) build(raw *fileSchema) *Config {
 	cfg := &Config{
 		Renovate:       b.renovate(&raw.Renovate),
@@ -331,6 +370,7 @@ func (b *builder) build(raw *fileSchema) *Config {
 	}
 	cfg.SecretsDir = derefOr(raw.SecretsDir, DefaultSecretsDir)
 	cfg.Ingest = b.ingest(raw.Ingest)
+	cfg.Sandbox = b.sandbox(raw.Sandbox, &cfg.Runs)
 	cfg.Profiles = b.profiles(raw.Profiles)
 	for i := range raw.ProfileRules {
 		r := &raw.ProfileRules[i]
@@ -375,6 +415,7 @@ func (b *builder) runs(r *runsBlock) Runs {
 	out := Runs{
 		Namespace:      r.Namespace,
 		PendingTimeout: b.duration(r.PendingTimeout, DefaultPendingTimeout),
+		HostUsers:      derefOr(r.HostUsers, true),
 	}
 	if r.MaxConcurrent != nil {
 		out.MaxConcurrent = *r.MaxConcurrent

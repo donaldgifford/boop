@@ -253,6 +253,12 @@ linters:
           - dupl
           - nilnil
 
+      # The floor lists Renovate's manager names, which the generated
+      # zz_generated.go beside it repeats (IMPL-0006 Phase 2)
+      - path: internal/renovate/unsafe/unsafe\.go
+        linters:
+          - goconst
+
       # Main files often have init functions
       - path: ./main.go
         linters:

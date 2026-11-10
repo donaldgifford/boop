@@ -272,3 +272,32 @@ func TestScanner_Renovate44DryRun(t *testing.T) {
 		t.Errorf("Finished = %+v, want result done", got.Finished)
 	}
 }
+
+// TestScanner_Renovate44ForcedFloor is IMPL-0006 task 1.1: the pinned
+// Renovate, with the floor forced off the way an ordinary enforce-mode
+// run is, leaves pip-compile out of boop-fixture-python-sdist's report
+// while the ungated managers stay, and fails nothing.
+func TestScanner_Renovate44ForcedFloor(t *testing.T) {
+	t.Parallel()
+	f, err := os.Open(filepath.Join("testdata", "renovate-44-forced-floor.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	s := renovate.NewScanner("donaldgifford/boop-fixture-python-sdist")
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64<<10), 4<<20)
+	for sc.Scan() {
+		s.Feed(sc.Text())
+	}
+	got := s.Result()
+	if got.ReportMissing || !slices.Equal(got.Managers, []string{"pip_requirements", "renovate-config"}) {
+		t.Errorf("managers = %v (report missing %v), want pip_requirements and renovate-config, no pip-compile", got.Managers, got.ReportMissing)
+	}
+	if len(got.Problems) != 0 {
+		t.Errorf("problems = %+v, want none: the forced object must carry the default patterns", got.Problems)
+	}
+	if got.RenovateVersion != "44.149.2" {
+		t.Errorf("RenovateVersion = %q, want the pinned 44.149.2", got.RenovateVersion)
+	}
+}

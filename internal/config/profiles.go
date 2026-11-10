@@ -51,7 +51,13 @@ func (b *builder) profiles(raws []profileBlock) map[string]*Profile {
 		if !ok {
 			return nil // the inherit reference validator reports it
 		}
-		own := &Profile{Name: name, Pod: b.pod(raw.Pod)}
+		own := &Profile{
+			Name:             name,
+			Pod:              b.pod(raw.Pod),
+			Sandboxed:        deref(raw.Sandboxed),
+			UnsafeExecutions: b.stringList(raw.UnsafeExecutions),
+			EgressAllow:      b.stringList(raw.EgressAllow),
+		}
 		if raw.Renovate != nil {
 			own.Renovate = b.options(raw.Renovate, "profile "+name+" renovate")
 		}
@@ -62,9 +68,12 @@ func (b *builder) profiles(raws []profileBlock) map[string]*Profile {
 					"Profile %q inherits through %s back to itself.", name, strings.Join(append(chain, name, parentName), " -> "))
 			} else if parent := resolve(parentName, append(chain, name)); parent != nil {
 				own = &Profile{
-					Name:     name,
-					Pod:      mergePod(&parent.Pod, &own.Pod),
-					Renovate: mergeOptions(parent.Renovate, own.Renovate),
+					Name:             name,
+					Pod:              mergePod(&parent.Pod, &own.Pod),
+					Renovate:         mergeOptions(parent.Renovate, own.Renovate),
+					Sandboxed:        derefOr(raw.Sandboxed, parent.Sandboxed),
+					UnsafeExecutions: b.listOr(raw.UnsafeExecutions, own.UnsafeExecutions, parent.UnsafeExecutions),
+					EgressAllow:      b.listOr(raw.EgressAllow, own.EgressAllow, parent.EgressAllow),
 				}
 			}
 		}
@@ -101,16 +110,7 @@ func (b *builder) pod(p *podBlock) jobspec.PodOverlay {
 			Limits:   b.resourceList(r.Limits, r.LimitsRange, "limits"),
 		}
 	}
-	for i := range p.Tolerations {
-		t := &p.Tolerations[i]
-		out.Tolerations = append(out.Tolerations, corev1.Toleration{
-			Key:               deref(t.Key),
-			Operator:          corev1.TolerationOperator(deref(t.Operator)),
-			Value:             deref(t.Value),
-			Effect:            corev1.TaintEffect(deref(t.Effect)),
-			TolerationSeconds: t.TolerationSeconds,
-		})
-	}
+	out.Tolerations = tolerations(p.Tolerations)
 	return out
 }
 
@@ -191,6 +191,15 @@ func mergeMap[K comparable, V any](parent, child map[K]V) map[K]V {
 	maps.Copy(out, parent)
 	maps.Copy(out, child)
 	return out
+}
+
+// listOr is a child's list attribute when it sets one, even empty, and
+// its parent's otherwise.
+func (b *builder) listOr(expr hcl.Expression, child, parent []string) []string {
+	if isNull(expr, b.ctx) {
+		return parent
+	}
+	return child
 }
 
 func firstSet[T any](a, b *T) *T {

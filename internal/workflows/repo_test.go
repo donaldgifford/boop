@@ -78,6 +78,7 @@ type rwProbe struct {
 
 	settle, minInterval time.Duration // PlanRun's ingest timings
 	checkInputs         []CheckRepoInput
+	sandboxed           bool // PlanRun answers the sandboxed profile "python"
 }
 
 func newRW(t *testing.T, script ...runReply) *rwProbe {
@@ -93,6 +94,9 @@ func newRW(t *testing.T, script ...runReply) *rwProbe {
 		defer p.mu.Unlock()
 		p.plans++
 		p.managers = append(p.managers, slices.Clone(in.Managers))
+		if p.sandboxed {
+			return &RunPlan{Profile: "python", Sandboxed: true, Cadence: testCadence}, nil
+		}
 		return &RunPlan{Profile: "default", Cadence: testCadence, Settle: p.settle, MinInterval: p.minInterval}, nil
 	}, activity.RegisterOptions{Name: PlanRunActivity})
 
@@ -609,5 +613,69 @@ func TestCapacityBackoff(t *testing.T) {
 		if again := capacityBackoff(n, testRepoID); again != got {
 			t.Errorf("capacityBackoff(%d) = %v then %v, want it deterministic", n, got, again)
 		}
+	}
+}
+
+// NeedsSandbox waits for the next cadence with no backoff retries, and a
+// recheck runs again at once (IMPL-0006 task 8.3).
+func TestRepoWorkflow_NeedsSandbox(t *testing.T) {
+	t.Parallel()
+	t.Run("waits a cadence", func(t *testing.T) {
+		t.Parallel()
+		p := newRW(t, appErr(ErrTypeNeedsSandbox), succeeded())
+		p.keepSeen(2 * testCadence)
+		var mid RepoState
+		p.env.RegisterDelayedCallback(func() { mid = p.query() }, time.Hour)
+		if err := p.run(state(t0), testCadence+time.Hour); err != nil && !isCanceled(err) {
+			t.Fatalf("workflow: %v", err)
+		}
+		if got := gaps(p.runAt); !slices.Equal(got, []time.Duration{testCadence}) {
+			t.Errorf("gaps = %v, want one cadence and no backoff retries", got)
+		}
+		if !mid.NextDue.Equal(p.runAt[0].Add(testCadence)) {
+			t.Errorf("NextDue = %v, want start + cadence", mid.NextDue)
+		}
+		if len(p.reports) < 1 || p.reports[0].LeaseID == "" {
+			t.Errorf("reports = %+v, want the lease closed", p.reports)
+		}
+	})
+	t.Run("recheck runs at once", func(t *testing.T) {
+		t.Parallel()
+		p := newRW(t, appErr(ErrTypeNeedsSandbox), succeeded())
+		p.keepSeen(2 * testCadence)
+		p.env.RegisterDelayedCallback(func() { p.env.SignalWorkflow(RecheckSignal, nil) }, 2*time.Hour)
+		if err := p.run(state(t0), 3*time.Hour); err != nil && !isCanceled(err) {
+			t.Fatalf("workflow: %v", err)
+		}
+		if len(p.runAt) != 2 || !p.runAt[1].Equal(t0.Add(2*time.Hour)) {
+			t.Errorf("runs at %v, want t0 and the recheck at t0+2h", p.runAt)
+		}
+	})
+	t.Run("before sandbox-1 it backs off", func(t *testing.T) {
+		t.Parallel()
+		p := newRW(t, appErr(ErrTypeNeedsSandbox), succeeded())
+		p.env.OnGetVersion(sandboxChange, workflow.DefaultVersion, 1).Return(workflow.DefaultVersion)
+		p.keepSeen(2 * testCadence)
+		if err := p.run(state(t0), time.Hour); err != nil && !isCanceled(err) {
+			t.Fatalf("workflow: %v", err)
+		}
+		if got := gaps(p.runAt); len(got) == 0 || got[0] != backoffBase {
+			t.Errorf("gaps = %v, want the %v backoff of any failure", got, backoffBase)
+		}
+	})
+}
+
+// A sandboxed plan runs with its profile like any other (task 8.5's
+// search attribute comes from the plan).
+func TestRepoWorkflow_SandboxedPlan(t *testing.T) {
+	t.Parallel()
+	p := newRW(t, runReply{res: &RunResult{Outcome: OutcomeSucceeded, RepositoryResult: "done", Sandbox: "kata"}})
+	p.sandboxed = true
+	p.keepSeen(testCadence)
+	if err := p.run(state(t0), time.Hour); err != nil && !isCanceled(err) {
+		t.Fatalf("workflow: %v", err)
+	}
+	if len(p.runs) != 1 || p.runs[0].Profile != "python" {
+		t.Errorf("runs = %+v, want one on the sandboxed profile", p.runs)
 	}
 }

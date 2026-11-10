@@ -51,6 +51,21 @@ build-core:
         -o {{ bin_dir }}/{{ binary_name }} ./cmd/{{ binary_name }}
     @echo "✓ Core binaries built"
 
+# Regenerate internal/renovate/unsafe/zz_generated.go from the chart's
+# pinned Renovate image (IMPL-0006 task 2.2): copies the image's dist and
+# package.json out of a created (never started) container
+[group('build')]
+generate-unsafe:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    image="$(sed -n 's/^    image: \(ghcr.io\/renovatebot\/renovate:.*\)$/\1/p' charts/boopd/values.yaml)"
+    work="$(mktemp -d)"
+    cid="$(docker create "${image}")"
+    trap 'docker rm -f "${cid}" >/dev/null; rm -rf "${work}"' EXIT
+    docker cp -q "${cid}:/usr/local/renovate/dist" "${work}/dist"
+    docker cp -q "${cid}:/usr/local/renovate/package.json" "${work}/package.json"
+    go run ./cmd/renovate-unsafe-gen -dist "${work}/dist" -image "${image}"
+
 # Remove build artifacts and the Go build cache
 [group('build')]
 clean:
@@ -92,6 +107,13 @@ test-all: test
 [group('test')]
 test-integration:
     @go test -v -race -count=1 -tags integration ./...
+
+# Run the Renovate drift test (build tag `renovate`, IMPL-0006 2.3): the
+# chart's pinned image must agree with internal/renovate/unsafe's
+# generated file. Needs Docker.
+[group('test')]
+test-renovate:
+    @go test -v -count=1 -tags renovate -run TestDrift ./internal/renovate/unsafe/
 
 # Run the e2e suite in the local k3d cluster: the stub Renovate and
 # GitHub images, and the boopd image the chart e2e installs

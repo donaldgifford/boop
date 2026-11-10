@@ -1,7 +1,7 @@
 ---
 id: IMPL-0006
 title: "Sandboxed execution of repository code in Renovate runs"
-status: Draft
+status: In Progress
 author: Donald Gifford
 created: 2026-10-25
 ---
@@ -225,11 +225,16 @@ and one commit per numbered task. The PR split is OQ1.
 
 #### Tasks
 
-- [ ] 1.1 Record the forced-disable result above in a test fixture:
+- [x] 1.1 Record the forced-disable result above in a test fixture:
   `internal/renovate/testdata/renovate-44-forced-floor.log`, the
   `dryRun: extract` run over `boop-fixture-python-sdist` with the forced
   object, sanitized like the 4.5 fixtures, with the command in the
   testdata README.
+  Recorded on 2026-11-09 with the pinned 44.149.2 and the forced object
+  built from `internal/renovate/unsafe` (the data `jobspec` uses), so the
+  fixture and the builder's object come from one source; the report
+  keeps `pip_requirements` and `renovate-config`, drops `pip-compile`,
+  and has no problems (`TestScanner_Renovate44ForcedFloor`).
 - [x] 1.2 **Deferred, human required.** In the homelab, run a pod with
   the boopd Job's exact posture (`internal/jobspec` output for a
   sandboxed profile, applied by hand) under `runtimeClassName: kata`:
@@ -298,23 +303,39 @@ and one commit per numbered task. The PR split is OQ1.
 
 #### Tasks
 
-- [ ] 2.1 `internal/renovate/unsafe`: `Floor` (the ungated managers:
+- [x] 2.1 `internal/renovate/unsafe`: `Floor` (the ungated managers:
   `maven-wrapper`, `pip-compile`, `pipenv`, `poetry`, `pep621`, `bundler`,
   `cocoapods`, `mix`, `nuget`, `conan`), `Gated` (Renovate's `allowedValues`), and
   `DefaultFilePatterns(manager)`; the data in a generated
-  `zz_generated.go` with the image digest it came from.
-- [ ] 2.2 `cmd/renovate-unsafe-gen` (or a `go:generate` program):
+  `zz_generated.go` with the image digest it came from. Also
+  `IsGated`, `IsManager`, `ExecManagers`, and the managers whose
+  defaults are built at run time (`flux`, `gradle`, `hermit`,
+  `renovate-config`), which have no static patterns. `pip-compile`'s
+  default list is empty, so the forced object carries `[]`.
+- [x] 2.2 `cmd/renovate-unsafe-gen` (or a `go:generate` program):
   extracts `dist/config/options/index.js` and each floor manager's
   `index.js` from the image named in `charts/boopd/values.yaml`, and
-  writes `zz_generated.go`. `just generate-unsafe` runs it.
-- [ ] 2.3 The drift test (OQ3): under the `renovate` build tag, it
+  writes `zz_generated.go`. `just generate-unsafe` runs it. The reader
+  is `internal/renovate/unsafe/distscan`, which reads the JavaScript as
+  text and follows relative imports transitively (poetry, pep621 and
+  conan reach `util/exec` only through helpers). The committed file was
+  generated on 2026-11-09 from Renovate 44.149.2's published npm
+  `dist`, the code the pinned image ships, because Docker was down; the
+  drift test checks it against the image.
+- [x] 2.3 The drift test (OQ3): under the `renovate` build tag, it
   re-reads the pinned image and fails when `allowedValues`, the set of
   managers whose artifact code imports `util/exec`, or any floor
   manager's default patterns differ from `zz_generated.go`. The message
   names the new or changed entries and the decision to make.
-- [ ] 2.4 CI: a `renovate-drift` job running the tagged test, required
+  `drift_test.go`, `just test-renovate`. CI's `renovate-drift` job ran
+  it against the pinned image on PR #40 and passed: the file generated
+  from the npm `dist` matches the image's.
+- [x] 2.4 CI: a `renovate-drift` job running the tagged test, required
   when `charts/boopd/values.yaml` or `internal/renovate/unsafe` change.
-- [ ] 2.5 DESIGN-0005's upstream tracking table points at
+  The job runs on those paths; marking it a required check in branch
+  protection is **deferred - human required** until PR #40 is merged
+  and the job has been tested on `main` (decided 2026-11-09).
+- [x] 2.5 DESIGN-0005's upstream tracking table points at
   `internal/renovate/unsafe` as the source of truth.
 
 #### Success Criteria
@@ -327,15 +348,15 @@ and one commit per numbered task. The PR split is OQ1.
 
 #### Tasks
 
-- [ ] 3.1 `internal/config/schema.go`: a top-level `sandbox` block
+- [x] 3.1 `internal/config/schema.go`: a top-level `sandbox` block
   (`runtime_class`, `service_account`, optional `node_selector` and
   `toleration`, `egress_allow`, `floor_mode` = `report` | `enforce`,
   `floor_add`, `token_permissions`, `pending_timeout`); profile
   attributes `sandboxed`, `unsafe_executions`, `egress_allow`.
-- [ ] 3.2 Decoding into `config.Sandbox` and `config.Profile` fields,
+- [x] 3.2 Decoding into `config.Sandbox` and `config.Profile` fields,
   with defaults: `floor_mode = "report"` (DESIGN-0005 OQ13),
   `service_account = "boopd-sandbox"`, OQ5's permission set.
-- [ ] 3.3 Validation with HCL positions:
+- [x] 3.3 Validation with HCL positions:
   - `unsafe_executions` only on a sandboxed profile, values from
     `unsafe.Gated`;
   - a sandboxed profile with `pod.runtime_class_name`, `node_selector`
@@ -345,16 +366,30 @@ and one commit per numbered task. The PR split is OQ1.
     `report` mode and an error in `enforce` mode;
   - `token_permissions` may not include `workflows`, `administration`
     or `secrets`.
-- [ ] 3.4 `config.BuildInput` carries the sandbox and the profile's
-  sandbox fields to `jobspec`.
-- [ ] 3.5 Golden HCL (`internal/config/testdata/golden.hcl`) and one
+
+  Also: `runtime_class` and `service_account` are DNS names, egress
+  hosts are DNS names with an optional `*.`, and token levels are `read`
+  or `write`. Without a `sandbox` block `floor_mode` is `report`, so a
+  sandboxed profile there is always the warning.
+- [x] 3.4 `config.BuildInput` carries the sandbox and the profile's
+  sandbox fields to `jobspec`. A sandboxed profile gets
+  `BuildInput.Sandbox` when the file has a `sandbox` block, and
+  `Profile.Sandboxed` and `Profile.UnsafeExecutions` always, so jobspec
+  can refuse it without one (5.5). An ordinary profile gets
+  `ForceDisable` (`Config.Floor`: the floor plus `floor_add`) in
+  `enforce` mode and `HostUsers` (`*bool`) from `runs.host_users`.
+  Egress stays in the config for the chart.
+- [x] 3.5 Golden HCL (`internal/config/testdata/golden.hcl`) and one
   failing case per rule; `examples/boopd.hcl` gains a commented
   `sandbox` block and sandboxed `python` and `jvm` profiles;
   `docs/config.md` documents every key (the reference test keeps it
   complete).
-- [ ] 3.6 `runs.host_users` (bool, default `true`, OQ8): `false` asks
+  The example's `sandbox` block is commented out, so its three
+  sandboxed profiles validate with a warning each.
+- [x] 3.6 `runs.host_users` (bool, default `true`, OQ8): `false` asks
   for a user namespace in ordinary Jobs. A sandboxed profile is never
   given one, and the setting is documented as runc-only.
+  Landed with 3.2 (decode, docs) and 3.4 (`BuildInput.HostUsers`).
 - [x] 3.7 (OQ12) Remove `PIP_ONLY_BINARY` and `UV_NO_BUILD` from the
   python profile in `charts/boopd/values.yaml` and `examples/boopd.hcl`;
   `docs/config.md` says why (Findings, 2026-10-26).
@@ -369,18 +404,26 @@ and one commit per numbered task. The PR split is OQ1.
 
 #### Tasks
 
-- [ ] 4.1 `profiles.New` takes the floor (`unsafe.Floor` plus
+- [x] 4.1 `profiles.New` takes the floor (`unsafe.Floor` plus
   `floor_add`) and which profiles are sandboxed.
-- [ ] 4.2 `Resolve` returns the profile and whether the floor raised it:
+- [x] 4.2 `Resolve` returns the profile and whether the floor raised it:
   with a floor manager, a profile below the least strict sandboxed
   profile in `order` is raised to it; rules can raise, never lower.
-- [ ] 4.3 Unknown managers (empty) with a sandbox configured resolve as
+- [x] 4.3 Unknown managers (empty) with a sandbox configured resolve as
   if a floor manager were present (DESIGN-0005 § Learning the managers
   safely).
-- [ ] 4.4 Table tests: no floor manager; a floor manager under an
+- [x] 4.4 Table tests: no floor manager; a floor manager under an
   ordinary profile; already sandboxed; no sandboxed profile defined (an
   error from `New`, caught by validation); empty managers with and
   without a sandbox; `floor_add`.
+
+  Landed together: `profiles.New(..., floor *Floor)` with `Floor{Managers,
+  Sandboxed, Configured}` (nil is no floor), and `Resolve` returns
+  `(profile, raised)`. `Config.Resolver` passes the floor when the file
+  has a `sandbox` block or a sandboxed profile, so a file with neither
+  resolves exactly as before. An ordinary profile stricter than every
+  sandboxed one is raised to the strictest sandboxed profile. A `sandbox`
+  block with no sandboxed profile is a validation error.
 
 #### Success Criteria
 
@@ -392,33 +435,44 @@ and one commit per numbered task. The PR split is OQ1.
 
 #### Tasks
 
-- [ ] 5.1 `jobspec.BuildInput.Sandbox` (`*Sandbox`: runtime class,
+- [x] 5.1 `jobspec.BuildInput.Sandbox` (`*Sandbox`: runtime class,
   ServiceAccount, optional node selector and tolerations, unsafe
   executions). With it, `podTemplate` sets `runtimeClassName`, the
   placement when given, `serviceAccountName`, an ephemeral-storage
   request and limit, and the `boopd.dev/sandbox: "true"` label.
-- [ ] 5.2 Sandboxed: `RENOVATE_REDIS_URL` is not set;
+- [x] 5.2 Sandboxed: `RENOVATE_REDIS_URL` is not set;
   `allowedUnsafeExecutions` is written into `RENOVATE_CONFIG` from the
   profile, after `ValidateOptions` (it stays forbidden as raw input).
-- [ ] 5.3 Ordinary with `floor_mode = "enforce"`: `RENOVATE_CONFIG`
+- [x] 5.3 Ordinary with `floor_mode = "enforce"`: `RENOVATE_CONFIG`
   gains `force` with `{ "<manager>": { enabled: false,
   managerFilePatterns: <default> } }` for every floor manager.
-- [ ] 5.4 `force` joins `forbiddenOptions`: the builder owns it, so
+- [x] 5.4 `force` joins `forbiddenOptions`: the builder owns it, so
   neither global config nor a profile can set it.
-- [ ] 5.5 `ErrNeedsSandbox` when a profile has `unsafe_executions` and
+- [x] 5.5 `ErrNeedsSandbox` when a profile has `unsafe_executions` and
   no `Sandbox` is given.
-- [ ] 5.6 Tests: the env table and golden Job for an ordinary run, an
+- [x] 5.6 Tests: the env table and golden Job for an ordinary run, an
   ordinary run in `enforce` mode, a sandboxed run with and without
   dedicated placement, `force` rejected in global and profile config.
-- [ ] 5.7 `BuildInput.HostUsers`: when `false` and the run is not
+- [x] 5.7 `BuildInput.HostUsers`: when `false` and the run is not
   sandboxed, `podTemplate` sets `hostUsers: false`; a sandboxed run
   never sets it (Kata rejects it). A golden Job for each case.
-- [ ] 5.8 Sandboxed: the pod template carries the annotation
+- [x] 5.8 Sandboxed: the pod template carries the annotation
   `io.katacontainers.config.runtime.disable_guest_seccomp: "false"`
   next to `RuntimeDefault`, so the profile applies inside the guest
   (Findings, 2026-11-04/05). The sandboxed golden Jobs include it;
   ordinary Jobs don't. `docs/sandbox.md` (12.1) says that the cluster's
   CRI config must allow `io.katacontainers.*` pod annotations.
+
+  Landed together. The unsafe executions live on `jobspec.Profile`
+  (with `Sandboxed`), not on `Sandbox`, so 5.5's check needs no Sandbox
+  to read them. `ErrNeedsSandbox` covers a sandboxed profile as well as
+  one with unsafe executions. Sandboxed pods default to 2Gi/10Gi
+  ephemeral storage unless the profile sets it. A forced manager whose
+  default patterns are built at run time is `ErrNoDefaultPatterns`, and
+  config rejects it in `floor_add` under `enforce`. The golden Jobs are
+  `internal/jobspec/testdata/*.yaml` (`-update` rewrites them); the
+  comparison with the Phase 1.1 fixture waits on 1.1. The
+  `docs/sandbox.md` note is 12.1's.
 
 #### Success Criteria
 
@@ -430,17 +484,25 @@ and one commit per numbered task. The PR split is OQ1.
 
 #### Tasks
 
-- [ ] 6.1 `platform.Minter.Mint(ctx, installationID, repoIDs, perms)`
+- [x] 6.1 `platform.Minter.Mint(ctx, installationID, repoIDs, perms)`
   with `perms map[string]string` (nil keeps today's behaviour);
   `internal/platform/github` sends `permissions` in the access-token
   request.
-- [ ] 6.2 `RunRenovate` passes `sandbox.token_permissions` for sandboxed
+- [x] 6.2 `RunRenovate` passes `sandbox.token_permissions` for sandboxed
   runs; ordinary runs pass nil.
-- [ ] 6.3 `test/fakegithub` records the requested permissions per token
+- [x] 6.3 `test/fakegithub` records the requested permissions per token
   and rejects a permission the fake App was not granted (GitHub answers
   422).
-- [ ] 6.4 A 422 on mint is a non-retryable `TokenPermissions` error with
+- [x] 6.4 A 422 on mint is a non-retryable `TokenPermissions` error with
   the missing permission named, so a misconfigured set fails loudly.
+
+  Landed together. The GitHub client builds the access-token request by
+  hand so an unknown permission name reaches GitHub rather than being
+  dropped by go-github's struct. GitHub's 422 does not say which
+  permission it refused, so the error names the requested set; the fake
+  names the permission in its body. The error type is
+  `workflows.ErrTypeTokenPermissions` (`token-permissions`); until
+  Phase 8, RepoWorkflow treats it like any other failed run.
 
 #### Success Criteria
 
@@ -452,20 +514,36 @@ and one commit per numbered task. The PR split is OQ1.
 
 #### Tasks
 
-- [ ] 7.1 `internal/platform/github`: `ListTree(ctx, repo, ref)` over
+- [x] 7.1 `internal/platform/github`: `ListTree(ctx, repo, ref)` over
   `GET /repos/{owner}/{repo}/git/trees/{ref}?recursive=1`, returning
   paths and `truncated`.
-- [ ] 7.2 `unsafe.MatchFloor(paths)`: the floor managers whose default
+- [x] 7.2 `unsafe.MatchFloor(paths)`: the floor managers whose default
   patterns match any path.
-- [ ] 7.3 `PlanRunInput` gains `RepoID` and `DefaultBranch`;
+- [x] 7.3 `PlanRunInput` gains `RepoID` and `DefaultBranch`;
   `PlanRun` lists the tree (OQ4), adds matched managers to the resolve
   input, and treats `truncated` as a floor match. `RunPlan` gains
   `Sandboxed`, `FloorRaised` and `FloorManagers`.
-- [ ] 7.4 A tree-listing failure is not fatal: PlanRun resolves from the
+- [x] 7.4 A tree-listing failure is not fatal: PlanRun resolves from the
   known managers, logs at warn and counts
   `boopd_floor_detection_errors_total`.
-- [ ] 7.5 `test/fakegithub` serves trees; tests for a match, no match, a
+- [x] 7.5 `test/fakegithub` serves trees; tests for a match, no match, a
   truncated tree and an error.
+
+  Landed together. `ListTree(ctx, repoID, ref)` uses
+  `GET /repositories/{id}/git/trees/{ref}?recursive=1`, by id like
+  `CheckRepo`, and returns a `github.Tree`. `MatchFloor(floor, paths)`
+  takes the floor (`Config.Floor`, so `floor_add` counts); it reads
+  `/.../` patterns as regexps and others as globs. PlanRun lists only
+  when the resolver has a floor and the input has `RepoID` and
+  `DefaultBranch`, so files without a sandbox and old histories cost
+  nothing. In `report` mode PlanRun returns the ordinary profile with
+  `FloorRaised` (8.4 logs it). Resolver gains `ResolveRules`,
+  `HasFloor`, `FloorManagers` and `Raise`.
+
+  `pip-compile` has no default patterns, so no file name finds it. The
+  first success criterion holds through 4.3 instead: with a `sandbox`
+  block a repository whose managers are unknown resolves sandboxed
+  before its first run (`TestPlanRun_FloorDetection`, "first run").
 
 #### Success Criteria
 
@@ -477,27 +555,44 @@ and one commit per numbered task. The PR split is OQ1.
 
 #### Tasks
 
-- [ ] 8.1 `RunRenovate`: for a sandboxed plan, check the sandbox (the
+- [x] 8.1 `RunRenovate`: for a sandboxed plan, check the sandbox (the
   RuntimeClass exists, OQ2) before minting; when it does not, or no
   `sandbox` block is configured, return the non-retryable
   `NeedsSandbox` error without creating anything.
-- [ ] 8.2 A sandboxed Job that stays unschedulable past
+- [x] 8.2 A sandboxed Job that stays unschedulable past
   `sandbox.pending_timeout` (OQ9) is deleted and classified
   `NeedsSandbox`, not `Pending`, when its pod events show the
   RuntimeClass or placement as the cause.
-- [ ] 8.3 `RepoWorkflow`, behind a new `GetVersion` change
+- [x] 8.3 `RepoWorkflow`, behind a new `GetVersion` change
   (`sandbox-1`): on `NeedsSandbox`, phase `needs-sandbox`, a
   `repository_event` log line (OQ6), and a wait until the next cadence;
   `recheck` retries at once.
-- [ ] 8.4 In `report` mode, a floor-raised plan runs as an ordinary Job
+- [x] 8.4 In `report` mode, a floor-raised plan runs as an ordinary Job
   (today's behaviour, OQ7) and logs `would_sandbox=true` with the floor
   managers.
-- [ ] 8.5 `RunResult.Sandbox` and `RunResult.UnsafeExecutions`; the
+- [x] 8.5 `RunResult.Sandbox` and `RunResult.UnsafeExecutions`; the
   `Sandboxed` (Bool) search attribute registered by `boopd worker` and
   upserted from the plan.
-- [ ] 8.6 Replay: record a `RepoWorkflow` history from the current code
+- [x] 8.6 Replay: record a `RepoWorkflow` history from the current code
   before 8.3 and keep `TestReplay_Histories` green; add a history for a
   `needs-sandbox` run.
+
+  Landed together. `kube.Runner.RuntimeClassExists` (needs `get` on
+  `runtimeclasses`, cluster-wide) and `SandboxPendingCause` (no pod,
+  an `Unschedulable` pod, or a `FailedScheduling` or
+  `FailedCreatePodSandBox` event; events need `list` on `events`) are
+  the checks; the chart's RBAC for both is Phase 10's, and until then a
+  forbidden RuntimeClass read is an infrastructure error. A sandboxed
+  run waits `sandbox.pending_timeout`. The error type is
+  `workflows.ErrTypeNeedsSandbox` (`needs-sandbox`, non-retryable).
+  RepoWorkflow reads `sandbox-1` once at the start of each execution;
+  from it a NeedsSandbox run logs `repository_event` at warn, waits in
+  phase `needs-sandbox` until start + cadence, and upserts `Sandboxed`.
+  PlanRun logs `would_sandbox=true` for 8.4, since it is where report
+  mode keeps the ordinary profile (Phase 7). The replay histories are
+  `repo-pre-sandbox-run-recheck-continue.json` (recorded before the
+  workflow change) and `repo-needs-sandbox-then-recheck.json`; the older
+  baselines are unchanged.
 
 #### Success Criteria
 
@@ -611,7 +706,8 @@ and one commit per numbered task. The PR split is OQ1.
 - [ ] 12.3 CLAUDE.md: the layout line for `internal/renovate/unsafe`,
   and the "Decisions already made" entry for the sandboxed tier.
 - [ ] 12.4 DESIGN-0005 → Approved at the start of Phase 2; →
-  Implemented in Phase 13.
+  Implemented in Phase 13. Approved on 2026-11-09 (IMPL-0006 → In
+  Progress the same day); Implemented waits on Phase 13.
 
 #### Success Criteria
 

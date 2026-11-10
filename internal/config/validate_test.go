@@ -12,6 +12,15 @@ import (
 	"github.com/donaldgifford/boop/internal/platform"
 )
 
+// sandboxAt is where sandbox inserts a sandbox block into the example.
+const sandboxAt = "# Webhook ingest (DESIGN-0003)"
+
+// sandbox returns a valid sandbox block with attr added, followed by
+// sandboxAt.
+func sandbox(attr string) string {
+	return "sandbox {\n  runtime_class = \"kata\"\n  " + attr + "\n}\n" + sandboxAt
+}
+
 // TestValidation breaks the example in one place per case and asserts
 // the diagnostic's summary and the line it points at. at is a substring
 // of the broken source; the diagnostic must name its line.
@@ -94,27 +103,27 @@ func TestValidation(t *testing.T) {
 		{name: "unknown unknown_profile", old: `unknown_profile = "strict"`, new: `unknown_profile = "strictest"`, summary: "", at: `"strictest"`},
 		{name: "unknown rule profile", old: `profile  = "node"`, new: `profile  = "nodejs"`, summary: "", at: `"nodejs"`},
 		{name: "unknown inherit", old: `inherit = "python" #`, new: `inherit = "pithon" #`, summary: "", at: `"pithon"`},
-		{name: "unknown in order", old: `"node", "python", "strict"]`, new: `"node", "python", "strict", "extra"]`, summary: "", at: `"extra"`},
+		{name: "unknown in order", old: `"jvm", "python", "strict"]`, new: `"jvm", "python", "strict", "extra"]`, summary: "", at: `"extra"`},
 		{
 			name:    "order duplicate",
-			old:     `["baseline", "node", "python", "strict"]`,
-			new:     `["baseline", "node", "python", "strict", "node"]`,
+			old:     `["baseline", "node", "jvm", "python", "strict"]`,
+			new:     `["baseline", "node", "jvm", "python", "strict", "node"]`,
 			summary: "Duplicate profile in order",
 			at:      `"strict", "node"]`,
 		},
 		{
 			name:    "order missing",
-			old:     `["baseline", "node", "python", "strict"]`,
-			new:     `["baseline", "node", "python"]`,
+			old:     `["baseline", "node", "jvm", "python", "strict"]`,
+			new:     `["baseline", "node", "jvm", "python"]`,
 			summary: "Profile missing from order",
-			at:      `["baseline", "node", "python"]`,
+			at:      `["baseline", "node", "jvm", "python"]`,
 		},
 		{
 			name:    "inherit cycle",
 			old:     `profile "baseline" {`,
 			new:     "profile \"baseline\" {\n  inherit = \"strict\"",
 			summary: "Profile inheritance cycle",
-			at:      "inherit = \"baseline\"\n  pod {",
+			at:      "inherit      = \"baseline\"\n  sandboxed    = true",
 		},
 		{
 			name:    "duplicate profile",
@@ -201,6 +210,77 @@ func TestValidation(t *testing.T) {
 		},
 		{name: "namespace invalid", old: `namespace       = "boopd"`, new: `namespace = "Boop_D"`, summary: "Invalid namespace", at: `"Boop_D"`},
 		{name: "bad quantity", old: `memory = "6Gi"`, new: `memory = "lots"`, summary: "Invalid quantity", at: `limits = { memory = "lots" }`},
+		{
+			name:    "unsafe_executions value",
+			old:     `unsafe_executions = ["gradleWrapper"]`,
+			new:     `unsafe_executions = ["gradleWrapper", "npmInstall"]`,
+			summary: "Invalid unsafe_executions",
+			at:      `"npmInstall"`,
+		},
+		{
+			name:    "unsafe_executions on an ordinary profile",
+			old:     `inherit = "baseline" # scripts are already ignored by default`,
+			new:     `inherit = "baseline" # scripts are already ignored by default` + "\n  unsafe_executions = [\"goGenerate\"]",
+			summary: "unsafe_executions on an ordinary profile",
+			at:      `profile "node" {`,
+		},
+		{
+			name:    "placement on a sandboxed profile",
+			old:     `labels = { "boopd.dev/egress" = "python" }`,
+			new:     `labels = { "boopd.dev/egress" = "python" }` + "\n    runtime_class_name = \"kata\"",
+			summary: "Placement on a sandboxed profile",
+			at:      `profile "python" {`,
+		},
+		{
+			name:    "profile egress host",
+			old:     `egress_allow = ["pypi.org", "files.pythonhosted.org"]`,
+			new:     `egress_allow = ["pypi.org", "files pythonhosted org"]`,
+			summary: "Invalid host name",
+			at:      `"files pythonhosted org"`,
+		},
+		{
+			name:    "sandbox runtime_class",
+			old:     sandboxAt,
+			new:     "sandbox {\n  runtime_class = \"Kata_VM\"\n}\n" + sandboxAt,
+			summary: "Invalid runtime_class",
+			at:      `"Kata_VM"`,
+		},
+		{name: "sandbox floor_mode", old: sandboxAt, new: sandbox(`floor_mode = "audit"`), summary: "Invalid value", at: `"audit"`},
+		{
+			name:    "sandbox floor_add",
+			old:     sandboxAt,
+			new:     sandbox(`floor_add = ["poetry", "nopkg"]`),
+			summary: "Unknown Renovate manager",
+			at:      `"nopkg"`,
+		},
+		{
+			name:    "sandbox egress host",
+			old:     sandboxAt,
+			new:     sandbox(`egress_allow = ["*.ok.example", "-bad"]`),
+			summary: "Invalid host name",
+			at:      `"-bad"`,
+		},
+		{
+			name:    "sandbox floor_add dynamic in enforce",
+			old:     sandboxAt,
+			new:     sandbox("floor_mode = \"enforce\"\n  floor_add = [\"gradle\"]"),
+			summary: "Floor manager cannot be forced off",
+			at:      `["gradle"]`,
+		},
+		{
+			name:    "sandbox token workflows",
+			old:     sandboxAt,
+			new:     sandbox(`token_permissions = { contents = "write", workflows = "write" }`),
+			summary: "Forbidden token permission",
+			at:      "token_permissions",
+		},
+		{
+			name:    "sandbox token level",
+			old:     sandboxAt,
+			new:     sandbox(`token_permissions = { contents = "admin" }`),
+			summary: "Invalid token permission",
+			at:      "token_permissions",
+		},
 		{
 			name:    "empty profile rule",
 			old:     "managers = [\"npm\", \"bun\"]\n  profile  = \"node\"",

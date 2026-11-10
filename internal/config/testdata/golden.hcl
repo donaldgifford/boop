@@ -65,11 +65,18 @@ profile "python" {
   }
 }
 
+profile "jvm" {
+  inherit           = "baseline"
+  sandboxed         = true
+  unsafe_executions = ["gradleWrapper"]
+  egress_allow      = ["repo1.maven.org", "services.gradle.org"]
+}
+
 profile "strict" {
   inherit = "python" # the posture for an ecosystem not yet classified
 }
 
-order           = ["baseline", "node", "python", "strict"] # ascending strictness
+order           = ["baseline", "node", "jvm", "python", "strict"] # ascending strictness
 default_profile = "baseline"
 unknown_profile = "strict"
 
@@ -84,6 +91,18 @@ profile_rule {
   extends  = ["github>boop-bot/renovate-config:node"]
   managers = ["npm", "bun"]
   profile  = "node"
+}
+
+sandbox {
+  runtime_class = "kata"
+  node_selector = { "boopd.dev/sandbox" = "true" }
+  toleration {
+    key    = "boopd.dev/sandbox"
+    value  = "true"
+    effect = "NoSchedule"
+  }
+  egress_allow = ["github.com", "api.github.com"]
+  floor_add    = ["gomod"]
 }
 
 app "boop-bot" {

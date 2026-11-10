@@ -43,7 +43,7 @@ go.work
 go.work.sum
 
 # Goreleaser snapshot output (created by `just release-local`)
-dist/
+/dist/
 
 # mkdocs build output (`mkdocs build` / `mkdocs build --strict`).
 # The published site is built by CI from source, never from a

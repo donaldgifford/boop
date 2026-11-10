@@ -1,7 +1,7 @@
 ---
 id: DESIGN-0005
 title: "Sandboxed execution of repository code in Renovate runs"
-status: Draft
+status: Approved
 author: Donald Gifford
 created: 2026-10-24
 ---
@@ -547,6 +547,15 @@ pinned Renovate image's `allowedUnsafeExecutions.allowedValues` and the
 managers whose artifact code calls `exec`, and fails when either differs
 from what boopd knows. Renovate upgrades in the chart then force a
 decision on any new execution path.
+
+The source of truth is `internal/renovate/unsafe` (IMPL-0006 Phase 2):
+`unsafe.go` holds the floor, kept by hand, and `zz_generated.go` holds
+the facts about the pinned image (gated values, every manager, the
+managers whose artifacts reach `util/exec`, each manager's default
+`managerFilePatterns`), regenerated with `just generate-unsafe`. The
+drift test (`just test-renovate`, CI job `renovate-drift`) fails when the
+pinned image disagrees with the generated file and names the decision
+each change needs. This table is the narrative; the package decides.
 
 boopd keeps the floor and **tracks** upstream rather than driving it
 (OQ12): no issues are filed for boopd. The drift test and this table

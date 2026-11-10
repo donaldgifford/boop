@@ -49,6 +49,7 @@ const (
 	DiscoveryProbeSplits  = "boopd_discovery_probe_splits_total"
 	DiscoveryProbeFalls   = "boopd_discovery_probe_fallbacks_total"
 	KubeRequestsTotal     = "boopd_kube_requests_total"
+	FloorDetectionErrors  = "boopd_floor_detection_errors_total"
 	// The ingest role's (DESIGN-0003 § Metrics).
 	IngestDeliveriesTotal = "boopd_ingest_deliveries_total"
 	IngestTemporalSeconds = "boopd_ingest_temporal_seconds"
@@ -80,6 +81,7 @@ type Metrics struct {
 	kube        metric.Int64Counter
 	deliveries  metric.Int64Counter
 	temporal    metric.Float64Histogram
+	floorErrors metric.Int64Counter
 }
 
 // NewMetrics creates the instruments on mp's boopd meter. Call it once
@@ -119,6 +121,7 @@ func NewMetrics(mp metric.MeterProvider) (*Metrics, error) {
 		"Repositories discovery probed, by installation and whether a config file was present, absent or unparsed.",
 	)
 	out.kube = counter(KubeRequestsTotal, "Kubernetes API requests by verb, resource and status code.")
+	out.floorErrors = counter(FloorDetectionErrors, "Tree listings for floor detection that failed; the run resolved from known managers.")
 	out.deliveries = counter(IngestDeliveriesTotal, "Webhook deliveries ingest answered, by app, event and outcome.")
 	temporal, err := m.Float64Histogram(IngestTemporalSeconds, metric.WithDescription("Time ingest spent in Temporal calls, by action."),
 		metric.WithExplicitBucketBoundaries(temporalBuckets...))
@@ -159,6 +162,9 @@ func (m *Metrics) RunCompleted(outcome, result, profile string, duration, podSta
 
 // PendingTimeout implements activities.Metrics.
 func (m *Metrics) PendingTimeout() { m.pending.Add(context.Background(), 1) }
+
+// FloorDetectionError implements activities.Metrics.
+func (m *Metrics) FloorDetectionError() { m.floorErrors.Add(context.Background(), 1) }
 
 // TokenMint implements activities.Metrics.
 func (m *Metrics) TokenMint(outcome string) {

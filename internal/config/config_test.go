@@ -34,8 +34,24 @@ func TestLoad_Example(t *testing.T) {
 		app.Discovery.Every != 6*time.Hour || app.Discovery.Probe != config.ProbeGraphQL {
 		t.Errorf("app = %+v, want the example's boop-bot", app)
 	}
-	if got := cfg.Profiles["python"]; got == nil || *got.Pod.RuntimeClassName != "gvisor" {
-		t.Errorf("profile python = %+v, want gvisor", got)
+	if got := cfg.Profiles["python"]; got == nil || !got.Sandboxed || got.Pod.RuntimeClassName != nil {
+		t.Errorf("profile python = %+v, want sandboxed with no runtime class of its own", got)
+	}
+	if got := cfg.Profiles["jvm"]; got == nil || !slices.Equal(got.UnsafeExecutions, []string{"gradleWrapper"}) {
+		t.Errorf("profile jvm = %+v, want unsafe_executions gradleWrapper", got)
+	}
+	// The sandbox block is commented out: sandboxed profiles warn.
+	if cfg.Sandbox != nil || cfg.FloorMode() != config.FloorReport {
+		t.Errorf("sandbox = %+v, floor mode %q; want none and report", cfg.Sandbox, cfg.FloorMode())
+	}
+	var warned []string
+	for _, d := range diags.Diagnostics {
+		if d.Summary == "Sandboxed profile without a sandbox" {
+			warned = append(warned, d.Detail)
+		}
+	}
+	if len(warned) != 3 { // jvm, python and strict, which inherits python
+		t.Errorf("sandbox warnings = %q, want one each for jvm, python and strict", warned)
 	}
 }
 
@@ -67,10 +83,15 @@ func TestResolver_FromExample(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolver() = %v", err)
 	}
-	if got := r.Resolve(nil, []string{"poetry"}); got != "strict" {
+	if got, _ := r.Resolve(nil, []string{"poetry"}); got != "strict" {
 		t.Errorf("Resolve(nil, poetry) = %q, want strict", got)
 	}
-	if got := r.Resolve([]string{"github>boop-bot/renovate-config:python"}, nil); got != "python" {
+	if got, _ := r.Resolve([]string{"github>boop-bot/renovate-config:python"}, nil); got != "python" {
 		t.Errorf("Resolve(python preset) = %q, want python", got)
+	}
+	// The example's sandboxed profiles bring the floor: bundler raises
+	// an ordinary repository to jvm, the least strict sandboxed profile.
+	if got, raised := r.Resolve([]string{"config:recommended"}, []string{"bundler"}); got != "jvm" || !raised {
+		t.Errorf("Resolve(bundler) = %q, %v; want jvm, raised", got, raised)
 	}
 }

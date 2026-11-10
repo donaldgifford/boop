@@ -20,7 +20,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
+	"slices"
+	"strings"
 	"time"
 
 	ghinstallation "github.com/bradleyfalzon/ghinstallation/v2"
@@ -105,9 +108,12 @@ func NewAppClient(appID int64, key []byte, endpoint string, opts ...AppOption) (
 
 // Mint creates an installation token with
 // POST /app/installations/{id}/access_tokens, restricted to repoIDs
-// (the run's repository and the shared-preset repository, OQ2). An empty
-// repoIDs is refused: an unscoped token is never what a run wants.
-func (c *AppClient) Mint(ctx context.Context, installationID int64, repoIDs []int64) (string, time.Time, error) {
+// (the run's repository and the shared-preset repository, OQ2) and, when
+// perms is not nil, to those permissions (DESIGN-0005 § The token). An
+// empty repoIDs is refused: an unscoped token is never what a run wants.
+// GitHub answers a permission the App lacks with 422, returned as
+// platform.ErrTokenPermissions with the requested set.
+func (c *AppClient) Mint(ctx context.Context, installationID int64, repoIDs []int64, perms map[string]string) (string, time.Time, error) {
 	if installationID == 0 {
 		return "", time.Time{}, errors.New("github: installation id required")
 	}
@@ -117,10 +123,23 @@ func (c *AppClient) Mint(ctx context.Context, installationID int64, repoIDs []in
 	if err := c.limiter.Wait(ctx); err != nil {
 		return "", time.Time{}, err
 	}
-	tok, resp, err := c.gh.Apps.CreateInstallationToken(ctx, installationID, &gogithub.InstallationTokenOptions{
+	// The request is built by hand: go-github's InstallationPermissions
+	// struct would drop a permission name it does not know, silently
+	// widening nothing but hiding a typo.
+	req, err := c.gh.NewRequest(http.MethodPost, fmt.Sprintf("app/installations/%d/access_tokens", installationID), &mintRequest{
 		RepositoryIDs: repoIDs,
+		Permissions:   perms,
 	})
 	if err != nil {
+		return "", time.Time{}, fmt.Errorf("github: mint installation token: %w", err)
+	}
+	tok := new(gogithub.InstallationToken)
+	resp, err := c.gh.Do(ctx, req, tok)
+	if err != nil {
+		if resp != nil && resp.StatusCode == http.StatusUnprocessableEntity && perms != nil {
+			return "", time.Time{}, fmt.Errorf("github: mint installation token with permissions %s: %w: %w",
+				formatPerms(perms), platform.ErrTokenPermissions, err)
+		}
 		if resp != nil && resp.StatusCode == http.StatusNotFound {
 			return "", time.Time{}, fmt.Errorf("github: mint installation token: %w: %w", platform.ErrInstallationGone, err)
 		}
@@ -130,6 +149,21 @@ func (c *AppClient) Mint(ctx context.Context, installationID int64, repoIDs []in
 		return "", time.Time{}, errors.New("github: mint returned an empty token")
 	}
 	return tok.GetToken(), tok.GetExpiresAt().Time, nil
+}
+
+// mintRequest is the access-token request body.
+type mintRequest struct {
+	RepositoryIDs []int64           `json:"repository_ids"`
+	Permissions   map[string]string `json:"permissions,omitempty"`
+}
+
+// formatPerms renders a permission set sorted, for errors.
+func formatPerms(perms map[string]string) string {
+	parts := make([]string, 0, len(perms))
+	for _, k := range slices.Sorted(maps.Keys(perms)) {
+		parts = append(parts, k+":"+perms[k])
+	}
+	return strings.Join(parts, ",")
 }
 
 // Revoke ends token with DELETE /installation/token, authenticated as
