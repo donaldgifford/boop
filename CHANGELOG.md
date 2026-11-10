@@ -9,10 +9,20 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 - *(renovate)* Unsafe package: the floor, gated values and default patterns
 - *(renovate)* Renovate-unsafe-gen reads a Renovate dist into the unsafe package
+- *(config)* Sandbox block, profile sandbox attributes and runs.host_users in the schema
+- *(config)* Decode the sandbox block and profile sandbox fields
+- *(config)* Validate the sandbox block and sandboxed profiles
+- *(config)* Carry the sandbox and profile sandbox fields to jobspec
+- *(profiles)* The floor raises repositories into a sandboxed profile
+- *(jobspec)* Sandboxed Jobs, the forced floor and user namespaces
+- *(platform)* Mint sandboxed run tokens with narrowed permissions
+- *(activities)* PlanRun detects floor files in the repository tree
+- *(workflows)* Fail sandboxed runs closed with NeedsSandbox
 
 ### Bug Fixes
 
 - *(scripts)* Sandbox-token-check revokes its token and shows progress
+- *(renovate)* Commit the distscan fixture dist
 
 ### Documentation
 
@@ -24,10 +34,14 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(impl)* IMPL-0006 1.5 resolved: Gateway checks the client's egress to the backend
 - DESIGN-0005 tracking points at internal/renovate/unsafe; IMPL-0006 Phase 2 progress
 - DESIGN-0005 Approved, IMPL-0006 In Progress
+- *(impl)* IMPL-0006 Phase 3 complete
+- *(impl)* Defer the renovate-drift required check until after merge
 
 ### Testing
 
 - *(renovate)* Drift test ties the unsafe package to the pinned image
+- *(renovate)* Check the drift test's diff without Docker
+- *(renovate)* Record the forced-floor run of the pinned Renovate
 
 ### Miscellaneous Tasks
 
