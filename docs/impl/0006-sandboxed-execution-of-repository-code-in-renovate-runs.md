@@ -332,9 +332,13 @@ and one commit per numbered task. The PR split is OQ1.
   from the npm `dist` matches the image's.
 - [x] 2.4 CI: a `renovate-drift` job running the tagged test, required
   when `charts/boopd/values.yaml` or `internal/renovate/unsafe` change.
-  The job runs on those paths; marking it a required check in branch
-  protection is **deferred - human required** until PR #40 is merged
-  and the job has been tested on `main` (decided 2026-11-09).
+  The job runs on those paths and passed on `main` after PR #40 merged.
+  It is **not** a required check (decided 2026-11-10): `main` is
+  user-owned, so a ruleset cannot let GitHub Actions bypass it, and
+  Changelog Regen pushes to `main` with `GITHUB_TOKEN`. Requiring it
+  would need Changelog Regen to push with a deploy key that bypasses
+  the ruleset; until then a drift failure shows on the PR but does not
+  block the merge.
 - [x] 2.5 DESIGN-0005's upstream tracking table points at
   `internal/renovate/unsafe` as the source of truth.
 
