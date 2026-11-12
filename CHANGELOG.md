@@ -28,6 +28,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 - *(impl)* Record that renovate-drift stays a non-required check
 - *(impl)* Notes on Phase 10's egress exclusion and runtime-class switch
+- CLAUDE.md names Go 1.27.4
 
 ### Testing
 
