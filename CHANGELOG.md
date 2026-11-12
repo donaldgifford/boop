@@ -20,6 +20,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(chart)* NOTES for the sandbox's egress and report mode
 - *(chart)* Runs.hostUsers
 
+### Bug Fixes
+
+- *(deps)* Build with Go 1.27.4 for GO-2026-6859
+
 ### Documentation
 
 - *(impl)* Record that renovate-drift stays a non-required check
