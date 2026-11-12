@@ -51,6 +51,8 @@ const (
 	KubeRequestsTotal     = "boopd_kube_requests_total"
 	FloorDetectionErrors  = "boopd_floor_detection_errors_total"
 	SandboxReady          = "boopd_sandbox_ready"
+	RunsNeedsSandbox      = "boopd_runs_needs_sandbox_total"
+	FloorRaisedTotal      = "boopd_floor_raised_total"
 	// The ingest role's (DESIGN-0003 § Metrics).
 	IngestDeliveriesTotal = "boopd_ingest_deliveries_total"
 	IngestTemporalSeconds = "boopd_ingest_temporal_seconds"
@@ -84,6 +86,8 @@ type Metrics struct {
 	temporal    metric.Float64Histogram
 	floorErrors metric.Int64Counter
 	sandbox     metric.Int64Gauge
+	needsSB     metric.Int64Counter
+	floorRaised metric.Int64Counter
 }
 
 // NewMetrics creates the instruments on mp's boopd meter. Call it once
@@ -124,6 +128,8 @@ func NewMetrics(mp metric.MeterProvider) (*Metrics, error) {
 	)
 	out.kube = counter(KubeRequestsTotal, "Kubernetes API requests by verb, resource and status code.")
 	out.floorErrors = counter(FloorDetectionErrors, "Tree listings for floor detection that failed; the run resolved from known managers.")
+	out.needsSB = counter(RunsNeedsSandbox, "Sandboxed runs that failed closed because the sandbox was missing, by app.")
+	out.floorRaised = counter(FloorRaisedTotal, "Plans the floor raised to a sandboxed profile (or would, in report mode), by app, manager and mode.")
 	sandbox, err := m.Int64Gauge(SandboxReady,
 		metric.WithDescription("1 when the sandbox's RuntimeClass exists, 0 when it does not or the check failed."))
 	add(err)
@@ -171,6 +177,17 @@ func (m *Metrics) PendingTimeout() { m.pending.Add(context.Background(), 1) }
 
 // FloorDetectionError implements activities.Metrics.
 func (m *Metrics) FloorDetectionError() { m.floorErrors.Add(context.Background(), 1) }
+
+// NeedsSandbox implements activities.Metrics.
+func (m *Metrics) NeedsSandbox(app string) {
+	m.needsSB.Add(context.Background(), 1, metric.WithAttributes(attribute.String("app", app)))
+}
+
+// FloorRaised implements activities.Metrics.
+func (m *Metrics) FloorRaised(app, manager, mode string) {
+	m.floorRaised.Add(context.Background(), 1, metric.WithAttributes(
+		attribute.String("app", app), attribute.String("manager", manager), attribute.String("mode", mode)))
+}
 
 // SetSandboxReady records boopd_sandbox_ready{runtime_class}.
 func (m *Metrics) SetSandboxReady(runtimeClass string, ready bool) {

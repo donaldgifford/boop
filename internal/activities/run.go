@@ -177,6 +177,9 @@ func (r *run) complete(ctx context.Context, err error) {
 	r.mu.Lock()
 	overhead := runOverhead(r.started, r.running, r.firstLine)
 	r.mu.Unlock()
+	if outcome == workflows.ErrTypeNeedsSandbox {
+		r.a.metrics.NeedsSandbox(r.app.Name)
+	}
 	r.a.metrics.RunCompleted(outcome, res.RepositoryResult, r.in.Profile, r.sandboxed(), res.Duration, res.PodStart, overhead)
 
 	attrs := []any{

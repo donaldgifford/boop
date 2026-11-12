@@ -53,7 +53,25 @@ type Metrics interface {
 	// FloorDetectionError is boopd_floor_detection_errors_total: a tree
 	// listing for floor detection that failed.
 	FloorDetectionError()
+	// NeedsSandbox is boopd_runs_needs_sandbox_total{app}: a sandboxed
+	// run that failed closed because the sandbox was missing.
+	NeedsSandbox(app string)
+	// FloorRaised is boopd_floor_raised_total{app,manager,mode}: one
+	// plan the floor raised, or would have in report mode, counted once
+	// per reason. manager is a floor manager, FloorUnknownManagers or
+	// FloorTruncatedTree.
+	FloorRaised(app, manager, mode string)
 }
+
+// Values of boopd_floor_raised_total's manager attribute when no floor
+// manager was seen.
+const (
+	// FloorUnknownManagers: the repository's managers are not known yet
+	// (its first run), and unknown counts as on the floor.
+	FloorUnknownManagers = "unknown"
+	// FloorTruncatedTree: the tree listing was truncated.
+	FloorTruncatedTree = "truncated"
+)
 
 // Values of boopd_discovery_repos_total's config attribute.
 const (
@@ -102,3 +120,9 @@ func (NopMetrics) ConfigProbed(int64, string) {}
 
 // FloorDetectionError implements Metrics.
 func (NopMetrics) FloorDetectionError() {}
+
+// NeedsSandbox implements Metrics.
+func (NopMetrics) NeedsSandbox(string) {}
+
+// FloorRaised implements Metrics.
+func (NopMetrics) FloorRaised(string, string, string) {}

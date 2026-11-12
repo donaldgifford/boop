@@ -3,6 +3,7 @@ package activities_test
 import (
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -25,14 +26,34 @@ import (
 // sandboxHarness runs RunRenovate for the sandboxed profile "jvm"
 // against a fake clientset.
 type sandboxHarness struct {
-	app *fakeApp
-	cs  *fake.Clientset
-	env *testsuite.TestActivityEnvironment
+	app     *fakeApp
+	cs      *fake.Clientset
+	env     *testsuite.TestActivityEnvironment
+	metrics *needsMetrics
+}
+
+// needsMetrics counts NeedsSandbox by app.
+type needsMetrics struct {
+	activities.NopMetrics
+	mu    sync.Mutex
+	needs map[string]int
+}
+
+func (m *needsMetrics) NeedsSandbox(app string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.needs[app]++
+}
+
+func (m *needsMetrics) count(app string) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.needs[app]
 }
 
 func newSandboxHarness(t *testing.T, sandbox *config.Sandbox, objects ...runtime.Object) *sandboxHarness {
 	t.Helper()
-	h := &sandboxHarness{app: &fakeApp{}, cs: fake.NewClientset(objects...)}
+	h := &sandboxHarness{app: &fakeApp{}, cs: fake.NewClientset(objects...), metrics: &needsMetrics{needs: map[string]int{}}}
 	h.cs.PrependReactor("create", "jobs", func(a k8stesting.Action) (bool, runtime.Object, error) {
 		a.(k8stesting.CreateAction).GetObject().(*batchv1.Job).UID = "job-uid"
 		return false, nil, nil
@@ -47,6 +68,7 @@ func newSandboxHarness(t *testing.T, sandbox *config.Sandbox, objects ...runtime
 		},
 		GitHub:  &fakeGitHub{apps: map[string]*fakeApp{"main": h.app}},
 		Runner:  kube.NewRunner(h.cs, "boopd"),
+		Metrics: h.metrics,
 		Timings: activities.RunTimings{Heartbeat: 50 * time.Millisecond, Cleanup: time.Second},
 	})
 	h.env = (&testsuite.WorkflowTestSuite{}).NewTestActivityEnvironment()
@@ -101,6 +123,9 @@ func TestRunRenovate_NeedsSandboxBeforeMint(t *testing.T) {
 			if len(h.app.minted) != 0 || len(h.created()) != 0 {
 				t.Errorf("minted %v, created %v; want nothing", h.app.minted, h.created())
 			}
+			if n := h.metrics.count("main"); n != 1 {
+				t.Errorf("boopd_runs_needs_sandbox_total{app=main} = %d, want 1", n)
+			}
 		})
 	}
 }
@@ -140,6 +165,13 @@ func TestRunRenovate_SandboxPending(t *testing.T) {
 			appErr := h.run(t)
 			if appErr.Type() != tt.want {
 				t.Fatalf("err = %v, want %s", appErr, tt.want)
+			}
+			want := 0
+			if tt.want == workflows.ErrTypeNeedsSandbox {
+				want = 1
+			}
+			if n := h.metrics.count("main"); n != want {
+				t.Errorf("boopd_runs_needs_sandbox_total{app=main} = %d, want %d", n, want)
 			}
 			deleted := false
 			for _, a := range h.cs.Actions() {

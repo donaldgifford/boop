@@ -613,7 +613,7 @@ and one commit per numbered task. The PR split is OQ1.
 - [x] 9.2 `boopd_sandbox_ready` (gauge, 1 when the RuntimeClass exists),
   refreshed by the worker every minute; it does not affect `/readyz`,
   so a missing sandbox never stops ordinary runs.
-- [ ] 9.3 `boopd_runs_needs_sandbox_total{app}` and
+- [x] 9.3 `boopd_runs_needs_sandbox_total{app}` and
   `boopd_floor_raised_total{app, manager, mode}`.
 - [ ] 9.4 The run's log fields include `sandbox`, `unsafe_executions`,
   `floor_managers` and `would_sandbox`.

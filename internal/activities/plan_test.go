@@ -3,6 +3,7 @@ package activities_test
 import (
 	"net/http"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -83,15 +84,17 @@ func TestPlanRun_FloorDetection(t *testing.T) {
 		raised     bool
 		wantFloor  []string
 		wantErrors int
+		wantRaised []string // manager/mode
 	}{
 		{
 			name: "pyproject.toml", files: []string{"pyproject.toml"}, managers: []string{"npm"}, mode: config.FloorEnforce,
 			want: "python", sandboxed: true, raised: true, wantFloor: []string{"pep621", "poetry"},
+			wantRaised: []string{"pep621/enforce", "poetry/enforce"},
 		},
 		{name: "no floor file", files: []string{"package.json"}, managers: []string{"npm"}, mode: config.FloorEnforce, want: "baseline"},
 		{
 			name: "truncated", files: []string{"package.json"}, truncated: true, managers: []string{"npm"}, mode: config.FloorEnforce,
-			want: "python", sandboxed: true, raised: true,
+			want: "python", sandboxed: true, raised: true, wantRaised: []string{"truncated/enforce"},
 		},
 		{
 			name: "listing fails", status: http.StatusBadGateway, managers: []string{"npm"}, mode: config.FloorEnforce,
@@ -99,11 +102,11 @@ func TestPlanRun_FloorDetection(t *testing.T) {
 		},
 		{
 			name: "report mode keeps the ordinary profile", files: []string{"Gemfile"}, managers: []string{"npm"}, mode: config.FloorReport,
-			want: "baseline", raised: true, wantFloor: []string{"bundler"},
+			want: "baseline", raised: true, wantFloor: []string{"bundler"}, wantRaised: []string{"bundler/report"},
 		},
 		{
 			name: "first run, managers unknown", files: []string{"package.json"}, mode: config.FloorEnforce,
-			want: "python", sandboxed: true, raised: true,
+			want: "python", sandboxed: true, raised: true, wantRaised: []string{"unknown/enforce"},
 		},
 	}
 	for _, tt := range tests {
@@ -151,6 +154,9 @@ func TestPlanRun_FloorDetection(t *testing.T) {
 			if n := int(metrics.floorErrors.Load()); n != tt.wantErrors {
 				t.Errorf("floor detection errors = %d, want %d", n, tt.wantErrors)
 			}
+			if got := metrics.raisedBy(); !slices.Equal(got, tt.wantRaised) {
+				t.Errorf("floor raised = %v, want %v", got, tt.wantRaised)
+			}
 		})
 	}
 }
@@ -183,6 +189,22 @@ func TestPlanRun_NoFloorNoListing(t *testing.T) {
 type floorMetrics struct {
 	activities.NopMetrics
 	floorErrors atomic.Int32
+	mu          sync.Mutex
+	raised      []string
 }
 
 func (m *floorMetrics) FloorDetectionError() { m.floorErrors.Add(1) }
+
+func (m *floorMetrics) FloorRaised(app, manager, mode string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if app == "main" {
+		m.raised = append(m.raised, manager+"/"+mode)
+	}
+}
+
+func (m *floorMetrics) raisedBy() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Clone(m.raised)
+}

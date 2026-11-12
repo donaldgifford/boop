@@ -56,6 +56,10 @@ func TestMetrics_Names(t *testing.T) {
 	m.RecordRequest("create", "jobs", "201")
 	m.Delivery("boop-bot", "issues", "routed")
 	m.TemporalCall("signal", 20*time.Millisecond)
+	m.FloorDetectionError()
+	m.SetSandboxReady("kata", true)
+	m.NeedsSandbox("boop-bot")
+	m.FloorRaised("boop-bot", "poetry", "enforce")
 
 	got := collect(t, reader)
 	names := make([]string, 0, len(got))
@@ -68,6 +72,8 @@ func TestMetrics_Names(t *testing.T) {
 		"boopd_discovery_probe_fallbacks_total",
 		"boopd_discovery_probe_splits_total",
 		"boopd_discovery_repos_total",
+		"boopd_floor_detection_errors_total",
+		"boopd_floor_raised_total",
 		"boopd_ingest_deliveries_total",
 		"boopd_ingest_temporal_seconds",
 		"boopd_kube_requests_total",
@@ -76,7 +82,9 @@ func TestMetrics_Names(t *testing.T) {
 		"boopd_run_pending_timeouts_total",
 		"boopd_run_pod_start_seconds",
 		"boopd_runs_active",
+		"boopd_runs_needs_sandbox_total",
 		"boopd_runs_total",
+		"boopd_sandbox_ready",
 		"boopd_token_mints_total",
 		"boopd_token_revocations_total",
 	}
@@ -96,10 +104,42 @@ func TestMetrics_Names(t *testing.T) {
 			t.Errorf("%s sandboxed = %v, want false", name, v.String())
 		}
 	}
+	for name, want := range map[string]map[string]string{
+		"boopd_sandbox_ready":            {"runtime_class": "kata"},
+		"boopd_runs_needs_sandbox_total": {"app": "boop-bot"},
+		"boopd_floor_raised_total":       {"app": "boop-bot", "manager": "poetry", "mode": "enforce"},
+	} {
+		attrs := firstPoint(t, got[name])
+		if attrs.Len() != len(want) {
+			t.Errorf("%s labels = %v, want %v", name, attrs.ToSlice(), want)
+		}
+		for k, v := range want {
+			if got, ok := attrs.Value(attribute.Key(k)); !ok || got.AsString() != v {
+				t.Errorf("%s %s = %v, want %s", name, k, got.String(), v)
+			}
+		}
+	}
+	if ready := got["boopd_sandbox_ready"].Data.(metricdata.Gauge[int64]).DataPoints[0].Value; ready != 1 {
+		t.Errorf("boopd_sandbox_ready = %d, want 1", ready)
+	}
 	if active := got["boopd_runs_active"].Data.(metricdata.Sum[int64]).DataPoints[0].Value; active != 0 {
 		t.Errorf("boopd_runs_active = %d after start and end, want 0", active)
 	}
 	if cost := got["boopd_discovery_probe_cost"].Data.(metricdata.Sum[int64]).DataPoints[0].Value; cost != 3 {
 		t.Errorf("boopd_discovery_probe_cost = %d, want 3", cost)
+	}
+}
+
+// firstPoint returns the attributes of an instrument's first point.
+func firstPoint(t *testing.T, m metricdata.Metrics) attribute.Set {
+	t.Helper()
+	switch d := m.Data.(type) {
+	case metricdata.Sum[int64]:
+		return d.DataPoints[0].Attributes
+	case metricdata.Gauge[int64]:
+		return d.DataPoints[0].Attributes
+	default:
+		t.Fatalf("%s: unexpected data %T", m.Name, m.Data)
+		return attribute.Set{}
 	}
 }
