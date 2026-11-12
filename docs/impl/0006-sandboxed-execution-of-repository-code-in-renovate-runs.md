@@ -644,11 +644,26 @@ and one commit per numbered task. The PR split is OQ1.
     configured cluster CIDRs), narrowed by `allowCIDRs`;
   - `vpc-cni`: the `kubernetes` objects plus `169.254.169.254/32` and
     the VPC CIDR (a required value) in the deny list.
+
+  Done (2026-11-12). The ordinary egress-class policies now select only
+  pods without `boopd.dev/sandbox`: a sandboxed profile inherits its
+  parent's `boopd.dev/egress` label, and policies add up, so it would
+  otherwise gain the ordinary 443-anywhere and Redis. Open for Phase 11:
+  Cilium's DNS proxy refuses names off the allowlist, search-domain
+  expansions included; check on the homelab that Renovate's resolver
+  falls through to the bare name.
 - [x] 10.4 RBAC for the RuntimeClass check (OQ2): a ClusterRole with
   `get` on `runtimeclasses.node.k8s.io`, limited by `resourceNames` to
   the configured class, and its binding; `sandbox.checkRuntimeClass:
   false` omits both and the worker falls back to the pod admission
   failure. Any error on the check fails closed.
+
+  Done (2026-11-12). The fallback needed a worker-side switch:
+  `sandbox.check_runtime_class` (default `true`) in `boopd.hcl`. With
+  `false` the worker skips the lookup and the `boopd_sandbox_ready`
+  refresher, and a missing class is the Job creating no pod, which
+  `SandboxPendingCause` turns into `NeedsSandbox`. The runs Role also
+  gains `list` on events with the sandbox.
 - [x] 10.5 The runs quota adds the RuntimeClass overhead
   (`sandbox.overhead`, default 250m and 250Mi, the homelab class's) for
   sandboxed Jobs.
