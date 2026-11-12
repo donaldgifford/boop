@@ -1,0 +1,126 @@
+{{/*
+Egress for sandboxed Job pods (DESIGN-0005 § Network), one policy per
+sandboxed profile, selecting its pods by boopd.dev/sandbox and
+boopd.dev/profile. No ingress; DNS to the cluster DNS; 443 out.
+- cilium: a CiliumNetworkPolicy; DNS goes through Cilium's DNS proxy,
+  which answers only for the allowed names, and 443 reaches only those
+  names (sandbox.egressAllow plus the profile's egressAllow). Rendered
+  only when the cluster serves cilium.io/v2.
+- kubernetes: a NetworkPolicy; 443 to every address except
+  sandbox.egress.denyCIDRs and clusterCIDRs, or only to allowCIDRs.
+  Host names are not filtered.
+- vpc-cni: the kubernetes policy with the metadata address and
+  sandbox.egress.vpcCIDR denied too.
+*/}}
+{{- if .Values.sandbox.enabled -}}
+{{- $sb := .Values.sandbox -}}
+{{- $ns := .Values.boopd.runs.namespace | default .Release.Namespace -}}
+{{- $provider := .Values.networkPolicies.provider | default "kubernetes" -}}
+{{- $profiles := .Values.boopd.profiles | default dict -}}
+{{- $dns := $sb.egress.dns -}}
+{{- range $name := include "boopd.sandboxedProfiles" . | fromJsonArray }}
+{{- $extra := (include "boopd.profileValue" (list $profiles $name "egressAllow") | fromJson).v | default list }}
+{{- $hosts := concat ($sb.egressAllow | default list) $extra | uniq }}
+{{- if eq $provider "cilium" }}
+{{- if $.Capabilities.APIVersions.Has "cilium.io/v2/CiliumNetworkPolicy" }}
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ include "boopd.fullname" $ }}-sandbox-{{ $name }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "boopd.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: sandbox
+spec:
+  endpointSelector:
+    matchLabels:
+      boopd.dev/sandbox: "true"
+      boopd.dev/profile: {{ $name | quote }}
+  # An empty rule turns on default deny for ingress and allows nothing.
+  ingress:
+    - {}
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: {{ $dns.namespace }}
+            {{- range $k, $v := $dns.podLabels }}
+            k8s:{{ $k }}: {{ $v | quote }}
+            {{- end }}
+      toPorts:
+        - ports:
+            - {port: "53", protocol: ANY}
+          rules:
+            dns:
+              {{- range $hosts }}
+              {{- if hasPrefix "*." . }}
+              - matchPattern: {{ . | quote }}
+              {{- else }}
+              - matchName: {{ . | quote }}
+              {{- end }}
+              {{- end }}
+    {{- if $hosts }}
+    - toFQDNs:
+        {{- range $hosts }}
+        {{- if hasPrefix "*." . }}
+        - matchPattern: {{ . | quote }}
+        {{- else }}
+        - matchName: {{ . | quote }}
+        {{- end }}
+        {{- end }}
+      toPorts:
+        - ports:
+            - {port: "443", protocol: TCP}
+    {{- end }}
+{{- end }}
+{{- else }}
+{{- $deny := concat ($sb.egress.denyCIDRs | default list) ($sb.egress.clusterCIDRs | default list) }}
+{{- if eq $provider "vpc-cni" }}
+{{- $deny = concat $deny (list "169.254.169.254/32" (required "sandbox.egress.vpcCIDR is required with networkPolicies.provider vpc-cni" $sb.egress.vpcCIDR)) }}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "boopd.fullname" $ }}-sandbox-{{ $name }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "boopd.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: sandbox
+spec:
+  podSelector:
+    matchLabels:
+      boopd.dev/sandbox: "true"
+      boopd.dev/profile: {{ $name | quote }}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $dns.namespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml $dns.podLabels | nindent 14 }}
+      ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+    - to:
+        {{- if $sb.egress.allowCIDRs }}
+        {{- range $sb.egress.allowCIDRs }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+        {{- else }}
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              {{- range $deny | uniq }}
+              - {{ . }}
+              {{- end }}
+        {{- end }}
+      ports:
+        - {port: 443, protocol: TCP}
+{{- end }}
+{{- end }}
+{{- end }}

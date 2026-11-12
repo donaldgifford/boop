@@ -482,3 +482,43 @@ HTTPRoute never claiming the same host.
 {{- end -}}
 {{- end -}}
 {{- end }}
+
+{{/*
+A profile's value through its inherit chain: (list <profiles> <name>
+<key>). The child's value, if set, replaces the parent's
+(docs/config.md § Inheritance). JSON {"v": <value>}; v is null when no
+profile in the chain sets it.
+*/}}
+{{- define "boopd.profileValue" -}}
+{{- $profiles := index . 0 -}}
+{{- $name := index . 1 -}}
+{{- $key := index . 2 -}}
+{{- $out := dict "v" nil -}}
+{{- $done := false -}}
+{{- range $_ := until (add (len $profiles) 1 | int) -}}
+{{- if and (not $done) $name -}}
+{{- $p := get $profiles $name | default dict -}}
+{{- if hasKey $p $key -}}
+{{- $_ := set $out "v" (get $p $key) -}}
+{{- $done = true -}}
+{{- else -}}
+{{- $name = $p.inherit | default "" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- toJson $out -}}
+{{- end }}
+
+{{/*
+The names of the sandboxed profiles, sorted. JSON list.
+*/}}
+{{- define "boopd.sandboxedProfiles" -}}
+{{- $profiles := .Values.boopd.profiles | default dict -}}
+{{- $out := list -}}
+{{- range $name := keys $profiles | sortAlpha -}}
+{{- if (include "boopd.profileValue" (list $profiles $name "sandboxed") | fromJson).v -}}
+{{- $out = append $out $name -}}
+{{- end -}}
+{{- end -}}
+{{- toJson $out -}}
+{{- end }}

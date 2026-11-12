@@ -104,6 +104,12 @@ tests:
           path: spec.podSelector.matchLabels["boopd.dev/egress"]
           value: baseline
         documentIndex: 0
+      # A sandboxed profile inheriting the label must not gain this egress.
+      - equal:
+          path: spec.podSelector.matchExpressions
+          value:
+            - {key: boopd.dev/sandbox, operator: DoesNotExist}
+        documentIndex: 0
       - equal:
           path: spec.ingress
           value: []

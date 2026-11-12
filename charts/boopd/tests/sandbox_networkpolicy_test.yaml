@@ -1,0 +1,163 @@
+---
+suite: sandbox egress
+templates:
+  - templates/sandbox-networkpolicy.yaml
+set:
+  sandbox.enabled: true
+  boopd.profiles:
+    baseline:
+      pod:
+        labels: {boopd.dev/egress: baseline}
+    jvm:
+      inherit: baseline
+      sandboxed: true
+      egressAllow: [repo1.maven.org, "*.gradle.org"]
+    gradle:
+      inherit: jvm
+    ordinary:
+      inherit: jvm
+      sandboxed: false
+  boopd.order: [baseline, ordinary, jvm, gradle]
+  boopd.defaultProfile: baseline
+  boopd.unknownProfile: jvm
+tests:
+  - it: renders nothing without the sandbox
+    set:
+      sandbox.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: kubernetes - one NetworkPolicy per sandboxed profile, inherited sandboxed included
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-boopd-sandbox-gradle
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-boopd-sandbox-jvm
+        documentIndex: 1
+      - equal:
+          path: spec.podSelector.matchLabels
+          value:
+            boopd.dev/sandbox: "true"
+            boopd.dev/profile: jvm
+        documentIndex: 1
+      - equal:
+          path: spec.ingress
+          value: []
+      - equal:
+          path: spec.egress[0].to[0]
+          value:
+            namespaceSelector:
+              matchLabels: {kubernetes.io/metadata.name: kube-system}
+            podSelector:
+              matchLabels: {k8s-app: kube-dns}
+      - equal:
+          path: spec.egress[1]
+          value:
+            to:
+              - ipBlock:
+                  cidr: 0.0.0.0/0
+                  except:
+                    - 10.0.0.0/8
+                    - 172.16.0.0/12
+                    - 192.168.0.0/16
+                    - 127.0.0.0/8
+                    - 169.254.0.0/16
+                    - 100.64.0.0/10
+                    - 203.0.113.0/24
+            ports:
+              - {port: 443, protocol: TCP}
+    set:
+      sandbox.egress.clusterCIDRs: [203.0.113.0/24]
+
+  - it: kubernetes - allowCIDRs narrow 443
+    set:
+      sandbox.egress.allowCIDRs: [140.82.112.0/20, 185.199.108.0/22]
+    asserts:
+      - equal:
+          path: spec.egress[1].to
+          value:
+            - ipBlock: {cidr: 140.82.112.0/20}
+            - ipBlock: {cidr: 185.199.108.0/22}
+        documentIndex: 0
+
+  - it: vpc-cni - adds the metadata address and the VPC CIDR
+    set:
+      networkPolicies.provider: vpc-cni
+      sandbox.egress.vpcCIDR: 10.20.0.0/16
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 169.254.169.254/32
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 10.20.0.0/16
+
+  - it: vpc-cni - requires the VPC CIDR
+    set:
+      networkPolicies.provider: vpc-cni
+    asserts:
+      - failedTemplate:
+          errorPattern: sandbox.egress.vpcCIDR is required
+
+  - it: cilium - toFQDNs from the sandbox and profile allowlists
+    capabilities:
+      apiVersions:
+        - cilium.io/v2/CiliumNetworkPolicy
+    set:
+      networkPolicies.provider: cilium
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: CiliumNetworkPolicy
+      - equal:
+          path: spec.endpointSelector.matchLabels
+          value:
+            boopd.dev/sandbox: "true"
+            boopd.dev/profile: jvm
+        documentIndex: 1
+      - equal:
+          path: spec.ingress
+          value: [{}]
+      - equal:
+          path: spec.egress[0].toEndpoints[0].matchLabels
+          value:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      - contains:
+          path: spec.egress[0].toPorts[0].rules.dns
+          content: {matchPattern: "*.gradle.org"}
+        documentIndex: 1
+      - equal:
+          path: spec.egress[1]
+          value:
+            toFQDNs:
+              - matchName: github.com
+              - matchName: api.github.com
+              - matchName: codeload.github.com
+              - matchName: objects.githubusercontent.com
+              - matchName: release-assets.githubusercontent.com
+              - matchName: ghcr.io
+              - matchName: repo1.maven.org
+              - matchPattern: "*.gradle.org"
+            toPorts:
+              - ports:
+                  - {port: "443", protocol: TCP}
+        documentIndex: 1
+
+  - it: cilium - renders nothing when the cluster lacks the API
+    set:
+      networkPolicies.provider: cilium
+    asserts:
+      - hasDocuments:
+          count: 0

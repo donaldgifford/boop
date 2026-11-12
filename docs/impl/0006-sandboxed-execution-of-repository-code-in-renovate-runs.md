@@ -634,7 +634,7 @@ and one commit per numbered task. The PR split is OQ1.
   `allowCIDRs`; rendered into `boopd.hcl`.
 - [x] 10.2 `templates/sandbox-serviceaccount.yaml`: `boopd-sandbox`,
   `automountServiceAccountToken: false`, no bindings.
-- [ ] 10.3 `templates/sandbox-networkpolicy.yaml`, per sandboxed
+- [x] 10.3 `templates/sandbox-networkpolicy.yaml`, per sandboxed
   profile:
   - `cilium`: a `CiliumNetworkPolicy` with no ingress, DNS through the
     DNS proxy to `kube-dns`, and 443 to `toFQDNs` (sandbox plus profile
