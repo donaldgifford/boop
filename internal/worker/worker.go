@@ -121,6 +121,11 @@ func Run(ctx context.Context, o *Options) error {
 		})
 	}
 	serve("health", o.ListenAddr, health.Handler())
+	if sb := o.Config.Sandbox; sb != nil && o.Metrics != nil {
+		wg.Go(func() {
+			WatchSandbox(srvCtx, runner, sb.RuntimeClass, SandboxCheckInterval, o.Metrics.SetSandboxReady, log)
+		})
+	}
 	if o.MetricsHandler != nil {
 		mux := http.NewServeMux()
 		mux.Handle("GET /metrics", o.MetricsHandler)
