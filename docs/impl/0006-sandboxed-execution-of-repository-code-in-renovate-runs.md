@@ -660,7 +660,7 @@ and one commit per numbered task. The PR split is OQ1.
 - [ ] 10.8 helm-unittest suites for every template and provider, the
   schema's rejections, and `boopd config validate` on the rendered
   config.
-- [ ] 10.9 `runs.hostUsers` (default `true`) rendered into `boopd.hcl`;
+- [x] 10.9 `runs.hostUsers` (default `true`) rendered into `boopd.hcl`;
   `NOTES.txt` names the node requirements when it is `false`
   (Kubernetes 1.33+, containerd 2.x, Linux 6.3+).
 

@@ -124,7 +124,7 @@ renovate {
 
 runs {
   namespace = {{ include "boopd.hclValue" ($c.runs.namespace | default .Release.Namespace) }}
-{{- include "boopd.hclAttrs" (list $c.runs (list "pendingTimeout:pending_timeout" "maxConcurrent:max_concurrent") 2) }}
+{{- include "boopd.hclAttrs" (list $c.runs (list "pendingTimeout:pending_timeout" "maxConcurrent:max_concurrent" "hostUsers:host_users") 2) }}
 }
 {{- with $c.ingest }}
 

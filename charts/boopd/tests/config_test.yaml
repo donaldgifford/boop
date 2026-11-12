@@ -70,3 +70,17 @@ tests:
     asserts:
       - matchSnapshot:
           path: data["boopd.hcl"]
+
+  - it: renders runs.hostUsers, true by default
+    asserts:
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'host_users = true'
+
+  - it: renders hostUsers false
+    set:
+      boopd.runs.hostUsers: false
+    asserts:
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'host_users = false'

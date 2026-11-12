@@ -271,6 +271,9 @@
             "maxConcurrent": {
               "type": "integer",
               "minimum": 0
+            },
+            "hostUsers": {
+              "type": "boolean"
             }
           }
         },

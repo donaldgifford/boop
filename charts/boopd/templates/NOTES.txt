@@ -10,6 +10,13 @@ privateKeySecretRef.
 WARNING: temporal.address is empty. The worker cannot dial Temporal and
 will not start; set temporal.address to the frontend host:port.
 {{- end }}
+{{- if eq (toString .Values.boopd.runs.hostUsers) "false" }}
+
+NOTE: boopd.runs.hostUsers is false: ordinary runs get a user namespace
+(hostUsers: false). Their nodes need Kubernetes 1.33+, containerd 2.x
+and Linux 6.3+ (idmapped mounts); elsewhere their pods fail to start
+and the runs end Pending.
+{{- end }}
 {{- if .Values.sandbox.enabled }}
 {{- $provider := .Values.networkPolicies.provider | default "kubernetes" }}
 {{- if ne $provider "cilium" }}

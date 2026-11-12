@@ -471,7 +471,7 @@ labelled blocks become maps keyed by label:
 | - | - |
 | `secrets_dir` | `boopd.secretsDir` |
 | `renovate.*` | `boopd.renovate.*`: `image`, `configPaths`, `sharedPreset`, `logLevel`, `dryRun`, `gitAuthor`, `global`, `redisSecretRef` |
-| `runs.*` | `boopd.runs.*`: `namespace`, `pendingTimeout`, `maxConcurrent` |
+| `runs.*` | `boopd.runs.*`: `namespace`, `pendingTimeout`, `maxConcurrent`, `hostUsers` |
 | `profile "<name>"` | `boopd.profiles.<name>`: `inherit`, `sandboxed`, `unsafeExecutions`, `egressAllow`, `pod`, `renovate`; pod keys in camelCase, `toleration` blocks as `pod.tolerations` |
 | `order`, `default_profile`, `unknown_profile` | `boopd.order`, `boopd.defaultProfile`, `boopd.unknownProfile` |
 | `profile_rule` | `boopd.profileRules`, a list |

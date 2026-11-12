@@ -58,3 +58,15 @@ tests:
     asserts:
       - matchRegexRaw:
           pattern: "NOTE: sandbox.floorMode is report."
+
+  - it: names the node requirements when hostUsers is false
+    set:
+      boopd.runs.hostUsers: false
+    asserts:
+      - matchRegexRaw:
+          pattern: "Kubernetes 1.33\\+, containerd 2.x\nand Linux 6.3\\+"
+
+  - it: says nothing about user namespaces by default
+    asserts:
+      - notMatchRegexRaw:
+          pattern: hostUsers

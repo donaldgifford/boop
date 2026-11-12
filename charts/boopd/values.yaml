@@ -78,6 +78,11 @@ boopd:
     pendingTimeout: 10m
     # Cluster-capacity cap across installations; 0 means no cap.
     maxConcurrent: 20
+    # false runs ordinary Jobs in a user namespace (hostUsers: false):
+    # root in the pod is an unprivileged user on the node. The nodes need
+    # Kubernetes 1.33+, containerd 2.x and Linux 6.3+. Sandboxed runs
+    # never get one.
+    hostUsers: true
   # Webhook ingest timings (DESIGN-0003): `path`, `settle`,
   # `minInterval`, `auditEvery`. Empty keeps the config's defaults
   # (/webhooks/github, 30s, 5m, 15m).
