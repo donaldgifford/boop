@@ -508,14 +508,19 @@ prometheusRule:
   # -- Create the PrometheusRule: the generic DeploymentReplicasUnavailable
   # and ContainerRestarting, plus BoopdRunResourceExhausted (disk-space,
   # out-of-memory), BoopdRunOOMKilled, BoopdOnboardingResult,
-  # BoopdReposStalled and BoopdBudgetLow.
+  # BoopdReposStalled and BoopdBudgetLow. With sandbox.enabled:
+  # BoopdSandboxNotReady (with checkRuntimeClass), BoopdRunsNeedSandbox
+  # and, with networkPolicies.provider cilium, BoopdSandboxEgressDenied
+  # from Hubble's hubble_drop_total (needs the drop metric with
+  # labelsContext=source_namespace).
   enabled: false
   # -- Additional labels (e.g., to match Prometheus operator
   # `ruleSelector`).
   labels: {}
   # -- Per-alert overrides: keys `replicasUnavailable`,
   # `containerRestarting`, `runResourceExhausted`, `runOOMKilled`,
-  # `onboardingResult`, `reposStalled` and `budgetLow`, each accepting
+  # `onboardingResult`, `reposStalled`, `budgetLow`, `sandboxNotReady`,
+  # `runsNeedSandbox` and `sandboxEgressDenied`, each accepting
   # `enabled`, `for`, `severity`, and `threshold`.
   alerts: {}
 

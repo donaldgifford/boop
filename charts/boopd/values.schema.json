@@ -152,6 +152,15 @@
             },
             "deliveriesLost": {
               "$ref": "#/$defs/alertOverride"
+            },
+            "sandboxNotReady": {
+              "$ref": "#/$defs/alertOverride"
+            },
+            "runsNeedSandbox": {
+              "$ref": "#/$defs/alertOverride"
+            },
+            "sandboxEgressDenied": {
+              "$ref": "#/$defs/alertOverride"
             }
           }
         }

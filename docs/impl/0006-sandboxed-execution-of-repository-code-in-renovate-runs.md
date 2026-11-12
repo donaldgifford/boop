@@ -652,7 +652,7 @@ and one commit per numbered task. The PR split is OQ1.
 - [x] 10.5 The runs quota adds the RuntimeClass overhead
   (`sandbox.overhead`, default 250m and 250Mi, the homelab class's) for
   sandboxed Jobs.
-- [ ] 10.6 `PrometheusRule`: `BoopdSandboxNotReady`,
+- [x] 10.6 `PrometheusRule`: `BoopdSandboxNotReady`,
   `BoopdRunsNeedSandbox`, and `BoopdSandboxEgressDenied` (Hubble
   metrics, `cilium` only).
 - [ ] 10.7 `NOTES.txt`: the `kubernetes` and `vpc-cni` warning that host

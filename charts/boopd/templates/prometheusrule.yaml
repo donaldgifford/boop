@@ -94,6 +94,27 @@ spec:
             "description" "The delivery audit found failed or missed {{ $labels.event }} deliveries for {{ $labels.app }}: redeliver them from the App's settings, or wait for the next discovery pass.")
         ) }}
         {{- end }}
+        {{- if .Values.sandbox.enabled }}
+        {{- if .Values.sandbox.checkRuntimeClass }}
+        {{- $defs = append $defs
+          (dict "key" "sandboxNotReady" "alert" "BoopdSandboxNotReady" "for" "10m" "threshold" 1
+            "expr" (printf "min by (runtime_class) (boopd_sandbox_ready{namespace=\"%s\"}) < %%v" $ns)
+            "summary" "The boopd sandbox's RuntimeClass is missing"
+            "description" "RuntimeClass {{ $labels.runtime_class }} does not exist, or the worker cannot read it: sandboxed runs fail closed with NeedsSandbox.") }}
+        {{- end }}
+        {{- $defs = append $defs
+          (dict "key" "runsNeedSandbox" "alert" "BoopdRunsNeedSandbox" "for" "0m" "threshold" 0
+            "expr" (printf "sum by (app) (increase(boopd_runs_needs_sandbox_total{namespace=\"%s\"}[1h])) > %%v" $ns)
+            "summary" "boopd runs are waiting for the sandbox"
+            "description" "Sandboxed runs for {{ $labels.app }} failed closed with NeedsSandbox: the RuntimeClass is missing, or its pods cannot be scheduled or started.") }}
+        {{- if eq (.Values.networkPolicies.provider | default "kubernetes") "cilium" }}
+        {{- $defs = append $defs
+          (dict "key" "sandboxEgressDenied" "alert" "BoopdSandboxEgressDenied" "for" "0m" "threshold" 0
+            "expr" (printf "sum by (source_namespace) (increase(hubble_drop_total{reason=\"POLICY_DENIED\",source_namespace=\"%s\"}[15m])) > %%v" $runsNs)
+            "summary" "Cilium denied egress from boopd runs"
+            "description" "Hubble saw policy-denied flows from {{ $labels.source_namespace }}: a run tried to reach a host its egress allowlist lacks. A dependency may be phoning home, or the profile's egressAllow is missing a registry.") }}
+        {{- end }}
+        {{- end }}
         {{- range $defs }}
         {{- $o := get $alerts .key | default dict }}
         {{- $on := true }}{{- if hasKey $o "enabled" }}{{- $on = $o.enabled }}{{- end }}
