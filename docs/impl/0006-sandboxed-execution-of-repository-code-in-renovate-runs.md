@@ -657,7 +657,7 @@ and one commit per numbered task. The PR split is OQ1.
   metrics, `cilium` only).
 - [x] 10.7 `NOTES.txt`: the `kubernetes` and `vpc-cni` warning that host
   names are not filtered; the `report` mode notice.
-- [ ] 10.8 helm-unittest suites for every template and provider, the
+- [x] 10.8 helm-unittest suites for every template and provider, the
   schema's rejections, and `boopd config validate` on the rendered
   config.
 - [x] 10.9 `runs.hostUsers` (default `true`) rendered into `boopd.hcl`;

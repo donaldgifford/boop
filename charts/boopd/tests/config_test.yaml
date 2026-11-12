@@ -84,3 +84,29 @@ tests:
       - matchRegex:
           path: data["boopd.hcl"]
           pattern: 'host_users = false'
+
+  - it: renders no sandbox block without the sandbox
+    asserts:
+      - notMatchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'sandbox \{'
+
+  - it: renders the sandbox block and the sandboxed profile's keys
+    values:
+      - values/sandbox-enforce.yaml
+    asserts:
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'sandbox \{\n  runtime_class   = "kata-qemu"\n  service_account = "boopd-sandbox"'
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'floor_mode = "enforce"\n  floor_add = \["gomod"\]\n  pending_timeout = "12m"\n  check_runtime_class = true'
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'toleration \{\n    key = "boopd.dev/sandbox"\n    operator = "Equal"\n    value = "true"\n    effect = "NoSchedule"\n  \}'
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'profile "jvm" \{\n  inherit = "baseline"\n  sandboxed = true\n  unsafe_executions = \["gradleWrapper"\]'
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'token_permissions = \{"checks":"write","contents":"write","issues":"write","metadata":"read","pull_requests":"write","statuses":"write"\}'

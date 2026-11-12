@@ -161,3 +161,27 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+
+  - it: snapshot - kubernetes
+    values:
+      - values/sandbox-report.yaml
+    asserts:
+      - matchSnapshot: {}
+
+  - it: snapshot - vpc-cni
+    values:
+      - values/sandbox-report.yaml
+    set:
+      networkPolicies.provider: vpc-cni
+      sandbox.egress.vpcCIDR: 10.20.0.0/16
+    asserts:
+      - matchSnapshot: {}
+
+  - it: snapshot - cilium
+    values:
+      - values/sandbox-enforce.yaml
+    capabilities:
+      apiVersions:
+        - cilium.io/v2/CiliumNetworkPolicy
+    asserts:
+      - matchSnapshot: {}

@@ -1,0 +1,415 @@
+snapshot - cilium:
+  1: |
+    apiVersion: cilium.io/v2
+    kind: CiliumNetworkPolicy
+    metadata:
+      labels:
+        app.kubernetes.io/component: sandbox
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: boopd
+        app.kubernetes.io/version: 0.0.0-dev
+        helm.sh/chart: boopd-0.0.0-dev
+      name: RELEASE-NAME-boopd-sandbox-gradle
+      namespace: NAMESPACE
+    spec:
+      egress:
+        - toEndpoints:
+            - matchLabels:
+                k8s:io.kubernetes.pod.namespace: kube-system
+                k8s:k8s-app: kube-dns
+          toPorts:
+            - ports:
+                - port: "53"
+                  protocol: ANY
+              rules:
+                dns:
+                  - matchName: github.com
+                  - matchName: api.github.com
+                  - matchName: codeload.github.com
+                  - matchName: objects.githubusercontent.com
+                  - matchName: release-assets.githubusercontent.com
+                  - matchName: ghcr.io
+                  - matchName: repo1.maven.org
+                  - matchPattern: '*.gradle.org'
+        - toFQDNs:
+            - matchName: github.com
+            - matchName: api.github.com
+            - matchName: codeload.github.com
+            - matchName: objects.githubusercontent.com
+            - matchName: release-assets.githubusercontent.com
+            - matchName: ghcr.io
+            - matchName: repo1.maven.org
+            - matchPattern: '*.gradle.org'
+          toPorts:
+            - ports:
+                - port: "443"
+                  protocol: TCP
+      endpointSelector:
+        matchLabels:
+          boopd.dev/profile: gradle
+          boopd.dev/sandbox: "true"
+      ingress:
+        - {}
+  2: |
+    apiVersion: cilium.io/v2
+    kind: CiliumNetworkPolicy
+    metadata:
+      labels:
+        app.kubernetes.io/component: sandbox
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: boopd
+        app.kubernetes.io/version: 0.0.0-dev
+        helm.sh/chart: boopd-0.0.0-dev
+      name: RELEASE-NAME-boopd-sandbox-jvm
+      namespace: NAMESPACE
+    spec:
+      egress:
+        - toEndpoints:
+            - matchLabels:
+                k8s:io.kubernetes.pod.namespace: kube-system
+                k8s:k8s-app: kube-dns
+          toPorts:
+            - ports:
+                - port: "53"
+                  protocol: ANY
+              rules:
+                dns:
+                  - matchName: github.com
+                  - matchName: api.github.com
+                  - matchName: codeload.github.com
+                  - matchName: objects.githubusercontent.com
+                  - matchName: release-assets.githubusercontent.com
+                  - matchName: ghcr.io
+                  - matchName: repo1.maven.org
+                  - matchPattern: '*.gradle.org'
+        - toFQDNs:
+            - matchName: github.com
+            - matchName: api.github.com
+            - matchName: codeload.github.com
+            - matchName: objects.githubusercontent.com
+            - matchName: release-assets.githubusercontent.com
+            - matchName: ghcr.io
+            - matchName: repo1.maven.org
+            - matchPattern: '*.gradle.org'
+          toPorts:
+            - ports:
+                - port: "443"
+                  protocol: TCP
+      endpointSelector:
+        matchLabels:
+          boopd.dev/profile: jvm
+          boopd.dev/sandbox: "true"
+      ingress:
+        - {}
+  3: |
+    apiVersion: cilium.io/v2
+    kind: CiliumNetworkPolicy
+    metadata:
+      labels:
+        app.kubernetes.io/component: sandbox
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: boopd
+        app.kubernetes.io/version: 0.0.0-dev
+        helm.sh/chart: boopd-0.0.0-dev
+      name: RELEASE-NAME-boopd-sandbox-python
+      namespace: NAMESPACE
+    spec:
+      egress:
+        - toEndpoints:
+            - matchLabels:
+                k8s:io.kubernetes.pod.namespace: kube-system
+                k8s:k8s-app: kube-dns
+          toPorts:
+            - ports:
+                - port: "53"
+                  protocol: ANY
+              rules:
+                dns:
+                  - matchName: github.com
+                  - matchName: api.github.com
+                  - matchName: codeload.github.com
+                  - matchName: objects.githubusercontent.com
+                  - matchName: release-assets.githubusercontent.com
+                  - matchName: ghcr.io
+                  - matchName: pypi.org
+                  - matchName: files.pythonhosted.org
+        - toFQDNs:
+            - matchName: github.com
+            - matchName: api.github.com
+            - matchName: codeload.github.com
+            - matchName: objects.githubusercontent.com
+            - matchName: release-assets.githubusercontent.com
+            - matchName: ghcr.io
+            - matchName: pypi.org
+            - matchName: files.pythonhosted.org
+          toPorts:
+            - ports:
+                - port: "443"
+                  protocol: TCP
+      endpointSelector:
+        matchLabels:
+          boopd.dev/profile: python
+          boopd.dev/sandbox: "true"
+      ingress:
+        - {}
+  4: |
+    apiVersion: cilium.io/v2
+    kind: CiliumNetworkPolicy
+    metadata:
+      labels:
+        app.kubernetes.io/component: sandbox
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: boopd
+        app.kubernetes.io/version: 0.0.0-dev
+        helm.sh/chart: boopd-0.0.0-dev
+      name: RELEASE-NAME-boopd-sandbox-strict
+      namespace: NAMESPACE
+    spec:
+      egress:
+        - toEndpoints:
+            - matchLabels:
+                k8s:io.kubernetes.pod.namespace: kube-system
+                k8s:k8s-app: kube-dns
+          toPorts:
+            - ports:
+                - port: "53"
+                  protocol: ANY
+              rules:
+                dns:
+                  - matchName: github.com
+                  - matchName: api.github.com
+                  - matchName: codeload.github.com
+                  - matchName: objects.githubusercontent.com
+                  - matchName: release-assets.githubusercontent.com
+                  - matchName: ghcr.io
+                  - matchName: pypi.org
+                  - matchName: files.pythonhosted.org
+        - toFQDNs:
+            - matchName: github.com
+            - matchName: api.github.com
+            - matchName: codeload.github.com
+            - matchName: objects.githubusercontent.com
+            - matchName: release-assets.githubusercontent.com
+            - matchName: ghcr.io
+            - matchName: pypi.org
+            - matchName: files.pythonhosted.org
+          toPorts:
+            - ports:
+                - port: "443"
+                  protocol: TCP
+      endpointSelector:
+        matchLabels:
+          boopd.dev/profile: strict
+          boopd.dev/sandbox: "true"
+      ingress:
+        - {}
+snapshot - kubernetes:
+  1: |
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      labels:
+        app.kubernetes.io/component: sandbox
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: boopd
+        app.kubernetes.io/version: 0.0.0-dev
+        helm.sh/chart: boopd-0.0.0-dev
+      name: RELEASE-NAME-boopd-sandbox-gradle
+      namespace: NAMESPACE
+    spec:
+      egress:
+        - ports:
+            - port: 53
+              protocol: UDP
+            - port: 53
+              protocol: TCP
+          to:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: kube-system
+              podSelector:
+                matchLabels:
+                  k8s-app: kube-dns
+        - ports:
+            - port: 443
+              protocol: TCP
+          to:
+            - ipBlock:
+                cidr: 0.0.0.0/0
+                except:
+                  - 10.0.0.0/8
+                  - 172.16.0.0/12
+                  - 192.168.0.0/16
+                  - 127.0.0.0/8
+                  - 169.254.0.0/16
+                  - 100.64.0.0/10
+                  - 10.42.0.0/16
+                  - 10.43.0.0/16
+      ingress: []
+      podSelector:
+        matchLabels:
+          boopd.dev/profile: gradle
+          boopd.dev/sandbox: "true"
+      policyTypes:
+        - Ingress
+        - Egress
+  2: |
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      labels:
+        app.kubernetes.io/component: sandbox
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: boopd
+        app.kubernetes.io/version: 0.0.0-dev
+        helm.sh/chart: boopd-0.0.0-dev
+      name: RELEASE-NAME-boopd-sandbox-jvm
+      namespace: NAMESPACE
+    spec:
+      egress:
+        - ports:
+            - port: 53
+              protocol: UDP
+            - port: 53
+              protocol: TCP
+          to:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: kube-system
+              podSelector:
+                matchLabels:
+                  k8s-app: kube-dns
+        - ports:
+            - port: 443
+              protocol: TCP
+          to:
+            - ipBlock:
+                cidr: 0.0.0.0/0
+                except:
+                  - 10.0.0.0/8
+                  - 172.16.0.0/12
+                  - 192.168.0.0/16
+                  - 127.0.0.0/8
+                  - 169.254.0.0/16
+                  - 100.64.0.0/10
+                  - 10.42.0.0/16
+                  - 10.43.0.0/16
+      ingress: []
+      podSelector:
+        matchLabels:
+          boopd.dev/profile: jvm
+          boopd.dev/sandbox: "true"
+      policyTypes:
+        - Ingress
+        - Egress
+snapshot - vpc-cni:
+  1: |
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      labels:
+        app.kubernetes.io/component: sandbox
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: boopd
+        app.kubernetes.io/version: 0.0.0-dev
+        helm.sh/chart: boopd-0.0.0-dev
+      name: RELEASE-NAME-boopd-sandbox-gradle
+      namespace: NAMESPACE
+    spec:
+      egress:
+        - ports:
+            - port: 53
+              protocol: UDP
+            - port: 53
+              protocol: TCP
+          to:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: kube-system
+              podSelector:
+                matchLabels:
+                  k8s-app: kube-dns
+        - ports:
+            - port: 443
+              protocol: TCP
+          to:
+            - ipBlock:
+                cidr: 0.0.0.0/0
+                except:
+                  - 10.0.0.0/8
+                  - 172.16.0.0/12
+                  - 192.168.0.0/16
+                  - 127.0.0.0/8
+                  - 169.254.0.0/16
+                  - 100.64.0.0/10
+                  - 10.42.0.0/16
+                  - 10.43.0.0/16
+                  - 169.254.169.254/32
+                  - 10.20.0.0/16
+      ingress: []
+      podSelector:
+        matchLabels:
+          boopd.dev/profile: gradle
+          boopd.dev/sandbox: "true"
+      policyTypes:
+        - Ingress
+        - Egress
+  2: |
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      labels:
+        app.kubernetes.io/component: sandbox
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: boopd
+        app.kubernetes.io/version: 0.0.0-dev
+        helm.sh/chart: boopd-0.0.0-dev
+      name: RELEASE-NAME-boopd-sandbox-jvm
+      namespace: NAMESPACE
+    spec:
+      egress:
+        - ports:
+            - port: 53
+              protocol: UDP
+            - port: 53
+              protocol: TCP
+          to:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: kube-system
+              podSelector:
+                matchLabels:
+                  k8s-app: kube-dns
+        - ports:
+            - port: 443
+              protocol: TCP
+          to:
+            - ipBlock:
+                cidr: 0.0.0.0/0
+                except:
+                  - 10.0.0.0/8
+                  - 172.16.0.0/12
+                  - 192.168.0.0/16
+                  - 127.0.0.0/8
+                  - 169.254.0.0/16
+                  - 100.64.0.0/10
+                  - 10.42.0.0/16
+                  - 10.43.0.0/16
+                  - 169.254.169.254/32
+                  - 10.20.0.0/16
+      ingress: []
+      podSelector:
+        matchLabels:
+          boopd.dev/profile: jvm
+          boopd.dev/sandbox: "true"
+      policyTypes:
+        - Ingress
+        - Egress
