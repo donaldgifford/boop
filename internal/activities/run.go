@@ -316,8 +316,10 @@ func (r *run) pendingTimeout() time.Duration {
 
 // checkSandbox fails a sandboxed run closed before anything is minted
 // or created (IMPL-0006 task 8.1): with no sandbox block, or a
-// RuntimeClass the cluster does not have, it is NeedsSandbox. It also
-// records the sandbox in the result.
+// RuntimeClass the cluster does not have, it is NeedsSandbox. With
+// check_runtime_class false it does not look, and a missing class
+// shows as no pod (SandboxPendingCause). It also records the sandbox in
+// the result.
 func (r *run) checkSandbox(ctx context.Context) error {
 	if !r.sandboxed() {
 		return nil
@@ -326,12 +328,14 @@ func (r *run) checkSandbox(ctx context.Context) error {
 	if sb == nil {
 		return needsSandbox(fmt.Sprintf("profile %s is sandboxed but boopd.hcl has no sandbox block", r.in.Profile), nil)
 	}
-	ok, err := r.a.runner.RuntimeClassExists(ctx, sb.RuntimeClass)
-	if err != nil {
-		return infraError("check the sandbox: "+err.Error(), nil)
-	}
-	if !ok {
-		return needsSandbox(fmt.Sprintf("RuntimeClass %s does not exist", sb.RuntimeClass), nil)
+	if sb.CheckRuntimeClass {
+		ok, err := r.a.runner.RuntimeClassExists(ctx, sb.RuntimeClass)
+		if err != nil {
+			return infraError("check the sandbox: "+err.Error(), nil)
+		}
+		if !ok {
+			return needsSandbox(fmt.Sprintf("RuntimeClass %s does not exist", sb.RuntimeClass), nil)
+		}
 	}
 	r.res.Sandbox = sb.RuntimeClass
 	r.res.UnsafeExecutions = slices.Clone(r.a.cfg.Profiles[r.in.Profile].UnsafeExecutions)

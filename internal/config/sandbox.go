@@ -92,6 +92,10 @@ type Sandbox struct {
 	TokenPermissions map[string]string
 	// PendingTimeout bounds how long a sandboxed pod may take to start.
 	PendingTimeout time.Duration
+	// CheckRuntimeClass is false to skip looking the RuntimeClass up
+	// before a run and every minute: the worker then has no cluster-wide
+	// right, and a missing class shows as the pod being refused.
+	CheckRuntimeClass bool
 }
 
 // FloorMode is the configured floor mode: FloorReport without a sandbox
@@ -108,14 +112,15 @@ func (b *builder) sandbox(s *sandboxBlock, runs *Runs) *Sandbox {
 		return nil
 	}
 	out := &Sandbox{
-		RuntimeClass:   s.RuntimeClass,
-		ServiceAccount: derefOr(s.ServiceAccount, DefaultSandboxServiceAccount),
-		NodeSelector:   maps.Clone(s.NodeSelector),
-		Tolerations:    tolerations(s.Tolerations),
-		EgressAllow:    b.stringList(s.EgressAllow),
-		FloorMode:      b.enum(floorModeEnum, s.FloorMode, FloorReport),
-		FloorAdd:       b.stringList(s.FloorAdd),
-		PendingTimeout: b.duration(s.PendingTimeout, runs.PendingTimeout+SandboxBootAllowance),
+		RuntimeClass:      s.RuntimeClass,
+		ServiceAccount:    derefOr(s.ServiceAccount, DefaultSandboxServiceAccount),
+		NodeSelector:      maps.Clone(s.NodeSelector),
+		Tolerations:       tolerations(s.Tolerations),
+		EgressAllow:       b.stringList(s.EgressAllow),
+		FloorMode:         b.enum(floorModeEnum, s.FloorMode, FloorReport),
+		FloorAdd:          b.stringList(s.FloorAdd),
+		PendingTimeout:    b.duration(s.PendingTimeout, runs.PendingTimeout+SandboxBootAllowance),
+		CheckRuntimeClass: derefOr(s.CheckRuntimeClass, true),
 	}
 	out.TokenPermissions = maps.Clone(s.TokenPermissions)
 	if out.TokenPermissions == nil {

@@ -333,6 +333,7 @@ no `sandbox` block is a warning.
 | `floor_add` | list of strings | none | Renovate managers to sandbox in addition to the floor. Each must be a manager of the pinned Renovate. |
 | `token_permissions` | map of strings | see below | The sandboxed run's token, by GitHub App permission, each `read` or `write`. `workflows`, `administration` and `secrets` are refused. The App must hold every permission named. |
 | `pending_timeout` | duration | `runs.pending_timeout` + `60s` | How long a sandboxed pod may take to reach `Running`, VM boot included. |
+| `check_runtime_class` | bool | `true` | Look the RuntimeClass up before each sandboxed run, and every minute for `boopd_sandbox_ready`. It needs `get` on that RuntimeClass, cluster-wide (the chart's ClusterRole). `false`: no lookup and no gauge; a missing class shows as the Job creating no pod, which is `NeedsSandbox` once `pending_timeout` passes. |
 
 The default `token_permissions` (IMPL-0006 OQ5):
 
@@ -475,7 +476,7 @@ labelled blocks become maps keyed by label:
 | `order`, `default_profile`, `unknown_profile` | `boopd.order`, `boopd.defaultProfile`, `boopd.unknownProfile` |
 | `profile_rule` | `boopd.profileRules`, a list |
 | `ingest.*` | `boopd.ingest.*`: `path`, `settle`, `minInterval`, `auditEvery` |
-| `sandbox` | top-level `sandbox.*`, rendered when `sandbox.enabled`: `runtimeClass`, `serviceAccount.name`, `nodeSelector`, `tolerations` (the `toleration` blocks), `egressAllow`, `floorMode`, `floorAdd`, `tokenPermissions`, `pendingTimeout` |
+| `sandbox` | top-level `sandbox.*`, rendered when `sandbox.enabled`: `runtimeClass`, `serviceAccount.name`, `nodeSelector`, `tolerations` (the `toleration` blocks), `egressAllow`, `floorMode`, `floorAdd`, `tokenPermissions`, `pendingTimeout`, `checkRuntimeClass` |
 | `app "<name>"` | `boopd.apps.<name>`: `endpoint`, `appId`, `installations`, `cadence`, `privateKeySecretRef`, `discovery`, `budget`, `webhook` (`bot`, `secretRef`) |
 
 What the chart adds:

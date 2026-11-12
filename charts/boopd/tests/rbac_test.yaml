@@ -60,3 +60,56 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+
+  - it: no cluster-wide rights without the sandbox
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: with the sandbox, lists events and gets the one RuntimeClass
+    set:
+      sandbox.enabled: true
+      sandbox.runtimeClass: kata-qemu
+    asserts:
+      - hasDocuments:
+          count: 4
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["events"]
+            verbs: ["list"]
+        documentIndex: 0
+      - isKind:
+          of: ClusterRole
+        documentIndex: 2
+      - equal:
+          path: rules
+          value:
+            - apiGroups: ["node.k8s.io"]
+              resources: ["runtimeclasses"]
+              resourceNames: ["kata-qemu"]
+              verbs: ["get"]
+        documentIndex: 2
+      - isKind:
+          of: ClusterRoleBinding
+        documentIndex: 3
+      - equal:
+          path: roleRef.name
+          value: RELEASE-NAME-boopd-NAMESPACE-runtimeclass
+        documentIndex: 3
+      - equal:
+          path: subjects[0]
+          value:
+            kind: ServiceAccount
+            name: RELEASE-NAME-boopd
+            namespace: NAMESPACE
+        documentIndex: 3
+
+  - it: checkRuntimeClass false omits the ClusterRole and its binding
+    set:
+      sandbox.enabled: true
+      sandbox.checkRuntimeClass: false
+    asserts:
+      - hasDocuments:
+          count: 2

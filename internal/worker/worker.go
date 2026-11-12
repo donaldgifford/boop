@@ -121,7 +121,7 @@ func Run(ctx context.Context, o *Options) error {
 		})
 	}
 	serve("health", o.ListenAddr, health.Handler())
-	if sb := o.Config.Sandbox; sb != nil && o.Metrics != nil {
+	if sb := o.Config.Sandbox; sb != nil && sb.CheckRuntimeClass && o.Metrics != nil {
 		wg.Go(func() {
 			WatchSandbox(srvCtx, runner, sb.RuntimeClass, SandboxCheckInterval, o.Metrics.SetSandboxReady, log)
 		})

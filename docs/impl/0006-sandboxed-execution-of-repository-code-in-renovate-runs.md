@@ -644,7 +644,7 @@ and one commit per numbered task. The PR split is OQ1.
     configured cluster CIDRs), narrowed by `allowCIDRs`;
   - `vpc-cni`: the `kubernetes` objects plus `169.254.169.254/32` and
     the VPC CIDR (a required value) in the deny list.
-- [ ] 10.4 RBAC for the RuntimeClass check (OQ2): a ClusterRole with
+- [x] 10.4 RBAC for the RuntimeClass check (OQ2): a ClusterRole with
   `get` on `runtimeclasses.node.k8s.io`, limited by `resourceNames` to
   the configured class, and its binding; `sandbox.checkRuntimeClass:
   false` omits both and the worker falls back to the pod admission

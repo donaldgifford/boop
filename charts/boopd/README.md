@@ -153,7 +153,7 @@ renders with an existing Secret are identical.
 | prometheusRule.alerts | object | `{}` | Per-alert overrides: keys `replicasUnavailable`, `containerRestarting`, `runResourceExhausted`, `runOOMKilled`, `onboardingResult`, `reposStalled` and `budgetLow`, each accepting `enabled`, `for`, `severity`, and `threshold`. |
 | prometheusRule.enabled | bool | `false` | Create the PrometheusRule: the generic DeploymentReplicasUnavailable and ContainerRestarting, plus BoopdRunResourceExhausted (disk-space, out-of-memory), BoopdRunOOMKilled, BoopdOnboardingResult, BoopdReposStalled and BoopdBudgetLow. |
 | prometheusRule.labels | object | `{}` | Additional labels (e.g., to match Prometheus operator `ruleSelector`). |
-| rbac.create | bool | `true` | Create the worker's Role and RoleBinding in the runs namespace: jobs create/get/list/watch/patch/delete, pods get/list/watch, pods/log get, secrets create/get/delete (no list). |
+| rbac.create | bool | `true` | Create the worker's Role and RoleBinding in the runs namespace: jobs create/get/list/watch/patch/delete, pods get/list/watch, pods/log get, secrets create/get/delete (no list); with sandbox.enabled, events list, and with sandbox.checkRuntimeClass a ClusterRole with get on the sandbox's one RuntimeClass. |
 | readinessProbe.httpGet.path | string | `"/readyz"` |  |
 | readinessProbe.httpGet.port | string | `"http"` |  |
 | readinessProbe.initialDelaySeconds | int | `5` |  |

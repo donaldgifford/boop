@@ -138,7 +138,7 @@ ingest {
 sandbox {
   runtime_class   = {{ include "boopd.hclValue" (required "sandbox.runtimeClass is required with sandbox.enabled" .runtimeClass) }}
   service_account = {{ include "boopd.hclValue" .serviceAccount.name }}
-{{- include "boopd.hclAttrs" (list . (list "nodeSelector:node_selector" "egressAllow:egress_allow" "floorMode:floor_mode" "floorAdd:floor_add" "pendingTimeout:pending_timeout") 2) }}
+{{- include "boopd.hclAttrs" (list . (list "nodeSelector:node_selector" "egressAllow:egress_allow" "floorMode:floor_mode" "floorAdd:floor_add" "pendingTimeout:pending_timeout" "checkRuntimeClass:check_runtime_class") 2) }}
 {{- with .tokenPermissions }}
   token_permissions = {{ include "boopd.hclValue" . }}
 {{- end }}

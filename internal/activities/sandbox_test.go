@@ -142,8 +142,8 @@ func TestRunRenovate_NeedsSandboxBeforeMint(t *testing.T) {
 		objects []runtime.Object
 	}{
 		"no sandbox block": {objects: []runtime.Object{kataClass}},
-		"no runtime class": {sandbox: &config.Sandbox{RuntimeClass: "kata"}},
-		"other class only": {sandbox: &config.Sandbox{RuntimeClass: "gvisor"}, objects: []runtime.Object{kataClass}},
+		"no runtime class": {sandbox: &config.Sandbox{RuntimeClass: "kata", CheckRuntimeClass: true}},
+		"other class only": {sandbox: &config.Sandbox{RuntimeClass: "gvisor", CheckRuntimeClass: true}, objects: []runtime.Object{kataClass}},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -160,6 +160,29 @@ func TestRunRenovate_NeedsSandboxBeforeMint(t *testing.T) {
 				t.Errorf("boopd_runs_needs_sandbox_total{app=main} = %d, want 1", n)
 			}
 		})
+	}
+}
+
+// Task 10.4: with check_runtime_class false the worker does not look
+// the RuntimeClass up; a missing one shows as the Job creating no pod,
+// which is NeedsSandbox once the sandbox's pending timeout passes.
+func TestRunRenovate_NoRuntimeClassCheck(t *testing.T) {
+	t.Parallel()
+	h := newSandboxHarness(t, &config.Sandbox{RuntimeClass: "kata", PendingTimeout: 200 * time.Millisecond})
+	appErr := h.run(t)
+	if appErr.Type() != workflows.ErrTypeNeedsSandbox {
+		t.Fatalf("err = %v, want %s", appErr, workflows.ErrTypeNeedsSandbox)
+	}
+	if !strings.Contains(appErr.Error(), "created no pod") {
+		t.Errorf("err = %v, want the no-pod cause", appErr)
+	}
+	for _, a := range h.cs.Actions() {
+		if a.GetResource().Resource == "runtimeclasses" {
+			t.Errorf("looked up the RuntimeClass: %v", a)
+		}
+	}
+	if len(h.app.minted) != 1 {
+		t.Errorf("minted %v, want one token: the run got as far as its Job", h.app.minted)
 	}
 }
 
@@ -182,7 +205,7 @@ func TestRunRenovate_SandboxPending(t *testing.T) {
 		Type: corev1.PodScheduled, Status: corev1.ConditionFalse, Reason: corev1.PodReasonUnschedulable,
 		Message: "0/5 nodes are available: 5 node(s) didn't match Pod's node affinity/selector.",
 	}
-	sandbox := &config.Sandbox{RuntimeClass: "kata", PendingTimeout: 200 * time.Millisecond}
+	sandbox := &config.Sandbox{RuntimeClass: "kata", PendingTimeout: 200 * time.Millisecond, CheckRuntimeClass: true}
 	tests := []struct {
 		name string
 		pod  *corev1.Pod
