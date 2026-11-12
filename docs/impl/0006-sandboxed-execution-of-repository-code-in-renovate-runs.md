@@ -632,7 +632,7 @@ and one commit per numbered task. The PR split is OQ1.
   `serviceAccount.create`; `networkPolicies.provider` (`cilium`,
   `kubernetes`, `vpc-cni`), `sandbox.egress.denyCIDRs` and
   `allowCIDRs`; rendered into `boopd.hcl`.
-- [ ] 10.2 `templates/sandbox-serviceaccount.yaml`: `boopd-sandbox`,
+- [x] 10.2 `templates/sandbox-serviceaccount.yaml`: `boopd-sandbox`,
   `automountServiceAccountToken: false`, no bindings.
 - [ ] 10.3 `templates/sandbox-networkpolicy.yaml`, per sandboxed
   profile:

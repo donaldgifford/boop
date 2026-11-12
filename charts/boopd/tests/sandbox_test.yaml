@@ -1,0 +1,34 @@
+---
+suite: sandbox
+templates:
+  - templates/sandbox-serviceaccount.yaml
+tests:
+  - it: renders nothing without the sandbox
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: creates the sandbox ServiceAccount with no token in the runs namespace
+    set:
+      sandbox.enabled: true
+      boopd.runs.namespace: boopd-runs
+    asserts:
+      - isKind:
+          of: ServiceAccount
+      - equal:
+          path: metadata.name
+          value: boopd-sandbox
+      - equal:
+          path: metadata.namespace
+          value: boopd-runs
+      - equal:
+          path: automountServiceAccountToken
+          value: false
+
+  - it: renders nothing with serviceAccount.create false
+    set:
+      sandbox.enabled: true
+      sandbox.serviceAccount.create: false
+    asserts:
+      - hasDocuments:
+          count: 0
