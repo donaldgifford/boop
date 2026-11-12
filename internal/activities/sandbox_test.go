@@ -1,7 +1,11 @@
 package activities_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"testing"
@@ -30,6 +34,34 @@ type sandboxHarness struct {
 	cs      *fake.Clientset
 	env     *testsuite.TestActivityEnvironment
 	metrics *needsMetrics
+	logs    *syncBuffer
+}
+
+// syncBuffer is a bytes.Buffer safe for the activity's goroutines.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+// line returns the first JSON log line whose msg is msg.
+func (b *syncBuffer) line(t *testing.T, msg string) map[string]any {
+	t.Helper()
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for l := range strings.Lines(b.buf.String()) {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(l), &m); err == nil && m["msg"] == msg {
+			return m
+		}
+	}
+	t.Fatalf("no %q log line in:\n%s", msg, b.buf.String())
+	return nil
 }
 
 // needsMetrics counts NeedsSandbox by app.
@@ -53,7 +85,7 @@ func (m *needsMetrics) count(app string) int {
 
 func newSandboxHarness(t *testing.T, sandbox *config.Sandbox, objects ...runtime.Object) *sandboxHarness {
 	t.Helper()
-	h := &sandboxHarness{app: &fakeApp{}, cs: fake.NewClientset(objects...), metrics: &needsMetrics{needs: map[string]int{}}}
+	h := &sandboxHarness{app: &fakeApp{}, cs: fake.NewClientset(objects...), metrics: &needsMetrics{needs: map[string]int{}}, logs: &syncBuffer{}}
 	h.cs.PrependReactor("create", "jobs", func(a k8stesting.Action) (bool, runtime.Object, error) {
 		a.(k8stesting.CreateAction).GetObject().(*batchv1.Job).UID = "job-uid"
 		return false, nil, nil
@@ -69,6 +101,7 @@ func newSandboxHarness(t *testing.T, sandbox *config.Sandbox, objects ...runtime
 		GitHub:  &fakeGitHub{apps: map[string]*fakeApp{"main": h.app}},
 		Runner:  kube.NewRunner(h.cs, "boopd"),
 		Metrics: h.metrics,
+		Logger:  slog.New(slog.NewJSONHandler(h.logs, nil)),
 		Timings: activities.RunTimings{Heartbeat: 50 * time.Millisecond, Cleanup: time.Second},
 	})
 	h.env = (&testsuite.WorkflowTestSuite{}).NewTestActivityEnvironment()
@@ -79,7 +112,7 @@ func newSandboxHarness(t *testing.T, sandbox *config.Sandbox, objects ...runtime
 func (h *sandboxHarness) run(t *testing.T) *temporal.ApplicationError {
 	t.Helper()
 	_, err := h.env.ExecuteActivity(workflows.RunRenovateActivity, &workflows.RunInput{
-		RepoID: 1, Slug: "acme/app", InstallationID: 1, Profile: "jvm",
+		RepoID: 1, Slug: "acme/app", InstallationID: 1, Profile: "jvm", FloorManagers: []string{"maven-wrapper"},
 	})
 	var appErr *temporal.ApplicationError
 	if !errors.As(err, &appErr) {
@@ -172,6 +205,16 @@ func TestRunRenovate_SandboxPending(t *testing.T) {
 			}
 			if n := h.metrics.count("main"); n != want {
 				t.Errorf("boopd_runs_needs_sandbox_total{app=main} = %d, want %d", n, want)
+			}
+			// Task 9.4: the run's log carries the sandbox and the floor.
+			line := h.logs.line(t, "run_complete")
+			for k, v := range map[string]string{
+				"sandbox": "kata", "unsafe_executions": "[gradleWrapper]",
+				"floor_managers": "[maven-wrapper]", "would_sandbox": "false",
+			} {
+				if got := fmt.Sprint(line[k]); got != v {
+					t.Errorf("run_complete %s = %s, want %s", k, got, v)
+				}
 			}
 			deleted := false
 			for _, a := range h.cs.Actions() {

@@ -615,7 +615,7 @@ and one commit per numbered task. The PR split is OQ1.
   so a missing sandbox never stops ordinary runs.
 - [x] 9.3 `boopd_runs_needs_sandbox_total{app}` and
   `boopd_floor_raised_total{app, manager, mode}`.
-- [ ] 9.4 The run's log fields include `sandbox`, `unsafe_executions`,
+- [x] 9.4 The run's log fields include `sandbox`, `unsafe_executions`,
   `floor_managers` and `would_sandbox`.
 
 #### Success Criteria

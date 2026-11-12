@@ -189,6 +189,8 @@ func (r *run) complete(ctx context.Context, err error) {
 		"prs_changed", res.Progress.PRsChanged, "tuples", len(res.Tuples), "managers", res.Managers,
 		"problems", len(res.Problems), "report_missing", res.ReportMissing,
 		"rate_before", res.RateBefore != nil, "rate_after", res.RateAfter != nil,
+		"sandbox", res.Sandbox, "unsafe_executions", res.UnsafeExecutions,
+		"floor_managers", r.in.FloorManagers, "would_sandbox", r.in.WouldSandbox,
 	}
 	if err != nil {
 		attrs = append(attrs, "error", err.Error())
