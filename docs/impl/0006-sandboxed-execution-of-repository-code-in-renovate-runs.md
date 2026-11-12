@@ -626,7 +626,7 @@ and one commit per numbered task. The PR split is OQ1.
 
 #### Tasks
 
-- [ ] 10.1 Values and schema: `sandbox.enabled`, `runtimeClass`,
+- [x] 10.1 Values and schema: `sandbox.enabled`, `runtimeClass`,
   `nodeSelector`, `tolerations`, `egressAllow`, `floorMode`,
   `floorAdd`, `tokenPermissions`, `pendingTimeout`,
   `serviceAccount.create`; `networkPolicies.provider` (`cilium`,

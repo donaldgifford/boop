@@ -334,6 +334,30 @@
               },
               "renovate": {
                 "type": "object"
+              },
+              "sandboxed": {
+                "type": "boolean"
+              },
+              "unsafeExecutions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "bazelModDeps",
+                    "goGenerate",
+                    "gradleWrapper",
+                    "mise",
+                    "pixi"
+                  ]
+                },
+                "uniqueItems": true
+              },
+              "egressAllow": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(\\*\\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+                }
               }
             }
           }
@@ -634,6 +658,186 @@
             "items": {
               "type": "object"
             }
+          }
+        },
+        "provider": {
+          "type": "string",
+          "enum": [
+            "cilium",
+            "kubernetes",
+            "vpc-cni"
+          ]
+        }
+      }
+    },
+    "sandbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "runtimeClass": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$",
+          "maxLength": 253
+        },
+        "checkRuntimeClass": {
+          "type": "boolean"
+        },
+        "serviceAccount": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "create": {
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string",
+              "pattern": "^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$",
+              "maxLength": 253
+            }
+          }
+        },
+        "nodeSelector": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "tolerations": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "egressAllow": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(\\*\\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+          }
+        },
+        "floorMode": {
+          "type": "string",
+          "enum": [
+            "report",
+            "enforce"
+          ]
+        },
+        "floorAdd": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "tokenPermissions": {
+          "type": "object",
+          "propertyNames": {
+            "not": {
+              "enum": [
+                "workflows",
+                "administration",
+                "secrets"
+              ]
+            }
+          },
+          "additionalProperties": {
+            "type": "string",
+            "enum": [
+              "read",
+              "write"
+            ]
+          }
+        },
+        "pendingTimeout": {
+          "type": "string",
+          "pattern": "^$|^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+        },
+        "overhead": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cpu": {
+              "type": "string",
+              "pattern": "^[0-9]+(\\.[0-9]+)?m?$"
+            },
+            "memory": {
+              "type": "string",
+              "pattern": "^[0-9]+(Ki|Mi|Gi)?$"
+            }
+          }
+        },
+        "egress": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "dns": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "namespace": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "podLabels": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "denyCIDRs": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
+              }
+            },
+            "clusterCIDRs": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
+              }
+            },
+            "allowCIDRs": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
+              }
+            },
+            "vpcCIDR": {
+              "anyOf": [
+                {
+                  "const": ""
+                },
+                {
+                  "type": "string",
+                  "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "enabled": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "runtimeClass"
+        ],
+        "properties": {
+          "runtimeClass": {
+            "minLength": 1
           }
         }
       }

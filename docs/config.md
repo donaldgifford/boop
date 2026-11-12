@@ -471,10 +471,11 @@ labelled blocks become maps keyed by label:
 | `secrets_dir` | `boopd.secretsDir` |
 | `renovate.*` | `boopd.renovate.*`: `image`, `configPaths`, `sharedPreset`, `logLevel`, `dryRun`, `gitAuthor`, `global`, `redisSecretRef` |
 | `runs.*` | `boopd.runs.*`: `namespace`, `pendingTimeout`, `maxConcurrent` |
-| `profile "<name>"` | `boopd.profiles.<name>`: `inherit`, `pod`, `renovate`; pod keys in camelCase, `toleration` blocks as `pod.tolerations` |
+| `profile "<name>"` | `boopd.profiles.<name>`: `inherit`, `sandboxed`, `unsafeExecutions`, `egressAllow`, `pod`, `renovate`; pod keys in camelCase, `toleration` blocks as `pod.tolerations` |
 | `order`, `default_profile`, `unknown_profile` | `boopd.order`, `boopd.defaultProfile`, `boopd.unknownProfile` |
 | `profile_rule` | `boopd.profileRules`, a list |
 | `ingest.*` | `boopd.ingest.*`: `path`, `settle`, `minInterval`, `auditEvery` |
+| `sandbox` | top-level `sandbox.*`, rendered when `sandbox.enabled`: `runtimeClass`, `serviceAccount.name`, `nodeSelector`, `tolerations` (the `toleration` blocks), `egressAllow`, `floorMode`, `floorAdd`, `tokenPermissions`, `pendingTimeout` |
 | `app "<name>"` | `boopd.apps.<name>`: `endpoint`, `appId`, `installations`, `cadence`, `privateKeySecretRef`, `discovery`, `budget`, `webhook` (`bot`, `secretRef`) |
 
 What the chart adds:
@@ -496,6 +497,13 @@ What the chart adds:
   instead. `boopd.renovate.configPath` became `configPaths` after v0.1.0.
   `resourceQuota.enabled` went after v0.2.1: the runs quota renders
   whenever `runs.maxConcurrent > 0`.
+- **The sandbox:** `sandbox.enabled` also renders the `boopd-sandbox`
+  ServiceAccount (`sandbox.serviceAccount.create`), an egress policy per
+  sandboxed profile for `networkPolicies.provider` (`cilium`,
+  `kubernetes` or `vpc-cni`, with `sandbox.egress.*` for the last two),
+  and the RuntimeClass check's RBAC (`sandbox.checkRuntimeClass`).
+  `sandbox.overhead` is added per run to the runs quota's cpu and memory
+  entries. None of these are in the file.
 - **The ingest role:** the top-level `ingest.*` values (not in the file)
   run `boopd ingest` and expose `boopd.ingest.path`. `ingest.enabled`
   fails the render without an App `webhook` block, and only the ingest

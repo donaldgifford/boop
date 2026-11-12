@@ -132,11 +132,29 @@ ingest {
 {{- include "boopd.hclAttrs" (list . (list "path:path" "settle:settle" "minInterval:min_interval" "auditEvery:audit_every") 2) }}
 }
 {{- end }}
+{{- with .Values.sandbox }}
+{{- if .enabled }}
+
+sandbox {
+  runtime_class   = {{ include "boopd.hclValue" (required "sandbox.runtimeClass is required with sandbox.enabled" .runtimeClass) }}
+  service_account = {{ include "boopd.hclValue" .serviceAccount.name }}
+{{- include "boopd.hclAttrs" (list . (list "nodeSelector:node_selector" "egressAllow:egress_allow" "floorMode:floor_mode" "floorAdd:floor_add" "pendingTimeout:pending_timeout") 2) }}
+{{- with .tokenPermissions }}
+  token_permissions = {{ include "boopd.hclValue" . }}
+{{- end }}
+{{- range .tolerations }}
+  toleration {
+{{- include "boopd.hclAttrs" (list . (list "key:key" "operator:operator" "value:value" "effect:effect" "tolerationSeconds:toleration_seconds") 4) }}
+  }
+{{- end }}
+}
+{{- end }}
+{{- end }}
 {{- range $name, $p := $c.profiles }}
 {{- $p = $p | default dict }}
 
 profile {{ include "boopd.hclValue" $name }} {
-{{- include "boopd.hclAttrs" (list $p (list "inherit:inherit") 2) }}
+{{- include "boopd.hclAttrs" (list $p (list "inherit:inherit" "sandboxed:sandboxed" "unsafeExecutions:unsafe_executions" "egressAllow:egress_allow") 2) }}
 {{- with $p.pod }}
   pod {
 {{- include "boopd.hclAttrs" (list . (list "runtimeClassName:runtime_class_name" "labels:labels" "annotations:annotations" "nodeSelector:node_selector" "terminationGracePeriodSeconds:termination_grace_period_seconds" "workSizeLimit:work_size_limit") 4) }}
