@@ -44,7 +44,7 @@ func TestMetrics_Names(t *testing.T) {
 		t.Fatalf("NewMetrics: %v", err)
 	}
 	m.RunStarted("default")
-	m.RunCompleted("Succeeded", "done", "default", time.Minute, 10*time.Second, 2*time.Second)
+	m.RunCompleted("Succeeded", "done", "default", false, time.Minute, 10*time.Second, 2*time.Second)
 	m.RunEnded("default")
 	m.PendingTimeout()
 	m.TokenMint("success")
@@ -85,9 +85,15 @@ func TestMetrics_Names(t *testing.T) {
 	}
 
 	runs := got["boopd_runs_total"].Data.(metricdata.Sum[int64]).DataPoints[0]
-	for key, want := range map[string]string{"outcome": "Succeeded", "result": "done", "profile": "default"} {
-		if v, ok := runs.Attributes.Value(attribute.Key(key)); !ok || v.AsString() != want {
-			t.Errorf("boopd_runs_total %s = %v, want %s", key, v, want)
+	for key, want := range map[string]string{"outcome": "Succeeded", "result": "done", "profile": "default", "sandboxed": "false"} {
+		if v, ok := runs.Attributes.Value(attribute.Key(key)); !ok || v.String() != want {
+			t.Errorf("boopd_runs_total %s = %v, want %s", key, v.String(), want)
+		}
+	}
+	for _, name := range []string{"boopd_run_duration_seconds", "boopd_run_pod_start_seconds", "boopd_run_overhead_seconds"} {
+		dp := got[name].Data.(metricdata.Histogram[float64]).DataPoints[0]
+		if v, ok := dp.Attributes.Value("sandboxed"); !ok || v.AsBool() {
+			t.Errorf("%s sandboxed = %v, want false", name, v.String())
 		}
 	}
 	if active := got["boopd_runs_active"].Data.(metricdata.Sum[int64]).DataPoints[0].Value; active != 0 {

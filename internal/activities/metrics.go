@@ -25,10 +25,12 @@ type Metrics interface {
 	// RunStarted and RunEnded move boopd_runs_active{profile}.
 	RunStarted(profile string)
 	RunEnded(profile string)
-	// RunCompleted is boopd_runs_total{outcome,result,profile} and the
-	// run's boopd_run_duration_seconds, boopd_run_pod_start_seconds and
-	// boopd_run_overhead_seconds; a zero duration is not recorded.
-	RunCompleted(outcome, result, profile string, duration, podStart, overhead time.Duration)
+	// RunCompleted is boopd_runs_total{outcome,result,profile,sandboxed}
+	// and the run's boopd_run_duration_seconds{profile,sandboxed},
+	// boopd_run_pod_start_seconds{sandboxed} and
+	// boopd_run_overhead_seconds{sandboxed}; a zero duration is not
+	// recorded.
+	RunCompleted(outcome, result, profile string, sandboxed bool, duration, podStart, overhead time.Duration)
 	// PendingTimeout is boopd_run_pending_timeouts_total.
 	PendingTimeout()
 	// TokenMint is boopd_token_mints_total{outcome}.
@@ -74,7 +76,8 @@ func (NopMetrics) RunStarted(string) {}
 func (NopMetrics) RunEnded(string) {}
 
 // RunCompleted implements Metrics.
-func (NopMetrics) RunCompleted(string, string, string, time.Duration, time.Duration, time.Duration) {}
+func (NopMetrics) RunCompleted(string, string, string, bool, time.Duration, time.Duration, time.Duration) {
+}
 
 // PendingTimeout implements Metrics.
 func (NopMetrics) PendingTimeout() {}

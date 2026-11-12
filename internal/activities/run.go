@@ -177,7 +177,7 @@ func (r *run) complete(ctx context.Context, err error) {
 	r.mu.Lock()
 	overhead := runOverhead(r.started, r.running, r.firstLine)
 	r.mu.Unlock()
-	r.a.metrics.RunCompleted(outcome, res.RepositoryResult, r.in.Profile, res.Duration, res.PodStart, overhead)
+	r.a.metrics.RunCompleted(outcome, res.RepositoryResult, r.in.Profile, r.sandboxed(), res.Duration, res.PodStart, overhead)
 
 	attrs := []any{
 		"outcome", outcome, "result", res.RepositoryResult, "exit_code", res.ExitCode,

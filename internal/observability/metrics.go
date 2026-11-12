@@ -103,13 +103,13 @@ func NewMetrics(mp metric.MeterProvider) (*Metrics, error) {
 		add(err)
 		return c
 	}
-	out.runs = counter(RunsTotal, "Renovate runs by outcome, repository result and profile.")
+	out.runs = counter(RunsTotal, "Renovate runs by outcome, repository result, profile and whether it was sandboxed.")
 	active, err := m.Int64UpDownCounter(RunsActive, metric.WithDescription("Renovate runs in flight by profile."))
 	add(err)
 	out.active = active
-	out.duration = hist(RunDurationSeconds, "Pod Running to container exit, by profile.")
-	out.podStart = hist(RunPodStartSeconds, "Job creation to pod Running.")
-	out.overhead = hist(RunOverheadSeconds, "Container start to the first Renovate log line, both by the kubelet's clock.")
+	out.duration = hist(RunDurationSeconds, "Pod Running to container exit, by profile and whether it was sandboxed.")
+	out.podStart = hist(RunPodStartSeconds, "Job creation to pod Running, by whether it was sandboxed (VM boot included).")
+	out.overhead = hist(RunOverheadSeconds, "Container start to the first Renovate log line (kubelet clock), by whether it was sandboxed.")
 	out.pending = counter(RunPendingTimeouts, "Runs whose pod was not Running within the pending timeout.")
 	out.mints = counter(TokenMintsTotal, "Run token mints by outcome.")
 	out.revocations = counter(TokenRevocationsTotal, "Run token revocations by outcome.")
@@ -144,19 +144,19 @@ func (m *Metrics) RunEnded(profile string) {
 }
 
 // RunCompleted implements activities.Metrics.
-func (m *Metrics) RunCompleted(outcome, result, profile string, duration, podStart, overhead time.Duration) {
+func (m *Metrics) RunCompleted(outcome, result, profile string, sandboxed bool, duration, podStart, overhead time.Duration) {
 	ctx := context.Background()
-	byProfile := metric.WithAttributes(attribute.String("profile", profile))
+	sb := attribute.Bool("sandboxed", sandboxed)
 	m.runs.Add(ctx, 1, metric.WithAttributes(
-		attribute.String("outcome", outcome), attribute.String("result", result), attribute.String("profile", profile)))
+		attribute.String("outcome", outcome), attribute.String("result", result), attribute.String("profile", profile), sb))
 	if duration > 0 {
-		m.duration.Record(ctx, duration.Seconds(), byProfile)
+		m.duration.Record(ctx, duration.Seconds(), metric.WithAttributes(attribute.String("profile", profile), sb))
 	}
 	if podStart > 0 {
-		m.podStart.Record(ctx, podStart.Seconds())
+		m.podStart.Record(ctx, podStart.Seconds(), metric.WithAttributes(sb))
 	}
 	if overhead > 0 {
-		m.overhead.Record(ctx, overhead.Seconds())
+		m.overhead.Record(ctx, overhead.Seconds(), metric.WithAttributes(sb))
 	}
 }
 

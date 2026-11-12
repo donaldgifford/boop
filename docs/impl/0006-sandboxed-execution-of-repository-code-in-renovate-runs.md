@@ -608,7 +608,7 @@ and one commit per numbered task. The PR split is OQ1.
 
 #### Tasks
 
-- [ ] 9.1 `boopd_runs_total` and the run duration histograms gain a
+- [x] 9.1 `boopd_runs_total` and the run duration histograms gain a
   `sandboxed` label.
 - [ ] 9.2 `boopd_sandbox_ready` (gauge, 1 when the RuntimeClass exists),
   refreshed by the worker every minute; it does not affect `/readyz`,
