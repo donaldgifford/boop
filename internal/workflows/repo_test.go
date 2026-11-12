@@ -78,7 +78,8 @@ type rwProbe struct {
 
 	settle, minInterval time.Duration // PlanRun's ingest timings
 	checkInputs         []CheckRepoInput
-	sandboxed           bool // PlanRun answers the sandboxed profile "python"
+	sandboxed           bool     // PlanRun answers the sandboxed profile "python"
+	plan                *RunPlan // PlanRun answers this when set
 }
 
 func newRW(t *testing.T, script ...runReply) *rwProbe {
@@ -94,6 +95,10 @@ func newRW(t *testing.T, script ...runReply) *rwProbe {
 		defer p.mu.Unlock()
 		p.plans++
 		p.managers = append(p.managers, slices.Clone(in.Managers))
+		if p.plan != nil {
+			plan := *p.plan
+			return &plan, nil
+		}
 		if p.sandboxed {
 			return &RunPlan{Profile: "python", Sandboxed: true, Cadence: testCadence}, nil
 		}
@@ -677,5 +682,37 @@ func TestRepoWorkflow_SandboxedPlan(t *testing.T) {
 	}
 	if len(p.runs) != 1 || p.runs[0].Profile != "python" {
 		t.Errorf("runs = %+v, want one on the sandboxed profile", p.runs)
+	}
+}
+
+// The plan's floor evidence reaches the run for its log (IMPL-0006 task
+// 9.4): report mode is would_sandbox, an enforced raise is not.
+func TestRepoWorkflow_FloorEvidenceToRun(t *testing.T) {
+	t.Parallel()
+	tests := map[string]struct {
+		plan  RunPlan
+		would bool
+	}{
+		"report":   {plan: RunPlan{Profile: "default", FloorRaised: true, FloorManagers: []string{"bundler"}}, would: true},
+		"enforced": {plan: RunPlan{Profile: "python", Sandboxed: true, FloorRaised: true, FloorManagers: []string{"bundler"}}},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			p := newRW(t, runReply{res: &RunResult{Outcome: OutcomeSucceeded, RepositoryResult: "done"}})
+			tt.plan.Cadence = testCadence
+			p.plan = &tt.plan
+			p.keepSeen(testCadence)
+			if err := p.run(state(t0), time.Hour); err != nil && !isCanceled(err) {
+				t.Fatalf("workflow: %v", err)
+			}
+			if len(p.runs) == 0 {
+				t.Fatal("no run")
+			}
+			in := p.runs[0]
+			if in.WouldSandbox != tt.would || !slices.Equal(in.FloorManagers, []string{"bundler"}) {
+				t.Errorf("run input would_sandbox=%v floor=%v; want %v [bundler]", in.WouldSandbox, in.FloorManagers, tt.would)
+			}
+		})
 	}
 }

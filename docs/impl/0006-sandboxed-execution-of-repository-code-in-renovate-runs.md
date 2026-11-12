@@ -608,14 +608,14 @@ and one commit per numbered task. The PR split is OQ1.
 
 #### Tasks
 
-- [ ] 9.1 `boopd_runs_total` and the run duration histograms gain a
+- [x] 9.1 `boopd_runs_total` and the run duration histograms gain a
   `sandboxed` label.
-- [ ] 9.2 `boopd_sandbox_ready` (gauge, 1 when the RuntimeClass exists),
+- [x] 9.2 `boopd_sandbox_ready` (gauge, 1 when the RuntimeClass exists),
   refreshed by the worker every minute; it does not affect `/readyz`,
   so a missing sandbox never stops ordinary runs.
-- [ ] 9.3 `boopd_runs_needs_sandbox_total{app}` and
+- [x] 9.3 `boopd_runs_needs_sandbox_total{app}` and
   `boopd_floor_raised_total{app, manager, mode}`.
-- [ ] 9.4 The run's log fields include `sandbox`, `unsafe_executions`,
+- [x] 9.4 The run's log fields include `sandbox`, `unsafe_executions`,
   `floor_managers` and `would_sandbox`.
 
 #### Success Criteria
@@ -626,15 +626,15 @@ and one commit per numbered task. The PR split is OQ1.
 
 #### Tasks
 
-- [ ] 10.1 Values and schema: `sandbox.enabled`, `runtimeClass`,
+- [x] 10.1 Values and schema: `sandbox.enabled`, `runtimeClass`,
   `nodeSelector`, `tolerations`, `egressAllow`, `floorMode`,
   `floorAdd`, `tokenPermissions`, `pendingTimeout`,
   `serviceAccount.create`; `networkPolicies.provider` (`cilium`,
   `kubernetes`, `vpc-cni`), `sandbox.egress.denyCIDRs` and
   `allowCIDRs`; rendered into `boopd.hcl`.
-- [ ] 10.2 `templates/sandbox-serviceaccount.yaml`: `boopd-sandbox`,
+- [x] 10.2 `templates/sandbox-serviceaccount.yaml`: `boopd-sandbox`,
   `automountServiceAccountToken: false`, no bindings.
-- [ ] 10.3 `templates/sandbox-networkpolicy.yaml`, per sandboxed
+- [x] 10.3 `templates/sandbox-networkpolicy.yaml`, per sandboxed
   profile:
   - `cilium`: a `CiliumNetworkPolicy` with no ingress, DNS through the
     DNS proxy to `kube-dns`, and 443 to `toFQDNs` (sandbox plus profile
@@ -644,23 +644,38 @@ and one commit per numbered task. The PR split is OQ1.
     configured cluster CIDRs), narrowed by `allowCIDRs`;
   - `vpc-cni`: the `kubernetes` objects plus `169.254.169.254/32` and
     the VPC CIDR (a required value) in the deny list.
-- [ ] 10.4 RBAC for the RuntimeClass check (OQ2): a ClusterRole with
+
+  Done (2026-11-12). The ordinary egress-class policies now select only
+  pods without `boopd.dev/sandbox`: a sandboxed profile inherits its
+  parent's `boopd.dev/egress` label, and policies add up, so it would
+  otherwise gain the ordinary 443-anywhere and Redis. Open for Phase 11:
+  Cilium's DNS proxy refuses names off the allowlist, search-domain
+  expansions included; check on the homelab that Renovate's resolver
+  falls through to the bare name.
+- [x] 10.4 RBAC for the RuntimeClass check (OQ2): a ClusterRole with
   `get` on `runtimeclasses.node.k8s.io`, limited by `resourceNames` to
   the configured class, and its binding; `sandbox.checkRuntimeClass:
   false` omits both and the worker falls back to the pod admission
   failure. Any error on the check fails closed.
-- [ ] 10.5 The runs quota adds the RuntimeClass overhead
+
+  Done (2026-11-12). The fallback needed a worker-side switch:
+  `sandbox.check_runtime_class` (default `true`) in `boopd.hcl`. With
+  `false` the worker skips the lookup and the `boopd_sandbox_ready`
+  refresher, and a missing class is the Job creating no pod, which
+  `SandboxPendingCause` turns into `NeedsSandbox`. The runs Role also
+  gains `list` on events with the sandbox.
+- [x] 10.5 The runs quota adds the RuntimeClass overhead
   (`sandbox.overhead`, default 250m and 250Mi, the homelab class's) for
   sandboxed Jobs.
-- [ ] 10.6 `PrometheusRule`: `BoopdSandboxNotReady`,
+- [x] 10.6 `PrometheusRule`: `BoopdSandboxNotReady`,
   `BoopdRunsNeedSandbox`, and `BoopdSandboxEgressDenied` (Hubble
   metrics, `cilium` only).
-- [ ] 10.7 `NOTES.txt`: the `kubernetes` and `vpc-cni` warning that host
+- [x] 10.7 `NOTES.txt`: the `kubernetes` and `vpc-cni` warning that host
   names are not filtered; the `report` mode notice.
-- [ ] 10.8 helm-unittest suites for every template and provider, the
+- [x] 10.8 helm-unittest suites for every template and provider, the
   schema's rejections, and `boopd config validate` on the rendered
   config.
-- [ ] 10.9 `runs.hostUsers` (default `true`) rendered into `boopd.hcl`;
+- [x] 10.9 `runs.hostUsers` (default `true`) rendered into `boopd.hcl`;
   `NOTES.txt` names the node requirements when it is `false`
   (Kubernetes 1.33+, containerd 2.x, Linux 6.3+).
 

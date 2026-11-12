@@ -74,6 +74,12 @@ func (a *Activities) PlanRun(ctx context.Context, in *workflows.PlanRunInput) (*
 		profile, raised = res.Raise(profile)
 	}
 	plan.FloorRaised = raised
+	if raised {
+		mode := a.cfg.FloorMode()
+		for _, m := range raisedBy(managers, res.FloorManagers(), truncated) {
+			a.metrics.FloorRaised(app.Name, m, mode)
+		}
+	}
 	if raised && a.cfg.FloorMode() == config.FloorReport {
 		// OQ7: report mode runs it as today and says what enforce would do.
 		ordinary := res.ResolveRules(in.Extends, managers)
@@ -98,6 +104,26 @@ func (a *Activities) detectFloor(ctx context.Context, in *workflows.PlanRunInput
 		return nil, false, err
 	}
 	return unsafe.MatchFloor(floor, tree.Paths), tree.Truncated, nil
+}
+
+// raisedBy names why the floor raised a plan, for
+// boopd_floor_raised_total: the floor managers among managers, else the
+// truncated listing, else the managers being unknown.
+func raisedBy(managers, floor []string, truncated bool) []string {
+	var out []string
+	for _, m := range managers {
+		if slices.Contains(floor, m) {
+			out = append(out, m)
+		}
+	}
+	switch {
+	case len(out) > 0:
+		return out
+	case truncated:
+		return []string{FloorTruncatedTree}
+	default:
+		return []string{FloorUnknownManagers}
+	}
 }
 
 // union returns a with b's entries it lacks appended.

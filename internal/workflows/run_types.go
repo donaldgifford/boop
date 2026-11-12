@@ -77,6 +77,11 @@ type RunInput struct {
 	LeaseID        string
 	Attempt        int    // part of the Job name
 	DryRun         string // "" or "full"
+	// FloorManagers and WouldSandbox are the plan's floor evidence, for
+	// the run's log: the floor managers the tree listing found, and
+	// whether report mode ran a repository the floor would sandbox.
+	FloorManagers []string
+	WouldSandbox  bool
 }
 
 // RunResult is the RunRenovate activity result.

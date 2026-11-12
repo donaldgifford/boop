@@ -91,6 +91,10 @@ type repo struct {
 	sandboxV workflow.Version
 	// sandboxed is the last plan's Sandboxed.
 	sandboxed bool
+	// floorManagers and wouldSandbox are the last plan's floor evidence,
+	// passed to the run for its log (IMPL-0006 task 9.4).
+	floorManagers []string
+	wouldSandbox  bool
 	// needsSandbox is set when the last run had no sandbox; the
 	// repository waits in PhaseNeedsSandbox.
 	needsSandbox bool
@@ -198,6 +202,7 @@ func (r *repo) plan(ctx workflow.Context, p Priority) error {
 	r.s.Profile, r.cadence = plan.Profile, plan.Cadence
 	r.settle, r.minInterval = plan.Settle, plan.MinInterval
 	r.sandboxed = plan.Sandboxed
+	r.floorManagers, r.wouldSandbox = plan.FloorManagers, plan.FloorRaised && !plan.Sandboxed
 	return nil
 }
 
@@ -371,6 +376,7 @@ func (r *repo) runOnce(ctx workflow.Context, prio Priority) (end bool, err error
 		runErr := workflow.ExecuteActivity(runOptions(ctx, prio, r.s.InstallationID), RunRenovateActivity, &RunInput{
 			RepoID: r.s.RepoID, Slug: r.s.Slug, DefaultBranch: r.s.DefaultBranch, InstallationID: r.s.InstallationID,
 			Profile: r.s.Profile, LeaseID: l.installation, Attempt: r.s.Iterations,
+			FloorManagers: r.floorManagers, WouldSandbox: r.wouldSandbox,
 		}).Get(ctx, &res)
 
 		a := attemptOf(runErr, &res)

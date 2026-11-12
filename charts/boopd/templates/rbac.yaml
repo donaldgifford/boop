@@ -24,6 +24,13 @@ rules:
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["create", "get", "delete"]
+  {{- if .Values.sandbox.enabled }}
+  # Why a sandboxed pod is stuck pending: FailedScheduling or
+  # FailedCreatePodSandBox (IMPL-0006 OQ9).
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list"]
+  {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -40,4 +47,36 @@ subjects:
   - kind: ServiceAccount
     name: {{ include "boopd.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}
+{{- if and .Values.sandbox.enabled .Values.sandbox.checkRuntimeClass }}
+---
+# The sandbox check (IMPL-0006 OQ2): the worker looks the sandbox's
+# RuntimeClass up before each sandboxed run and every minute. Cluster
+# scoped, so a ClusterRole, limited to that one RuntimeClass.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "boopd.fullname" . }}-{{ .Release.Namespace }}-runtimeclass
+  labels:
+    {{- include "boopd.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["node.k8s.io"]
+    resources: ["runtimeclasses"]
+    resourceNames: [{{ .Values.sandbox.runtimeClass | quote }}]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "boopd.fullname" . }}-{{ .Release.Namespace }}-runtimeclass
+  labels:
+    {{- include "boopd.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "boopd.fullname" . }}-{{ .Release.Namespace }}-runtimeclass
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "boopd.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
 {{- end }}

@@ -1,0 +1,40 @@
+# The sandbox in enforce mode on Cilium, with dedicated nodes, a narrowed
+# token and user namespaces for ordinary runs (IMPL-0006 task 10.8).
+boopd:
+  runs:
+    hostUsers: false
+  profiles:
+    jvm:
+      inherit: baseline
+      sandboxed: true
+      unsafeExecutions: [gradleWrapper]
+      egressAllow: [repo1.maven.org, services.gradle.org, plugins.gradle.org]
+    python:
+      inherit: baseline
+      sandboxed: true
+      pod:
+        runtimeClassName: ""
+      egressAllow: [pypi.org, files.pythonhosted.org]
+  order: [baseline, node, jvm, python, strict]
+  apps:
+    boop-bot:
+      appId: 123456
+      privateKeySecretRef: {name: boop-bot-app, key: private-key.pem}
+networkPolicies:
+  provider: cilium
+sandbox:
+  enabled: true
+  runtimeClass: kata-qemu
+  floorMode: enforce
+  floorAdd: [gomod]
+  nodeSelector: {boopd.dev/sandbox: "true"}
+  tolerations:
+    - {key: boopd.dev/sandbox, operator: Equal, value: "true", effect: NoSchedule}
+  tokenPermissions:
+    contents: write
+    pull_requests: write
+    issues: write
+    checks: write
+    statuses: write
+    metadata: read
+  pendingTimeout: 12m

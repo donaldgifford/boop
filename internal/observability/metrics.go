@@ -50,6 +50,9 @@ const (
 	DiscoveryProbeFalls   = "boopd_discovery_probe_fallbacks_total"
 	KubeRequestsTotal     = "boopd_kube_requests_total"
 	FloorDetectionErrors  = "boopd_floor_detection_errors_total"
+	SandboxReady          = "boopd_sandbox_ready"
+	RunsNeedsSandbox      = "boopd_runs_needs_sandbox_total"
+	FloorRaisedTotal      = "boopd_floor_raised_total"
 	// The ingest role's (DESIGN-0003 § Metrics).
 	IngestDeliveriesTotal = "boopd_ingest_deliveries_total"
 	IngestTemporalSeconds = "boopd_ingest_temporal_seconds"
@@ -82,6 +85,9 @@ type Metrics struct {
 	deliveries  metric.Int64Counter
 	temporal    metric.Float64Histogram
 	floorErrors metric.Int64Counter
+	sandbox     metric.Int64Gauge
+	needsSB     metric.Int64Counter
+	floorRaised metric.Int64Counter
 }
 
 // NewMetrics creates the instruments on mp's boopd meter. Call it once
@@ -103,13 +109,13 @@ func NewMetrics(mp metric.MeterProvider) (*Metrics, error) {
 		add(err)
 		return c
 	}
-	out.runs = counter(RunsTotal, "Renovate runs by outcome, repository result and profile.")
+	out.runs = counter(RunsTotal, "Renovate runs by outcome, repository result, profile and whether it was sandboxed.")
 	active, err := m.Int64UpDownCounter(RunsActive, metric.WithDescription("Renovate runs in flight by profile."))
 	add(err)
 	out.active = active
-	out.duration = hist(RunDurationSeconds, "Pod Running to container exit, by profile.")
-	out.podStart = hist(RunPodStartSeconds, "Job creation to pod Running.")
-	out.overhead = hist(RunOverheadSeconds, "Container start to the first Renovate log line, both by the kubelet's clock.")
+	out.duration = hist(RunDurationSeconds, "Pod Running to container exit, by profile and whether it was sandboxed.")
+	out.podStart = hist(RunPodStartSeconds, "Job creation to pod Running, by whether it was sandboxed (VM boot included).")
+	out.overhead = hist(RunOverheadSeconds, "Container start to the first Renovate log line (kubelet clock), by whether it was sandboxed.")
 	out.pending = counter(RunPendingTimeouts, "Runs whose pod was not Running within the pending timeout.")
 	out.mints = counter(TokenMintsTotal, "Run token mints by outcome.")
 	out.revocations = counter(TokenRevocationsTotal, "Run token revocations by outcome.")
@@ -122,6 +128,12 @@ func NewMetrics(mp metric.MeterProvider) (*Metrics, error) {
 	)
 	out.kube = counter(KubeRequestsTotal, "Kubernetes API requests by verb, resource and status code.")
 	out.floorErrors = counter(FloorDetectionErrors, "Tree listings for floor detection that failed; the run resolved from known managers.")
+	out.needsSB = counter(RunsNeedsSandbox, "Sandboxed runs that failed closed because the sandbox was missing, by app.")
+	out.floorRaised = counter(FloorRaisedTotal, "Plans the floor raised to a sandboxed profile (or would, in report mode), by app, manager and mode.")
+	sandbox, err := m.Int64Gauge(SandboxReady,
+		metric.WithDescription("1 when the sandbox's RuntimeClass exists, 0 when it does not or the check failed."))
+	add(err)
+	out.sandbox = sandbox
 	out.deliveries = counter(IngestDeliveriesTotal, "Webhook deliveries ingest answered, by app, event and outcome.")
 	temporal, err := m.Float64Histogram(IngestTemporalSeconds, metric.WithDescription("Time ingest spent in Temporal calls, by action."),
 		metric.WithExplicitBucketBoundaries(temporalBuckets...))
@@ -144,19 +156,19 @@ func (m *Metrics) RunEnded(profile string) {
 }
 
 // RunCompleted implements activities.Metrics.
-func (m *Metrics) RunCompleted(outcome, result, profile string, duration, podStart, overhead time.Duration) {
+func (m *Metrics) RunCompleted(outcome, result, profile string, sandboxed bool, duration, podStart, overhead time.Duration) {
 	ctx := context.Background()
-	byProfile := metric.WithAttributes(attribute.String("profile", profile))
+	sb := attribute.Bool("sandboxed", sandboxed)
 	m.runs.Add(ctx, 1, metric.WithAttributes(
-		attribute.String("outcome", outcome), attribute.String("result", result), attribute.String("profile", profile)))
+		attribute.String("outcome", outcome), attribute.String("result", result), attribute.String("profile", profile), sb))
 	if duration > 0 {
-		m.duration.Record(ctx, duration.Seconds(), byProfile)
+		m.duration.Record(ctx, duration.Seconds(), metric.WithAttributes(attribute.String("profile", profile), sb))
 	}
 	if podStart > 0 {
-		m.podStart.Record(ctx, podStart.Seconds())
+		m.podStart.Record(ctx, podStart.Seconds(), metric.WithAttributes(sb))
 	}
 	if overhead > 0 {
-		m.overhead.Record(ctx, overhead.Seconds())
+		m.overhead.Record(ctx, overhead.Seconds(), metric.WithAttributes(sb))
 	}
 }
 
@@ -165,6 +177,26 @@ func (m *Metrics) PendingTimeout() { m.pending.Add(context.Background(), 1) }
 
 // FloorDetectionError implements activities.Metrics.
 func (m *Metrics) FloorDetectionError() { m.floorErrors.Add(context.Background(), 1) }
+
+// NeedsSandbox implements activities.Metrics.
+func (m *Metrics) NeedsSandbox(app string) {
+	m.needsSB.Add(context.Background(), 1, metric.WithAttributes(attribute.String("app", app)))
+}
+
+// FloorRaised implements activities.Metrics.
+func (m *Metrics) FloorRaised(app, manager, mode string) {
+	m.floorRaised.Add(context.Background(), 1, metric.WithAttributes(
+		attribute.String("app", app), attribute.String("manager", manager), attribute.String("mode", mode)))
+}
+
+// SetSandboxReady records boopd_sandbox_ready{runtime_class}.
+func (m *Metrics) SetSandboxReady(runtimeClass string, ready bool) {
+	var v int64
+	if ready {
+		v = 1
+	}
+	m.sandbox.Record(context.Background(), v, metric.WithAttributes(attribute.String("runtime_class", runtimeClass)))
+}
 
 // TokenMint implements activities.Metrics.
 func (m *Metrics) TokenMint(outcome string) {

@@ -24,6 +24,7 @@ renders the golden example (examples/boopd.hcl as values):
         namespace = "boopd"
         pending_timeout = "10m"
         max_concurrent = 20
+        host_users = true
       }
 
       profile "baseline" {

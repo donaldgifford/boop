@@ -78,12 +78,26 @@ boopd:
     pendingTimeout: 10m
     # Cluster-capacity cap across installations; 0 means no cap.
     maxConcurrent: 20
+    # false runs ordinary Jobs in a user namespace (hostUsers: false):
+    # root in the pod is an unprivileged user on the node. The nodes need
+    # Kubernetes 1.33+, containerd 2.x and Linux 6.3+. Sandboxed runs
+    # never get one.
+    hostUsers: true
   # Webhook ingest timings (DESIGN-0003): `path`, `settle`,
   # `minInterval`, `auditEvery`. Empty keeps the config's defaults
   # (/webhooks/github, 30s, 5m, 15m).
   ingest: {}
   # Profiles by name. `pod` and `renovate` follow the config file's
-  # profile blocks.
+  # profile blocks. With `sandbox.enabled`, a profile may set
+  # `sandboxed: true` (its runs go to the sandbox; its `pod` may not set
+  # runtimeClassName, nodeSelector or tolerations), `unsafeExecutions`
+  # (Renovate's allowedUnsafeExecutions, sandboxed profiles only) and
+  # `egressAllow` (host names added to sandbox.egressAllow):
+  #   jvm:
+  #     inherit: baseline
+  #     sandboxed: true
+  #     unsafeExecutions: [gradleWrapper]
+  #     egressAllow: [repo1.maven.org, services.gradle.org, plugins.gradle.org]
   profiles:
     baseline:
       pod:
@@ -231,8 +245,15 @@ resourceQuota:
 networkPolicies:
   # -- Render one NetworkPolicy per egress class, selecting Job pods by
   # the `boopd.dev/egress` label their profile sets. Each policy denies
-  # ingress and allows DNS plus the listed egress rules.
+  # ingress and allows DNS plus the listed egress rules. Sandboxed pods
+  # are never selected: the sandbox's own policies cover them.
   enabled: false
+  # -- The cluster's network provider, for the sandbox egress policies:
+  # `cilium` (CiliumNetworkPolicy with toFQDNs, the only one that
+  # filters by host name), `kubernetes` (standard NetworkPolicy, 443 to
+  # public addresses) or `vpc-cni` (EKS: `kubernetes` plus the metadata
+  # address and the VPC CIDR denied).
+  provider: kubernetes
   # -- Egress rules (NetworkPolicyEgressRule list) per class.
   # @default -- See values.yaml
   egress:
@@ -242,6 +263,90 @@ networkPolicies:
     python:
       - ports:
           - {port: 443, protocol: TCP}
+
+# The sandboxed tier (DESIGN-0005): runs of repository code in a Kata
+# VM. Rendered into boopd.hcl's `sandbox` block, with the sandbox
+# ServiceAccount, an egress policy per sandboxed profile and the
+# RuntimeClass check's RBAC. A run goes there when its profile is
+# `sandboxed: true`, or when the repository uses a floor manager (in
+# `enforce` mode). Without it, sandboxed runs fail closed (NeedsSandbox).
+sandbox:
+  # -- Render the sandbox block and its objects.
+  enabled: false
+  # -- The RuntimeClass sandboxed pods run under (Kata); placement comes
+  # from it. The cluster must have it; the chart does not create it.
+  runtimeClass: kata
+  # -- Check the RuntimeClass exists before each sandboxed run and
+  # every minute (boopd_sandbox_ready). Needs a ClusterRole with `get`
+  # on that one RuntimeClass; false omits it, and a missing RuntimeClass
+  # shows as the pod being refused instead.
+  checkRuntimeClass: true
+  serviceAccount:
+    # -- Create the sandboxed Jobs' ServiceAccount: no token mounted, no
+    # bindings.
+    create: true
+    # -- Its name, written into boopd.hcl as `service_account`.
+    name: boopd-sandbox
+  # -- Optional dedicated nodes for sandboxed Jobs, on top of the
+  # RuntimeClass's scheduling.
+  nodeSelector: {}
+  # -- Tolerations for those nodes (`key`, `operator`, `value`,
+  # `effect`, `tolerationSeconds`).
+  tolerations: []
+  # -- Host names every sandboxed run may reach on 443; a profile's
+  # `egressAllow` adds to them. `*.` wildcards allowed. Only `cilium`
+  # filters by name.
+  egressAllow:
+    - github.com
+    - api.github.com
+    - codeload.github.com
+    - objects.githubusercontent.com
+    - release-assets.githubusercontent.com
+    - ghcr.io
+  # -- `report`: a repository the floor would sandbox runs as an
+  # ordinary Job, logged with would_sandbox=true. `enforce`: it runs
+  # sandboxed, and ordinary runs force the floor managers off.
+  floorMode: report
+  # -- Renovate managers to sandbox in addition to the built-in floor.
+  floorAdd: []
+  # -- The sandboxed run's token permissions, each `read` or `write`.
+  # Empty keeps boopd's default set (docs/config.md); `workflows`,
+  # `administration` and `secrets` are refused.
+  tokenPermissions: {}
+  # -- How long a sandboxed pod may take to reach Running, VM boot
+  # included. Empty is runs.pendingTimeout + 60s.
+  pendingTimeout: ""
+  # -- The RuntimeClass's pod overhead, added per run to the runs
+  # quota's cpu and memory entries (`resourceQuota.hard`) when set.
+  overhead:
+    cpu: 250m
+    memory: 250Mi
+  # Egress for the `kubernetes` and `vpc-cni` providers, which filter by
+  # address only.
+  egress:
+    # -- Where DNS is: the namespace and pod labels of the cluster DNS.
+    dns:
+      namespace: kube-system
+      podLabels:
+        k8s-app: kube-dns
+    # -- Ranges 443 may never reach: private, loopback, link-local
+    # (metadata included) and CGNAT.
+    denyCIDRs:
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+      - 127.0.0.0/8
+      - 169.254.0.0/16
+      - 100.64.0.0/10
+    # -- The cluster's pod and service CIDRs, denied too when they are
+    # outside the ranges above.
+    clusterCIDRs: []
+    # -- Narrow 443 to these ranges (GitHub's published ones, for
+    # example) instead of every public address.
+    allowCIDRs: []
+    # -- `vpc-cni` only, required there: the VPC CIDR, denied with the
+    # metadata address.
+    vpcCIDR: ""
 
 # The webhook ingest role (DESIGN-0003): `boopd ingest` behind its own
 # Service, exposed to GitHub by an Ingress or a Gateway API HTTPRoute.
@@ -316,7 +421,9 @@ ingest:
 rbac:
   # -- Create the worker's Role and RoleBinding in the runs namespace:
   # jobs create/get/list/watch/patch/delete, pods get/list/watch, pods/log get,
-  # secrets create/get/delete (no list).
+  # secrets create/get/delete (no list); with sandbox.enabled, events
+  # list, and with sandbox.checkRuntimeClass a ClusterRole with get on
+  # the sandbox's one RuntimeClass.
   create: true
 
 serviceAccount:
@@ -406,14 +513,19 @@ prometheusRule:
   # -- Create the PrometheusRule: the generic DeploymentReplicasUnavailable
   # and ContainerRestarting, plus BoopdRunResourceExhausted (disk-space,
   # out-of-memory), BoopdRunOOMKilled, BoopdOnboardingResult,
-  # BoopdReposStalled and BoopdBudgetLow.
+  # BoopdReposStalled and BoopdBudgetLow. With sandbox.enabled:
+  # BoopdSandboxNotReady (with checkRuntimeClass), BoopdRunsNeedSandbox
+  # and, with networkPolicies.provider cilium, BoopdSandboxEgressDenied
+  # from Hubble's hubble_drop_total (needs the drop metric with
+  # labelsContext=source_namespace).
   enabled: false
   # -- Additional labels (e.g., to match Prometheus operator
   # `ruleSelector`).
   labels: {}
   # -- Per-alert overrides: keys `replicasUnavailable`,
   # `containerRestarting`, `runResourceExhausted`, `runOOMKilled`,
-  # `onboardingResult`, `reposStalled` and `budgetLow`, each accepting
+  # `onboardingResult`, `reposStalled`, `budgetLow`, `sandboxNotReady`,
+  # `runsNeedSandbox` and `sandboxEgressDenied`, each accepting
   # `enabled`, `for`, `severity`, and `threshold`.
   alerts: {}
 

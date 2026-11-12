@@ -5,9 +5,34 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Features
+
+- *(observability)* Label run metrics by sandboxed
+- *(worker)* Refresh boopd_sandbox_ready every minute
+- *(observability)* Count needs-sandbox runs and floor raises
+- *(activities)* Log the sandbox and floor evidence on run_complete
+- *(chart)* Sandbox values, schema and boopd.hcl block
+- *(chart)* The boopd-sandbox ServiceAccount
+- *(chart)* Sandbox egress policies per provider
+- *(chart)* RBAC for the sandbox's RuntimeClass check and events
+- *(chart)* Count the sandbox's pod overhead in the runs quota
+- *(chart)* Sandbox alerts
+- *(chart)* NOTES for the sandbox's egress and report mode
+- *(chart)* Runs.hostUsers
+
+### Bug Fixes
+
+- *(deps)* Build with Go 1.27.4 for GO-2026-6859
+
 ### Documentation
 
 - *(impl)* Record that renovate-drift stays a non-required check
+- *(impl)* Notes on Phase 10's egress exclusion and runtime-class switch
+- CLAUDE.md names Go 1.27.4
+
+### Testing
+
+- *(chart)* Sandbox suites, provider snapshots and config validation
 
 ## [0.6.0] - 2026-11-10
 

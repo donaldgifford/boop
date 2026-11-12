@@ -1,0 +1,25 @@
+# The sandbox in report mode on a standard-NetworkPolicy cluster, for
+# helm-config-validate and the sandbox suites (IMPL-0006 task 10.8).
+boopd:
+  profiles:
+    jvm:
+      inherit: baseline
+      sandboxed: true
+      unsafeExecutions: [gradleWrapper]
+      egressAllow: [repo1.maven.org, services.gradle.org, plugins.gradle.org]
+  order: [baseline, node, jvm, python, strict]
+  profileRules:
+    - extends: ["github>boop-bot/renovate-config:jvm"]
+      managers: [gradle, gradle-wrapper, maven, maven-wrapper]
+      profile: jvm
+  apps:
+    boop-bot:
+      appId: 123456
+      privateKeySecretRef: {name: boop-bot-app, key: private-key.pem}
+networkPolicies:
+  provider: kubernetes
+sandbox:
+  enabled: true
+  floorMode: report
+  egress:
+    clusterCIDRs: [10.42.0.0/16, 10.43.0.0/16]

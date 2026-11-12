@@ -482,3 +482,105 @@ HTTPRoute never claiming the same host.
 {{- end -}}
 {{- end -}}
 {{- end }}
+
+{{/*
+A profile's value through its inherit chain: (list <profiles> <name>
+<key>). The child's value, if set, replaces the parent's
+(docs/config.md § Inheritance). JSON {"v": <value>}; v is null when no
+profile in the chain sets it.
+*/}}
+{{- define "boopd.profileValue" -}}
+{{- $profiles := index . 0 -}}
+{{- $name := index . 1 -}}
+{{- $key := index . 2 -}}
+{{- $out := dict "v" nil -}}
+{{- $done := false -}}
+{{- range $_ := until (add (len $profiles) 1 | int) -}}
+{{- if and (not $done) $name -}}
+{{- $p := get $profiles $name | default dict -}}
+{{- if hasKey $p $key -}}
+{{- $_ := set $out "v" (get $p $key) -}}
+{{- $done = true -}}
+{{- else -}}
+{{- $name = $p.inherit | default "" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- toJson $out -}}
+{{- end }}
+
+{{/*
+The names of the sandboxed profiles, sorted. JSON list.
+*/}}
+{{- define "boopd.sandboxedProfiles" -}}
+{{- $profiles := .Values.boopd.profiles | default dict -}}
+{{- $out := list -}}
+{{- range $name := keys $profiles | sortAlpha -}}
+{{- if (include "boopd.profileValue" (list $profiles $name "sandboxed") | fromJson).v -}}
+{{- $out = append $out $name -}}
+{{- end -}}
+{{- end -}}
+{{- toJson $out -}}
+{{- end }}
+
+{{/*
+A CPU quantity in millicores: "250m", "2", "0.5", 2.
+*/}}
+{{- define "boopd.milliCPU" -}}
+{{- $s := toString . -}}
+{{- if hasSuffix "m" $s -}}
+{{- trimSuffix "m" $s | int -}}
+{{- else -}}
+{{- mulf (float64 $s) 1000 | ceil | int -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+A memory quantity in KiB, rounded up: binary (Ki, Mi, Gi, Ti), decimal
+(k, M, G, T) or bytes.
+*/}}
+{{- define "boopd.kibMemory" -}}
+{{- $s := toString . -}}
+{{- $units := dict "Ki" 1.0 "Mi" 1024.0 "Gi" 1048576.0 "Ti" 1073741824.0 "k" (divf 1000 1024) "M" (divf 1000000 1024) "G" (divf 1000000000 1024) "T" (divf 1000000000000 1024) -}}
+{{- $kib := divf (float64 $s | default 0) 1024 -}}
+{{- range $u := list "Ki" "Mi" "Gi" "Ti" "k" "M" "G" "T" -}}
+{{- if hasSuffix $u $s -}}
+{{- $kib = mulf (float64 (trimSuffix $u $s)) (get $units $u) -}}
+{{- end -}}
+{{- end -}}
+{{- ceil $kib | int64 -}}
+{{- end }}
+
+{{/*
+The runs quota's spec.hard entries the sandbox raises: the cpu and
+memory ones resourceQuota.hard sets, each plus the sandbox's pod
+overhead (sandbox.overhead) once per run slot
+(boopd.runs.maxConcurrent). Any slot may be sandboxed, and a pod's
+overhead counts against quota. JSON of only the raised entries, as
+strings, so the others keep their YAML form.
+*/}}
+{{- define "boopd.runsQuotaRaised" -}}
+{{- $hard := .Values.resourceQuota.hard | default dict -}}
+{{- $out := dict -}}
+{{- if .Values.sandbox.enabled -}}
+{{- $n := int .Values.boopd.runs.maxConcurrent -}}
+{{- $o := .Values.sandbox.overhead | default dict -}}
+{{- if $o.cpu -}}
+{{- $add := mul $n (include "boopd.milliCPU" $o.cpu | int) -}}
+{{- range $k := list "requests.cpu" "limits.cpu" "cpu" -}}
+{{- if hasKey $hard $k -}}
+{{- $_ := set $out $k (printf "%dm" (add (include "boopd.milliCPU" (get $hard $k) | int) $add)) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if $o.memory -}}
+{{- $add := mul $n (include "boopd.kibMemory" $o.memory | int64) -}}
+{{- range $k := list "requests.memory" "limits.memory" "memory" -}}
+{{- if hasKey $hard $k -}}
+{{- $_ := set $out $k (printf "%dKi" (add (include "boopd.kibMemory" (get $hard $k) | int64) $add)) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- toJson $out -}}
+{{- end }}

@@ -28,7 +28,7 @@ func TestMeterProvider_ExpositionNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.RunCompleted("Succeeded", "done", "default", time.Minute, time.Second, time.Second)
+	m.RunCompleted("Succeeded", "done", "default", true, time.Minute, time.Second, time.Second)
 	m.TokenMint("success")
 	m.RecordRequest("get", "pods", "200")
 
@@ -40,7 +40,7 @@ func TestMeterProvider_ExpositionNames(t *testing.T) {
 		"# TYPE boopd_run_duration_seconds histogram",
 		"# TYPE boopd_token_mints_total counter",
 		"# TYPE boopd_kube_requests_total counter",
-		`boopd_runs_total{outcome="Succeeded",profile="default",result="done"} 1`,
+		`boopd_runs_total{outcome="Succeeded",profile="default",result="done",sandboxed="true"} 1`,
 		"go_goroutines",
 	} {
 		if !strings.Contains(body, want) {

@@ -158,11 +158,12 @@ func TestGolden_Sandbox(t *testing.T) {
 		Tolerations: []corev1.Toleration{
 			{Key: "boopd.dev/sandbox", Value: "true", Effect: corev1.TaintEffectNoSchedule},
 		},
-		EgressAllow:      []string{"github.com", "api.github.com"},
-		FloorMode:        config.FloorReport,
-		FloorAdd:         []string{"gomod"},
-		TokenPermissions: config.DefaultTokenPermissions(),
-		PendingTimeout:   11 * time.Minute,
+		EgressAllow:       []string{"github.com", "api.github.com"},
+		FloorMode:         config.FloorReport,
+		FloorAdd:          []string{"gomod"},
+		TokenPermissions:  config.DefaultTokenPermissions(),
+		PendingTimeout:    11 * time.Minute,
+		CheckRuntimeClass: true,
 	}
 	if !reflect.DeepEqual(cfg.Sandbox, want) {
 		t.Errorf("Sandbox =\n%+v\nwant\n%+v", cfg.Sandbox, want)

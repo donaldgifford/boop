@@ -1,0 +1,72 @@
+---
+suite: notes
+templates:
+  - templates/NOTES.txt
+set:
+  temporal.address: temporal:7233
+  boopd.apps:
+    boop-bot:
+      appId: 1
+      privateKeySecretRef: {name: k, key: pem}
+tests:
+  - it: separates the header from the endpoints
+    asserts:
+      - matchRegexRaw:
+          pattern: "has been deployed!\n\nHealth check:"
+
+  - it: says nothing about the sandbox without it
+    asserts:
+      - notMatchRegexRaw:
+          pattern: sandbox
+
+  - it: warns that kubernetes and vpc-cni do not filter host names
+    set:
+      sandbox.enabled: true
+      networkPolicies.provider: vpc-cni
+      sandbox.egress.vpcCIDR: 10.20.0.0/16
+    asserts:
+      - matchRegexRaw:
+          pattern: "WARNING: networkPolicies.provider is vpc-cni. Sandboxed runs may\nreach any public address on 443"
+
+  - it: warns when cilium is chosen but its API is missing
+    set:
+      sandbox.enabled: true
+      networkPolicies.provider: cilium
+    asserts:
+      - matchRegexRaw:
+          pattern: does not\nserve cilium.io/v2 CiliumNetworkPolicy
+
+  - it: no egress warning with cilium and its API
+    capabilities:
+      apiVersions:
+        - cilium.io/v2/CiliumNetworkPolicy
+    set:
+      sandbox.enabled: true
+      networkPolicies.provider: cilium
+      sandbox.floorMode: enforce
+    asserts:
+      - notMatchRegexRaw:
+          pattern: WARNING|NOTE
+
+  - it: notes report mode
+    set:
+      sandbox.enabled: true
+      networkPolicies.provider: cilium
+    capabilities:
+      apiVersions:
+        - cilium.io/v2/CiliumNetworkPolicy
+    asserts:
+      - matchRegexRaw:
+          pattern: "NOTE: sandbox.floorMode is report."
+
+  - it: names the node requirements when hostUsers is false
+    set:
+      boopd.runs.hostUsers: false
+    asserts:
+      - matchRegexRaw:
+          pattern: "Kubernetes 1.33\\+, containerd 2.x\nand Linux 6.3\\+"
+
+  - it: says nothing about user namespaces by default
+    asserts:
+      - notMatchRegexRaw:
+          pattern: hostUsers

@@ -25,10 +25,12 @@ type Metrics interface {
 	// RunStarted and RunEnded move boopd_runs_active{profile}.
 	RunStarted(profile string)
 	RunEnded(profile string)
-	// RunCompleted is boopd_runs_total{outcome,result,profile} and the
-	// run's boopd_run_duration_seconds, boopd_run_pod_start_seconds and
-	// boopd_run_overhead_seconds; a zero duration is not recorded.
-	RunCompleted(outcome, result, profile string, duration, podStart, overhead time.Duration)
+	// RunCompleted is boopd_runs_total{outcome,result,profile,sandboxed}
+	// and the run's boopd_run_duration_seconds{profile,sandboxed},
+	// boopd_run_pod_start_seconds{sandboxed} and
+	// boopd_run_overhead_seconds{sandboxed}; a zero duration is not
+	// recorded.
+	RunCompleted(outcome, result, profile string, sandboxed bool, duration, podStart, overhead time.Duration)
 	// PendingTimeout is boopd_run_pending_timeouts_total.
 	PendingTimeout()
 	// TokenMint is boopd_token_mints_total{outcome}.
@@ -51,7 +53,25 @@ type Metrics interface {
 	// FloorDetectionError is boopd_floor_detection_errors_total: a tree
 	// listing for floor detection that failed.
 	FloorDetectionError()
+	// NeedsSandbox is boopd_runs_needs_sandbox_total{app}: a sandboxed
+	// run that failed closed because the sandbox was missing.
+	NeedsSandbox(app string)
+	// FloorRaised is boopd_floor_raised_total{app,manager,mode}: one
+	// plan the floor raised, or would have in report mode, counted once
+	// per reason. manager is a floor manager, FloorUnknownManagers or
+	// FloorTruncatedTree.
+	FloorRaised(app, manager, mode string)
 }
+
+// Values of boopd_floor_raised_total's manager attribute when no floor
+// manager was seen.
+const (
+	// FloorUnknownManagers: the repository's managers are not known yet
+	// (its first run), and unknown counts as on the floor.
+	FloorUnknownManagers = "unknown"
+	// FloorTruncatedTree: the tree listing was truncated.
+	FloorTruncatedTree = "truncated"
+)
 
 // Values of boopd_discovery_repos_total's config attribute.
 const (
@@ -74,7 +94,8 @@ func (NopMetrics) RunStarted(string) {}
 func (NopMetrics) RunEnded(string) {}
 
 // RunCompleted implements Metrics.
-func (NopMetrics) RunCompleted(string, string, string, time.Duration, time.Duration, time.Duration) {}
+func (NopMetrics) RunCompleted(string, string, string, bool, time.Duration, time.Duration, time.Duration) {
+}
 
 // PendingTimeout implements Metrics.
 func (NopMetrics) PendingTimeout() {}
@@ -99,3 +120,9 @@ func (NopMetrics) ConfigProbed(int64, string) {}
 
 // FloorDetectionError implements Metrics.
 func (NopMetrics) FloorDetectionError() {}
+
+// NeedsSandbox implements Metrics.
+func (NopMetrics) NeedsSandbox(string) {}
+
+// FloorRaised implements Metrics.
+func (NopMetrics) FloorRaised(string, string, string) {}

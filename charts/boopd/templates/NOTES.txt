@@ -1,16 +1,47 @@
 {{ include "boopd.fullname" . }} has been deployed!
-
 {{- if not .Values.boopd.apps }}
+
 WARNING: boopd.apps is empty. The worker refuses a config without a
 GitHub App and will not become ready; set boopd.apps.<name>.appId and
 privateKeySecretRef.
-
-{{ end -}}
+{{- end }}
 {{- if not .Values.temporal.address }}
+
 WARNING: temporal.address is empty. The worker cannot dial Temporal and
 will not start; set temporal.address to the frontend host:port.
+{{- end }}
+{{- if eq (toString .Values.boopd.runs.hostUsers) "false" }}
 
-{{ end -}}
+NOTE: boopd.runs.hostUsers is false: ordinary runs get a user namespace
+(hostUsers: false). Their nodes need Kubernetes 1.33+, containerd 2.x
+and Linux 6.3+ (idmapped mounts); elsewhere their pods fail to start
+and the runs end Pending.
+{{- end }}
+{{- if .Values.sandbox.enabled }}
+{{- $provider := .Values.networkPolicies.provider | default "kubernetes" }}
+{{- if ne $provider "cilium" }}
+
+WARNING: networkPolicies.provider is {{ $provider }}. Sandboxed runs may
+reach any public address on 443: a standard NetworkPolicy cannot filter
+by host name, so sandbox.egressAllow is not enforced. Only the
+sandbox.egress deny ranges (and allowCIDRs, if set) apply. Use cilium,
+or an egress proxy, to limit runs to the allowed hosts.
+{{- else if not (.Capabilities.APIVersions.Has "cilium.io/v2/CiliumNetworkPolicy") }}
+
+WARNING: networkPolicies.provider is cilium, but the cluster does not
+serve cilium.io/v2 CiliumNetworkPolicy, so no sandbox egress policy was
+rendered. Sandboxed runs have unrestricted egress.
+{{- end }}
+{{- if eq (.Values.sandbox.floorMode | default "report") "report" }}
+
+NOTE: sandbox.floorMode is report. Repositories that use a floor manager
+(bundler, poetry, pip-compile, ...) still run as ordinary Jobs; their
+run_complete lines say would_sandbox=true and
+boopd_floor_raised_total{mode="report"} counts them. Set floorMode:
+enforce once those runs look right in the sandbox.
+{{- end }}
+{{- end }}
+
 Health check:     GET /healthz
 Readiness check:  GET /readyz
 Metrics:          GET :{{ .Values.config.metricsPort }}/metrics

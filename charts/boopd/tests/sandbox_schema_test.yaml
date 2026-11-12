@@ -1,0 +1,76 @@
+---
+suite: sandbox schema
+templates:
+  - templates/config.yaml
+tests:
+  - it: accepts the report and enforce values
+    values:
+      - values/sandbox-report.yaml
+      - values/sandbox-enforce.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+
+  - it: refuses a forbidden token permission
+    set:
+      sandbox.tokenPermissions: {workflows: write}
+    asserts:
+      - failedTemplate:
+          errorPattern: "specifications of the schema"
+
+  - it: refuses a permission level other than read or write
+    set:
+      sandbox.tokenPermissions: {contents: admin}
+    asserts:
+      - failedTemplate:
+          errorPattern: "specifications of the schema"
+
+  - it: refuses an unknown unsafe execution
+    set:
+      boopd.profiles.baseline.unsafeExecutions: [npmScripts]
+    asserts:
+      - failedTemplate:
+          errorPattern: "specifications of the schema"
+
+  - it: refuses an unknown floor mode
+    set:
+      sandbox.floorMode: audit
+    asserts:
+      - failedTemplate:
+          errorPattern: "specifications of the schema"
+
+  - it: refuses an unknown network provider
+    set:
+      networkPolicies.provider: calico
+    asserts:
+      - failedTemplate:
+          errorPattern: "specifications of the schema"
+
+  - it: refuses a malformed CIDR
+    set:
+      sandbox.egress.denyCIDRs: [10.0.0.0]
+    asserts:
+      - failedTemplate:
+          errorPattern: "specifications of the schema"
+
+  - it: refuses an empty runtimeClass with the sandbox on
+    set:
+      sandbox.enabled: true
+      sandbox.runtimeClass: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "specifications of the schema"
+
+  - it: refuses an unknown sandbox key
+    set:
+      sandbox.runtimeClassName: kata
+    asserts:
+      - failedTemplate:
+          errorPattern: "specifications of the schema"
+
+  - it: refuses a host name with a scheme in egressAllow
+    set:
+      sandbox.egressAllow: [https://github.com]
+    asserts:
+      - failedTemplate:
+          errorPattern: "specifications of the schema"

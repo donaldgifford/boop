@@ -137,3 +137,61 @@ tests:
       - matchRegex:
           path: spec.groups[0].rules[5].expr
           pattern: '< 0.2$'
+
+  - it: adds no sandbox alerts without the sandbox
+    set:
+      prometheusRule.enabled: true
+    asserts:
+      - lengthEqual:
+          path: spec.groups[0].rules
+          count: 7
+
+  - it: adds the sandbox alerts, egress denied only with cilium
+    set:
+      prometheusRule.enabled: true
+      sandbox.enabled: true
+      boopd.runs.namespace: boopd-runs
+    asserts:
+      - lengthEqual:
+          path: spec.groups[0].rules
+          count: 9
+      - equal:
+          path: spec.groups[0].rules[7].alert
+          value: BoopdSandboxNotReady
+      - matchRegex:
+          path: spec.groups[0].rules[7].expr
+          pattern: 'boopd_sandbox_ready\{namespace="NAMESPACE"\}\) < 1$'
+      - equal:
+          path: spec.groups[0].rules[8].alert
+          value: BoopdRunsNeedSandbox
+      - matchRegex:
+          path: spec.groups[0].rules[8].expr
+          pattern: 'boopd_runs_needs_sandbox_total'
+
+  - it: BoopdSandboxEgressDenied watches Hubble drops in the runs namespace
+    set:
+      prometheusRule.enabled: true
+      sandbox.enabled: true
+      networkPolicies.provider: cilium
+      boopd.runs.namespace: boopd-runs
+    asserts:
+      - equal:
+          path: spec.groups[0].rules[9].alert
+          value: BoopdSandboxEgressDenied
+      - matchRegex:
+          path: spec.groups[0].rules[9].expr
+          pattern: 'hubble_drop_total\{reason="POLICY_DENIED",source_namespace="boopd-runs"\}'
+
+  - it: no BoopdSandboxNotReady without the RuntimeClass check
+    set:
+      prometheusRule.enabled: true
+      sandbox.enabled: true
+      sandbox.checkRuntimeClass: false
+    asserts:
+      - notContains:
+          path: spec.groups[0].rules
+          content: {alert: BoopdSandboxNotReady}
+          any: true
+      - lengthEqual:
+          path: spec.groups[0].rules
+          count: 8

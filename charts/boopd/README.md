@@ -144,15 +144,16 @@ renders with an existing Secret are identical.
 | nameOverride | string | `""` | Override the chart name |
 | namespace.create | bool | `false` | Render the runs namespace with the PodSecurity `restricted` labels (kept on uninstall). Otherwise label it yourself: `pod-security.kubernetes.io/enforce=restricted`. |
 | networkPolicies.egress | object | See values.yaml | Egress rules (NetworkPolicyEgressRule list) per class. |
-| networkPolicies.enabled | bool | `false` | Render one NetworkPolicy per egress class, selecting Job pods by the `boopd.dev/egress` label their profile sets. Each policy denies ingress and allows DNS plus the listed egress rules. |
+| networkPolicies.enabled | bool | `false` | Render one NetworkPolicy per egress class, selecting Job pods by the `boopd.dev/egress` label their profile sets. Each policy denies ingress and allows DNS plus the listed egress rules. Sandboxed pods are never selected: the sandbox's own policies cover them. |
+| networkPolicies.provider | string | `"kubernetes"` | The cluster's network provider, for the sandbox egress policies: `cilium` (CiliumNetworkPolicy with toFQDNs, the only one that filters by host name), `kubernetes` (standard NetworkPolicy, 443 to public addresses) or `vpc-cni` (EKS: `kubernetes` plus the metadata address and the VPC CIDR denied). |
 | nodeSelector | object | `{}` | Node selector |
 | podAnnotations | object | `{}` | Pod annotations |
 | podLabels | object | `{}` | Pod labels |
 | podSecurityContext | object | `{"fsGroup":65532,"runAsGroup":65532,"runAsNonRoot":true,"runAsUser":65532,"seccompProfile":{"type":"RuntimeDefault"}}` | Pod security context. fsGroup makes the 0440 credential files readable by the nonroot worker. |
-| prometheusRule.alerts | object | `{}` | Per-alert overrides: keys `replicasUnavailable`, `containerRestarting`, `runResourceExhausted`, `runOOMKilled`, `onboardingResult`, `reposStalled` and `budgetLow`, each accepting `enabled`, `for`, `severity`, and `threshold`. |
-| prometheusRule.enabled | bool | `false` | Create the PrometheusRule: the generic DeploymentReplicasUnavailable and ContainerRestarting, plus BoopdRunResourceExhausted (disk-space, out-of-memory), BoopdRunOOMKilled, BoopdOnboardingResult, BoopdReposStalled and BoopdBudgetLow. |
+| prometheusRule.alerts | object | `{}` | Per-alert overrides: keys `replicasUnavailable`, `containerRestarting`, `runResourceExhausted`, `runOOMKilled`, `onboardingResult`, `reposStalled`, `budgetLow`, `sandboxNotReady`, `runsNeedSandbox` and `sandboxEgressDenied`, each accepting `enabled`, `for`, `severity`, and `threshold`. |
+| prometheusRule.enabled | bool | `false` | Create the PrometheusRule: the generic DeploymentReplicasUnavailable and ContainerRestarting, plus BoopdRunResourceExhausted (disk-space, out-of-memory), BoopdRunOOMKilled, BoopdOnboardingResult, BoopdReposStalled and BoopdBudgetLow. With sandbox.enabled: BoopdSandboxNotReady (with checkRuntimeClass), BoopdRunsNeedSandbox and, with networkPolicies.provider cilium, BoopdSandboxEgressDenied from Hubble's hubble_drop_total (needs the drop metric with labelsContext=source_namespace). |
 | prometheusRule.labels | object | `{}` | Additional labels (e.g., to match Prometheus operator `ruleSelector`). |
-| rbac.create | bool | `true` | Create the worker's Role and RoleBinding in the runs namespace: jobs create/get/list/watch/patch/delete, pods get/list/watch, pods/log get, secrets create/get/delete (no list). |
+| rbac.create | bool | `true` | Create the worker's Role and RoleBinding in the runs namespace: jobs create/get/list/watch/patch/delete, pods get/list/watch, pods/log get, secrets create/get/delete (no list); with sandbox.enabled, events list, and with sandbox.checkRuntimeClass a ClusterRole with get on the sandbox's one RuntimeClass. |
 | readinessProbe.httpGet.path | string | `"/readyz"` |  |
 | readinessProbe.httpGet.port | string | `"http"` |  |
 | readinessProbe.initialDelaySeconds | int | `5` |  |
@@ -167,6 +168,24 @@ renders with an existing Secret are identical.
 | resourceQuota.hard | object | `{}` | Extra `spec.hard` entries, e.g. `limits.memory`. |
 | resources | object | `{"limits":{"cpu":"500m","memory":"256Mi"},"requests":{"cpu":"100m","memory":"128Mi"}}` | Container resource requests and limits |
 | revisionHistoryLimit | int | `3` | Number of old ReplicaSets retained for rollback. Defaults to 3 to keep the kubectl `get rs` view tidy; bump if you need more rollback headroom. Kubernetes default is 10. |
+| sandbox.checkRuntimeClass | bool | `true` | Check the RuntimeClass exists before each sandboxed run and every minute (boopd_sandbox_ready). Needs a ClusterRole with `get` on that one RuntimeClass; false omits it, and a missing RuntimeClass shows as the pod being refused instead. |
+| sandbox.egress.allowCIDRs | list | `[]` | Narrow 443 to these ranges (GitHub's published ones, for example) instead of every public address. |
+| sandbox.egress.clusterCIDRs | list | `[]` | The cluster's pod and service CIDRs, denied too when they are outside the ranges above. |
+| sandbox.egress.denyCIDRs | list | `["10.0.0.0/8","172.16.0.0/12","192.168.0.0/16","127.0.0.0/8","169.254.0.0/16","100.64.0.0/10"]` | Ranges 443 may never reach: private, loopback, link-local (metadata included) and CGNAT. |
+| sandbox.egress.dns | object | `{"namespace":"kube-system","podLabels":{"k8s-app":"kube-dns"}}` | Where DNS is: the namespace and pod labels of the cluster DNS. |
+| sandbox.egress.vpcCIDR | string | `""` | `vpc-cni` only, required there: the VPC CIDR, denied with the metadata address. |
+| sandbox.egressAllow | list | `["github.com","api.github.com","codeload.github.com","objects.githubusercontent.com","release-assets.githubusercontent.com","ghcr.io"]` | Host names every sandboxed run may reach on 443; a profile's `egressAllow` adds to them. `*.` wildcards allowed. Only `cilium` filters by name. |
+| sandbox.enabled | bool | `false` | Render the sandbox block and its objects. |
+| sandbox.floorAdd | list | `[]` | Renovate managers to sandbox in addition to the built-in floor. |
+| sandbox.floorMode | string | `"report"` | `report`: a repository the floor would sandbox runs as an ordinary Job, logged with would_sandbox=true. `enforce`: it runs sandboxed, and ordinary runs force the floor managers off. |
+| sandbox.nodeSelector | object | `{}` | Optional dedicated nodes for sandboxed Jobs, on top of the RuntimeClass's scheduling. |
+| sandbox.overhead | object | `{"cpu":"250m","memory":"250Mi"}` | The RuntimeClass's pod overhead, added per run to the runs quota's cpu and memory entries (`resourceQuota.hard`) when set. |
+| sandbox.pendingTimeout | string | `""` | How long a sandboxed pod may take to reach Running, VM boot included. Empty is runs.pendingTimeout + 60s. |
+| sandbox.runtimeClass | string | `"kata"` | The RuntimeClass sandboxed pods run under (Kata); placement comes from it. The cluster must have it; the chart does not create it. |
+| sandbox.serviceAccount.create | bool | `true` | Create the sandboxed Jobs' ServiceAccount: no token mounted, no bindings. |
+| sandbox.serviceAccount.name | string | `"boopd-sandbox"` | Its name, written into boopd.hcl as `service_account`. |
+| sandbox.tokenPermissions | object | `{}` | The sandboxed run's token permissions, each `read` or `write`. Empty keeps boopd's default set (docs/config.md); `workflows`, `administration` and `secrets` are refused. |
+| sandbox.tolerations | list | `[]` | Tolerations for those nodes (`key`, `operator`, `value`, `effect`, `tolerationSeconds`). |
 | secrets.create | bool | `true` | Create the Secret resource (false = use existingSecret) |
 | secrets.existingSecret | string | `""` | Name of an existing Secret for envFrom (when create=false) |
 | secrets.stringData | object | `{}` | Key/value pairs projected into the chart-managed Secret (stringData) and injected via envFrom. Same collision guard as configMap.data. |

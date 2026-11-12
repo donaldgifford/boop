@@ -53,6 +53,7 @@ type sandboxBlock struct {
 	TokenPermissions      map[string]string `hcl:"token_permissions,optional"`
 	TokenPermissionsRange hcl.Range         `hcl:"token_permissions,attr_value_range"`
 	PendingTimeout        hcl.Expression    `hcl:"pending_timeout,optional"`
+	CheckRuntimeClass     *bool             `hcl:"check_runtime_class,optional"`
 	DefRange              hcl.Range         `hcl:",def_range"`
 }
 

@@ -1,8 +1,13 @@
 package activities_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -25,14 +30,62 @@ import (
 // sandboxHarness runs RunRenovate for the sandboxed profile "jvm"
 // against a fake clientset.
 type sandboxHarness struct {
-	app *fakeApp
-	cs  *fake.Clientset
-	env *testsuite.TestActivityEnvironment
+	app     *fakeApp
+	cs      *fake.Clientset
+	env     *testsuite.TestActivityEnvironment
+	metrics *needsMetrics
+	logs    *syncBuffer
+}
+
+// syncBuffer is a bytes.Buffer safe for the activity's goroutines.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+// line returns the first JSON log line whose msg is msg.
+func (b *syncBuffer) line(t *testing.T, msg string) map[string]any {
+	t.Helper()
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for l := range strings.Lines(b.buf.String()) {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(l), &m); err == nil && m["msg"] == msg {
+			return m
+		}
+	}
+	t.Fatalf("no %q log line in:\n%s", msg, b.buf.String())
+	return nil
+}
+
+// needsMetrics counts NeedsSandbox by app.
+type needsMetrics struct {
+	activities.NopMetrics
+	mu    sync.Mutex
+	needs map[string]int
+}
+
+func (m *needsMetrics) NeedsSandbox(app string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.needs[app]++
+}
+
+func (m *needsMetrics) count(app string) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.needs[app]
 }
 
 func newSandboxHarness(t *testing.T, sandbox *config.Sandbox, objects ...runtime.Object) *sandboxHarness {
 	t.Helper()
-	h := &sandboxHarness{app: &fakeApp{}, cs: fake.NewClientset(objects...)}
+	h := &sandboxHarness{app: &fakeApp{}, cs: fake.NewClientset(objects...), metrics: &needsMetrics{needs: map[string]int{}}, logs: &syncBuffer{}}
 	h.cs.PrependReactor("create", "jobs", func(a k8stesting.Action) (bool, runtime.Object, error) {
 		a.(k8stesting.CreateAction).GetObject().(*batchv1.Job).UID = "job-uid"
 		return false, nil, nil
@@ -47,6 +100,8 @@ func newSandboxHarness(t *testing.T, sandbox *config.Sandbox, objects ...runtime
 		},
 		GitHub:  &fakeGitHub{apps: map[string]*fakeApp{"main": h.app}},
 		Runner:  kube.NewRunner(h.cs, "boopd"),
+		Metrics: h.metrics,
+		Logger:  slog.New(slog.NewJSONHandler(h.logs, nil)),
 		Timings: activities.RunTimings{Heartbeat: 50 * time.Millisecond, Cleanup: time.Second},
 	})
 	h.env = (&testsuite.WorkflowTestSuite{}).NewTestActivityEnvironment()
@@ -57,7 +112,7 @@ func newSandboxHarness(t *testing.T, sandbox *config.Sandbox, objects ...runtime
 func (h *sandboxHarness) run(t *testing.T) *temporal.ApplicationError {
 	t.Helper()
 	_, err := h.env.ExecuteActivity(workflows.RunRenovateActivity, &workflows.RunInput{
-		RepoID: 1, Slug: "acme/app", InstallationID: 1, Profile: "jvm",
+		RepoID: 1, Slug: "acme/app", InstallationID: 1, Profile: "jvm", FloorManagers: []string{"maven-wrapper"},
 	})
 	var appErr *temporal.ApplicationError
 	if !errors.As(err, &appErr) {
@@ -87,8 +142,8 @@ func TestRunRenovate_NeedsSandboxBeforeMint(t *testing.T) {
 		objects []runtime.Object
 	}{
 		"no sandbox block": {objects: []runtime.Object{kataClass}},
-		"no runtime class": {sandbox: &config.Sandbox{RuntimeClass: "kata"}},
-		"other class only": {sandbox: &config.Sandbox{RuntimeClass: "gvisor"}, objects: []runtime.Object{kataClass}},
+		"no runtime class": {sandbox: &config.Sandbox{RuntimeClass: "kata", CheckRuntimeClass: true}},
+		"other class only": {sandbox: &config.Sandbox{RuntimeClass: "gvisor", CheckRuntimeClass: true}, objects: []runtime.Object{kataClass}},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -101,7 +156,33 @@ func TestRunRenovate_NeedsSandboxBeforeMint(t *testing.T) {
 			if len(h.app.minted) != 0 || len(h.created()) != 0 {
 				t.Errorf("minted %v, created %v; want nothing", h.app.minted, h.created())
 			}
+			if n := h.metrics.count("main"); n != 1 {
+				t.Errorf("boopd_runs_needs_sandbox_total{app=main} = %d, want 1", n)
+			}
 		})
+	}
+}
+
+// Task 10.4: with check_runtime_class false the worker does not look
+// the RuntimeClass up; a missing one shows as the Job creating no pod,
+// which is NeedsSandbox once the sandbox's pending timeout passes.
+func TestRunRenovate_NoRuntimeClassCheck(t *testing.T) {
+	t.Parallel()
+	h := newSandboxHarness(t, &config.Sandbox{RuntimeClass: "kata", PendingTimeout: 200 * time.Millisecond})
+	appErr := h.run(t)
+	if appErr.Type() != workflows.ErrTypeNeedsSandbox {
+		t.Fatalf("err = %v, want %s", appErr, workflows.ErrTypeNeedsSandbox)
+	}
+	if !strings.Contains(appErr.Error(), "created no pod") {
+		t.Errorf("err = %v, want the no-pod cause", appErr)
+	}
+	for _, a := range h.cs.Actions() {
+		if a.GetResource().Resource == "runtimeclasses" {
+			t.Errorf("looked up the RuntimeClass: %v", a)
+		}
+	}
+	if len(h.app.minted) != 1 {
+		t.Errorf("minted %v, want one token: the run got as far as its Job", h.app.minted)
 	}
 }
 
@@ -124,7 +205,7 @@ func TestRunRenovate_SandboxPending(t *testing.T) {
 		Type: corev1.PodScheduled, Status: corev1.ConditionFalse, Reason: corev1.PodReasonUnschedulable,
 		Message: "0/5 nodes are available: 5 node(s) didn't match Pod's node affinity/selector.",
 	}
-	sandbox := &config.Sandbox{RuntimeClass: "kata", PendingTimeout: 200 * time.Millisecond}
+	sandbox := &config.Sandbox{RuntimeClass: "kata", PendingTimeout: 200 * time.Millisecond, CheckRuntimeClass: true}
 	tests := []struct {
 		name string
 		pod  *corev1.Pod
@@ -140,6 +221,23 @@ func TestRunRenovate_SandboxPending(t *testing.T) {
 			appErr := h.run(t)
 			if appErr.Type() != tt.want {
 				t.Fatalf("err = %v, want %s", appErr, tt.want)
+			}
+			want := 0
+			if tt.want == workflows.ErrTypeNeedsSandbox {
+				want = 1
+			}
+			if n := h.metrics.count("main"); n != want {
+				t.Errorf("boopd_runs_needs_sandbox_total{app=main} = %d, want %d", n, want)
+			}
+			// Task 9.4: the run's log carries the sandbox and the floor.
+			line := h.logs.line(t, "run_complete")
+			for k, v := range map[string]string{
+				"sandbox": "kata", "unsafe_executions": "[gradleWrapper]",
+				"floor_managers": "[maven-wrapper]", "would_sandbox": "false",
+			} {
+				if got := fmt.Sprint(line[k]); got != v {
+					t.Errorf("run_complete %s = %s, want %s", k, got, v)
+				}
 			}
 			deleted := false
 			for _, a := range h.cs.Actions() {
