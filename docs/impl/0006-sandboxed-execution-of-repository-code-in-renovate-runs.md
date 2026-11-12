@@ -655,7 +655,7 @@ and one commit per numbered task. The PR split is OQ1.
 - [x] 10.6 `PrometheusRule`: `BoopdSandboxNotReady`,
   `BoopdRunsNeedSandbox`, and `BoopdSandboxEgressDenied` (Hubble
   metrics, `cilium` only).
-- [ ] 10.7 `NOTES.txt`: the `kubernetes` and `vpc-cni` warning that host
+- [x] 10.7 `NOTES.txt`: the `kubernetes` and `vpc-cni` warning that host
   names are not filtered; the `report` mode notice.
 - [ ] 10.8 helm-unittest suites for every template and provider, the
   schema's rejections, and `boopd config validate` on the rendered
