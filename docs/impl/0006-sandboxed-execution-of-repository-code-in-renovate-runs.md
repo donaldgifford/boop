@@ -649,7 +649,7 @@ and one commit per numbered task. The PR split is OQ1.
   the configured class, and its binding; `sandbox.checkRuntimeClass:
   false` omits both and the worker falls back to the pod admission
   failure. Any error on the check fails closed.
-- [ ] 10.5 The runs quota adds the RuntimeClass overhead
+- [x] 10.5 The runs quota adds the RuntimeClass overhead
   (`sandbox.overhead`, default 250m and 250Mi, the homelab class's) for
   sandboxed Jobs.
 - [ ] 10.6 `PrometheusRule`: `BoopdSandboxNotReady`,

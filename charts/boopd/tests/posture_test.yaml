@@ -85,6 +85,43 @@ tests:
           path: metadata.namespace
           value: boopd-runs
 
+  - it: adds the sandbox overhead per run slot to the cpu and memory entries
+    template: templates/resourcequota.yaml
+    set:
+      boopd.runs.namespace: boopd-runs
+      boopd.runs.maxConcurrent: 4
+      sandbox.enabled: true
+      resourceQuota.hard:
+        requests.cpu: 8
+        limits.cpu: 7500m
+        requests.memory: 1500M
+        limits.memory: 16Gi
+        count/jobs.batch: 1000000
+    asserts:
+      - equal:
+          path: spec.hard
+          value:
+            pods: "4"
+            requests.cpu: 9000m
+            limits.cpu: 8500m
+            requests.memory: 2488844Ki
+            limits.memory: 17801216Ki
+            count/jobs.batch: 1000000
+
+  - it: leaves the quota's entries alone without the sandbox
+    template: templates/resourcequota.yaml
+    set:
+      resourceQuota.hard:
+        requests.cpu: 8
+        limits.memory: 16Gi
+    asserts:
+      - equal:
+          path: spec.hard["requests.cpu"]
+          value: 8
+      - equal:
+          path: spec.hard["limits.memory"]
+          value: 16Gi
+
   - it: renders no quota without a cap
     template: templates/resourcequota.yaml
     set:

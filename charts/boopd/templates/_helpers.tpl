@@ -522,3 +522,65 @@ The names of the sandboxed profiles, sorted. JSON list.
 {{- end -}}
 {{- toJson $out -}}
 {{- end }}
+
+{{/*
+A CPU quantity in millicores: "250m", "2", "0.5", 2.
+*/}}
+{{- define "boopd.milliCPU" -}}
+{{- $s := toString . -}}
+{{- if hasSuffix "m" $s -}}
+{{- trimSuffix "m" $s | int -}}
+{{- else -}}
+{{- mulf (float64 $s) 1000 | ceil | int -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+A memory quantity in KiB, rounded up: binary (Ki, Mi, Gi, Ti), decimal
+(k, M, G, T) or bytes.
+*/}}
+{{- define "boopd.kibMemory" -}}
+{{- $s := toString . -}}
+{{- $units := dict "Ki" 1.0 "Mi" 1024.0 "Gi" 1048576.0 "Ti" 1073741824.0 "k" (divf 1000 1024) "M" (divf 1000000 1024) "G" (divf 1000000000 1024) "T" (divf 1000000000000 1024) -}}
+{{- $kib := divf (float64 $s | default 0) 1024 -}}
+{{- range $u := list "Ki" "Mi" "Gi" "Ti" "k" "M" "G" "T" -}}
+{{- if hasSuffix $u $s -}}
+{{- $kib = mulf (float64 (trimSuffix $u $s)) (get $units $u) -}}
+{{- end -}}
+{{- end -}}
+{{- ceil $kib | int64 -}}
+{{- end }}
+
+{{/*
+The runs quota's spec.hard entries the sandbox raises: the cpu and
+memory ones resourceQuota.hard sets, each plus the sandbox's pod
+overhead (sandbox.overhead) once per run slot
+(boopd.runs.maxConcurrent). Any slot may be sandboxed, and a pod's
+overhead counts against quota. JSON of only the raised entries, as
+strings, so the others keep their YAML form.
+*/}}
+{{- define "boopd.runsQuotaRaised" -}}
+{{- $hard := .Values.resourceQuota.hard | default dict -}}
+{{- $out := dict -}}
+{{- if .Values.sandbox.enabled -}}
+{{- $n := int .Values.boopd.runs.maxConcurrent -}}
+{{- $o := .Values.sandbox.overhead | default dict -}}
+{{- if $o.cpu -}}
+{{- $add := mul $n (include "boopd.milliCPU" $o.cpu | int) -}}
+{{- range $k := list "requests.cpu" "limits.cpu" "cpu" -}}
+{{- if hasKey $hard $k -}}
+{{- $_ := set $out $k (printf "%dm" (add (include "boopd.milliCPU" (get $hard $k) | int) $add)) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if $o.memory -}}
+{{- $add := mul $n (include "boopd.kibMemory" $o.memory | int64) -}}
+{{- range $k := list "requests.memory" "limits.memory" "memory" -}}
+{{- if hasKey $hard $k -}}
+{{- $_ := set $out $k (printf "%dKi" (add (include "boopd.kibMemory" (get $hard $k) | int64) $add)) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- toJson $out -}}
+{{- end }}
