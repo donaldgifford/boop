@@ -609,7 +609,9 @@ file is copied from it.
   what the package lacks. A generic component is built in
   `donaldgifford/design-system` against a local link from this `ui/`,
   released, and the pin bumped here; it is not added under
-  `ui/web/src`. Known candidates:
+  `ui/web/src`. The candidates known on 2026-11-21 were released in
+  design-system 0.4.0, with the app switcher (its RFC-0002) and the
+  status page parts:
   - stacked bars over time (12.1, runs by outcome);
   - a segmented control (the range control);
   - popover option rows (the owner scope);

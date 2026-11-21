@@ -1,8 +1,10 @@
 import { IconFileText, IconRefresh, IconShieldCheck } from "@tabler/icons-react";
 
-import type { SwitcherApp } from "../candidates/AppSwitcher";
+import type { SwitcherApp } from "@donaldgifford/design-system/shell/app-switcher";
 
-// In the real UI this comes from the BFF's /ui/config, which the chart
+// The app maps the ids it knows to icons (design-system RFC-0002); an
+// entry it does not know gets the package's neutral mark.
+// In the real UI the list comes from the BFF's /ui/config, which the chart
 // fills from `ui.links` and, later, the app list (INV-0005 finding 9).
 // The mockup hard-codes a deployment with all three apps. `?apps=off` on
 // any URL shows the default, with no list configured.

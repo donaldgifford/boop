@@ -13,13 +13,21 @@ import { IconExternalLink } from "@tabler/icons-react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 
-import { type ActiveFilter, FilterBar } from "../candidates/FilterBar";
-import { InlineEmpty } from "../candidates/InlineState";
-import { SegmentedControl } from "../candidates/SegmentedControl";
+import { FilterBar } from "@donaldgifford/design-system/blocks/filter-bar";
+import { FilterChip } from "@donaldgifford/design-system/blocks/filter-chip";
+import { InlineEmpty } from "@donaldgifford/design-system/blocks/inline-state";
+import { SegmentedControl } from "@donaldgifford/design-system/blocks/segmented-control";
 import { StateBadge, UpdateTypeBadge } from "../components/badges";
 import { Endpoint, PageControls, parseScopeSearch, type ScopeSearch } from "../components/PageControls";
 import { type PullRequest, type PullState, pulls, pullTimeline } from "../fixtures";
 import { when } from "../lib/when";
+
+// A filter in force. In the mockup a chip removes its filter; the real
+// page opens that filter's editor.
+interface ActiveFilter {
+  name: string;
+  value: string;
+}
 
 export interface PullsSearch extends ScopeSearch {
   state?: PullState | undefined;
@@ -90,14 +98,26 @@ export function PullsView() {
             patch({ state: next, open: undefined });
           }}
         />
-        <FilterBar
-          className="flex-1"
-          filters={[{ name: "state", value: state }, ...extra]}
-          onRemove={(name) => setExtra((prev) => prev.filter((f) => f.name !== name))}
-          onAdd={() => setExtra((prev) => (prev.some((f) => f.name === "automerge") ? prev : [...prev, { name: "automerge", value: "false" }]))}
-          onClear={() => setExtra([])}
-          count={`${inState.length} of ${pulls.length}`}
-        />
+        <FilterBar className="flex-1" count={`${inState.length} of ${pulls.length}`} {...(extra.length > 0 ? { onClear: () => setExtra([]) } : {})}>
+          <FilterChip name="state" value={state} disabled />
+          {extra.map((f) => (
+            <FilterChip
+              key={f.name}
+              name={f.name}
+              value={
+                <>
+                  {f.value}{" "}
+                  <span aria-hidden="true" className="ml-0.5 opacity-70">
+                    ×
+                  </span>
+                </>
+              }
+              aria-label={`Remove filter ${f.name} = ${f.value}`}
+              onClick={() => setExtra((prev) => prev.filter((x) => x.name !== f.name))}
+            />
+          ))}
+          <FilterChip onClick={() => setExtra((prev) => (prev.some((f) => f.name === "automerge") ? prev : [...prev, { name: "automerge", value: "false" }]))} />
+        </FilterBar>
       </div>
 
       <div className={cn("grid items-start gap-4", selected && inline && "grid-cols-[minmax(0,1fr)_minmax(0,28rem)]")}>

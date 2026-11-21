@@ -13,12 +13,9 @@ yet; IMPL-0005 Phase 11 adds them.
 ui/
   web/                  React + Vite SPA
     src/shell/          the frame, composed from the package's shell parts
-    src/views/          pages: Estate, Pull requests, one repository
-    src/candidates/     drafts of generic components for the design system
+    src/views/          pages: Estate, Pull requests, one repository, Status
     src/components/     boop's own: state badges, page controls
     src/fixtures.ts     fixture data in the API's shapes
-  design/
-    candidates.html     static sketch of the candidates and the app switcher
 ```
 
 ## Commands
@@ -29,7 +26,6 @@ ui/
 | `just ui-dev` | the mockup on `http://localhost:5173` |
 | `just ui-lint` | typecheck |
 | `just ui-build` | build into `ui/dist` |
-| `just ui-sketch` | open `design/candidates.html` (needs `ui-install` first) |
 
 Add `?apps=off` to any URL to see the sidebar header with no app list
 configured.
@@ -42,11 +38,13 @@ scope there and holds only the reference `${NPM_TOKEN}`. `just
 ui-install` uses `NPM_TOKEN` when it is set, else `gh auth token`, which
 needs the `read:packages` scope (`gh auth refresh -s read:packages`).
 
-## Candidates
+## Components from the mockup
 
-`web/src/candidates/` holds drafts of components that are not about
-boop's domain and that the package lacks. They move to the design system
-and are deleted here (IMPL-0005 12.7). See its README.
+The components the first mockup drafted here (segmented control, option
+rows, filter bar, inline states, stacked bars over time, the app
+switcher) and the status page parts are in the package since 0.4.0. boop
+keeps no local copy. A generic component the package lacks is drafted
+here, seen working, and moved there (design-system RFC-0001).
 
 ## Gaps found while building the mockup
 

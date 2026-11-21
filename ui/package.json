@@ -15,7 +15,7 @@
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
-    "@donaldgifford/design-system": "0.3.2",
+    "@donaldgifford/design-system": "0.4.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/bun": "^1.4.2",
     "@types/react": "^19.3.0",
