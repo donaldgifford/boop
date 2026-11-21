@@ -260,7 +260,7 @@ with one commit per numbered task. The PR split is in OQ1.
   refuse to start below the schema it needs.
 - [x] 2.5 `boopd migrate --config <file>` in `cmd/boopd`, using the
   owner DSN from `store.owner_dsn_secret_ref` (migrate only).
-- [ ] 2.6 Tests (integration): up from empty and idempotent re-run;
+- [x] 2.6 Tests (integration): up from empty and idempotent re-run;
   role grants (a `boopd_ro` INSERT fails, a `boopd_ingest` UPDATE on
   `events` fails); partition functions.
 

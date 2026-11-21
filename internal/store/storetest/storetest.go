@@ -47,13 +47,32 @@ const (
 	readyTimeout = 60 * time.Second
 )
 
+// The roles the operator creates (DESIGN-0004 § Database roles, OQ8).
+const (
+	RoleOwner  = "boopd_owner"
+	RoleWorker = "boopd_worker"
+	RoleIngest = "boopd_ingest"
+	RoleRO     = "boopd_ro"
+)
+
 // Server is a running Postgres container.
 type Server struct {
-	// DSN connects as the superuser, which owns the database.
+	// DSN connects as the superuser.
 	DSN string
 	// Container is the docker container ID.
 	Container string
+
+	hostPort string
 }
+
+// RoleDSN connects as one of the roles; the password is the role name.
+func (s *Server) RoleDSN(role string) string {
+	return fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable", role, role, s.hostPort, database)
+}
+
+// OwnerDSN connects as boopd_owner, which owns the database and so the
+// public schema, the way migrate runs in a cluster.
+func (s *Server) OwnerDSN() string { return s.RoleDSN(RoleOwner) }
 
 // Start runs Postgres in a container on a free host port, waits until it
 // accepts connections, and removes the container when tb finishes.
@@ -87,16 +106,46 @@ func Start(tb testing.TB) *Server {
 		tb.Fatalf("storetest: %v", err)
 	}
 
+	addr := net.JoinHostPort("127.0.0.1", port)
 	srv := &Server{
-		DSN: fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable",
-			user, password, net.JoinHostPort("127.0.0.1", port), database),
+		DSN:       fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable", user, password, addr, database),
 		Container: id,
+		hostPort:  addr,
 	}
 	if err := waitReady(ctx, srv.DSN); err != nil {
 		tb.Fatalf("storetest: %s did not become ready: %v", Image, err)
 	}
+	if err := createRoles(ctx, srv.DSN); err != nil {
+		tb.Fatalf("storetest: %v", err)
+	}
 
 	return srv
+}
+
+// createRoles creates the four roles with LOGIN and makes boopd_owner
+// the database's owner. None is a superuser or has CREATEROLE.
+func createRoles(ctx context.Context, dsn string) (err error) {
+	conn, err := pgx.Connect(ctx, dsn)
+	if err != nil {
+		return fmt.Errorf("connect to create roles: %w", err)
+	}
+	defer func() {
+		if cerr := conn.Close(context.WithoutCancel(ctx)); cerr != nil && err == nil {
+			err = fmt.Errorf("close: %w", cerr)
+		}
+	}()
+
+	for _, role := range []string{RoleOwner, RoleWorker, RoleIngest, RoleRO} {
+		ident := pgx.Identifier{role}.Sanitize()
+		if _, err := conn.Exec(ctx, fmt.Sprintf("CREATE ROLE %s LOGIN PASSWORD '%s'", ident, role)); err != nil {
+			return fmt.Errorf("create role %s: %w", role, err)
+		}
+	}
+	if _, err := conn.Exec(ctx, "ALTER DATABASE "+database+" OWNER TO "+RoleOwner); err != nil {
+		return fmt.Errorf("give the database to %s: %w", RoleOwner, err)
+	}
+
+	return nil
 }
 
 // hostPort reads the host port docker bound to the container's 5432.
