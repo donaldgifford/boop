@@ -136,7 +136,10 @@ func TestGrants_EventsAreAppendOnly(t *testing.T) {
 		if _, err := conn.Exec(ctx, insert, "grant-test:ro"); err == nil {
 			t.Error("INSERT events as boopd_ro succeeded, want it refused")
 		}
-		if _, err := conn.Exec(ctx, "INSERT INTO repositories (id, installation_id, owner, slug, updated_at) VALUES (1, 1, 'o', 'o/r', now())"); err == nil {
+		if _, err := conn.Exec(
+			ctx,
+			"INSERT INTO repositories (id, installation_id, owner, slug, updated_at) VALUES (1, 1, 'o', 'o/r', now())",
+		); err == nil {
 			t.Error("INSERT repositories as boopd_ro succeeded, want it refused")
 		}
 	})
@@ -148,7 +151,10 @@ func TestGrants_EventsAreAppendOnly(t *testing.T) {
 		) {
 			t.Errorf("INSERT runs as boopd_ingest = %v, want permission denied", err)
 		}
-		if _, err := conn.Exec(ctx, "INSERT INTO dashboard_items (repo_id, marker, branch, first_seen_at, last_seen_at) VALUES (1, 'approve', 'b', now(), now())"); err != nil {
+		if _, err := conn.Exec(
+			ctx,
+			"INSERT INTO dashboard_items (repo_id, marker, branch, first_seen_at, last_seen_at) VALUES (1, 'approve', 'b', now(), now())",
+		); err != nil {
 			t.Errorf("INSERT dashboard_items as boopd_ingest: %v", err)
 		}
 	})
