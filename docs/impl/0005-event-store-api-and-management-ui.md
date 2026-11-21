@@ -436,7 +436,7 @@ with one commit per numbered task. The PR split is in OQ1.
 - [x] 5.4 `RecordEvents` activity for workflow decisions. The key is
   `wf:<workflow id>:<run id>:<seq>`, where `seq` is a workflow-local
   counter carried through ContinueAsNew.
-- [ ] 5.5 `storeOptions` (unlimited retry, 10 s start-to-close, low
+- [x] 5.5 `storeOptions` (unlimited retry, 10 s start-to-close, low
   priority) in `internal/workflows/options.go`.
 - [ ] 5.6 `RepoWorkflow`: call `RecordRun` after the outcome decision,
   and `RecordEvents` at IMPL-0004's decision points (onboarded,

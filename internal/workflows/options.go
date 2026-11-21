@@ -113,3 +113,27 @@ func discoverOptions(ctx workflow.Context, installationID int64) workflow.Contex
 		Priority: TaskPriority(PriorityNormal, installationID),
 	})
 }
+
+// Store recording options (DESIGN-0004 § Workflow and activity changes,
+// ADR-0006): retried without limit, so a store outage delays recording
+// but loses nothing, at low priority behind every run.
+const (
+	StoreStartToClose = 10 * time.Second
+	storeRetryFirst   = time.Second
+	storeRetryMax     = 5 * time.Minute
+)
+
+// storeOptions run RecordRun and RecordEvents.
+func storeOptions(ctx workflow.Context, installationID int64) workflow.Context {
+	return workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: StoreStartToClose,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    storeRetryFirst,
+			BackoffCoefficient: 2,
+			MaximumInterval:    storeRetryMax,
+			// Zero is unlimited.
+			MaximumAttempts: 0,
+		},
+		Priority: TaskPriority(PriorityLow, installationID),
+	})
+}
