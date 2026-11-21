@@ -11,6 +11,7 @@ set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 # skipped silently when the file is absent.
 import? 'docker.just'
 import? 'helm.just'
+import? 'ui.just'
 
 project_name      := "boop"
 binary_name       := "boopd"

@@ -639,8 +639,12 @@ The look is the design system's. The app imports the package's
   and range live in the URL. Detail opens in the package's
   `DetailPanel`, beside the list on a wide screen and over it on a
   narrow one, deep-linked by `?open=`.
-- **Catalog:** the package's Storybook. boop keeps no HTML mockup; the
-  pages are built from the package's parts.
+- **Catalog:** the package's Storybook.
+- **Mockup:** the UI itself over fixture data (`just ui-dev`), built from
+  the package's parts, so the mockup is what ships once the API replaces
+  the fixtures. `ui/design/candidates.html` is a static sketch of the
+  component candidates and the app switcher (INV-0005 findings 8 and 9),
+  drawn by hand on the package's tokens.
 
 ### Pages
 

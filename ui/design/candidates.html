@@ -1,0 +1,771 @@
+<!doctype html>
+<!--
+  Sketch of components boop needs that @donaldgifford/design-system does not
+  have yet (INV-0005 findings 8 and 9). Static HTML: every colour, font, size
+  and radius comes from the package's tokens.css, but the markup is drawn by
+  hand, so treat it as a proposal and not as the package's output.
+
+  Open it from ui/ after `just ui-install` (the stylesheets below resolve
+  into node_modules). Nothing here ships.
+-->
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>boop · component candidates</title>
+    <link rel="stylesheet" href="../node_modules/@fontsource/ibm-plex-sans/latin-400.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/ibm-plex-sans/latin-500.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/ibm-plex-sans/latin-600.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/jetbrains-mono/latin-400.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/jetbrains-mono/latin-500.css" />
+    <link rel="stylesheet" href="../node_modules/@donaldgifford/design-system/src/styles/tokens.css" />
+    <style>
+      /* Base, as the package's globals.css sets it. */
+      * { box-sizing: border-box; border-color: var(--border); }
+      html { color-scheme: dark; }
+      html:not(.dark) { color-scheme: light; }
+      body {
+        margin: 0;
+        background: var(--background);
+        color: var(--foreground);
+        font-family: var(--font-family-sans);
+        font-size: var(--text-base);
+        line-height: 1.45;
+        -webkit-font-smoothing: antialiased;
+      }
+      :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+      button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+      a { color: inherit; text-decoration: none; }
+      .mono { font-family: var(--font-family-mono); }
+      .muted { color: var(--muted-foreground); }
+      .xs { font-size: var(--text-xs); }
+      .label {
+        font-size: var(--label-size-sm);
+        font-weight: 600;
+        letter-spacing: var(--label-tracking);
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+      }
+
+      /* Page. */
+      .page { max-width: 1180px; margin: 0 auto; padding: 20px 18px 64px; }
+      .page > header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 8px; }
+      h1 { font-size: var(--text-xl); font-weight: 600; margin: 0; }
+      h2 { font-size: var(--text-lg); font-weight: 600; margin: 36px 0 2px; }
+      h3 { font-size: var(--text-base); font-weight: 600; margin: 0; line-height: 1; }
+      p { margin: 4px 0 0; }
+      .lede { max-width: 78ch; }
+      .note { margin: 0 0 14px; max-width: 86ch; }
+      .grid { display: grid; gap: 14px; }
+      .two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      @media (max-width: 900px) { .two, .three { grid-template-columns: 1fr; } }
+      .caption { margin-top: 8px; font-size: var(--text-xs); color: var(--muted-foreground); }
+      .status {
+        display: inline-flex; align-items: center; margin-left: 8px; vertical-align: 2px;
+        padding: var(--badge-py) var(--badge-px);
+        font-family: var(--font-family-mono); font-size: var(--text-xs); line-height: 1; font-weight: 400;
+        background: color-mix(in srgb, var(--tone) var(--badge-tint), transparent);
+        color: color-mix(in srgb, var(--tone) var(--badge-tint-text), var(--badge-mix));
+      }
+      .status.new { --tone: var(--info); }
+      .status.move { --tone: var(--warning); }
+
+      /* Card, after the package's Card. */
+      .card {
+        background: var(--card); color: var(--card-foreground);
+        border: 1px solid var(--border); border-radius: var(--radius);
+        padding: 14px 0; display: flex; flex-direction: column; gap: 12px;
+      }
+      .card > .head { padding: 0 14px; display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start; }
+      .card > .head .desc { grid-column: 1; font-size: var(--text-xs); color: var(--muted-foreground); margin-top: 1px; }
+      .card > .head .action { grid-column: 2; grid-row: 1 / span 2; }
+      .card > .body { padding: 0 14px; }
+
+      /* Button, outline and ghost. */
+      .btn {
+        display: inline-flex; align-items: center; gap: 6px; height: var(--control-h);
+        padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius);
+        font-size: var(--text-xs); font-weight: 500;
+      }
+      .btn:hover { background: var(--muted); }
+      .btn.ghost { border-color: transparent; }
+
+      /* 1. Segmented control: the package's Tabs list, default variant. */
+      .segmented {
+        display: inline-flex; height: var(--control-h); border: 1px solid var(--border);
+        border-radius: var(--radius); overflow: hidden;
+      }
+      .segmented button {
+        padding: 0 10px; font-size: var(--text-xs); font-weight: 500; color: var(--muted-foreground);
+        transition: color var(--duration-fast) var(--ease-standard);
+      }
+      .segmented button:hover { color: var(--foreground); }
+      .segmented button[aria-pressed="true"] { background: var(--accent); color: var(--accent-foreground); }
+
+      /* 2. Stacked bars over time. */
+      .stack-time { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; }
+      .stack-time .y {
+        display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end;
+        height: 180px; font-family: var(--font-family-mono); font-size: var(--label-size);
+        color: var(--muted-foreground); font-variant-numeric: tabular-nums;
+      }
+      .stack-time .plot {
+        position: relative; height: 180px; display: flex; align-items: flex-end; gap: 2px;
+        border-bottom: 1px solid var(--border);
+        background-image: linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+        background-size: 100% 25%;
+      }
+      .stack-time .col {
+        position: relative; flex: 1 1 0; min-width: 0; height: 100%;
+        display: flex; flex-direction: column-reverse; gap: 1px;
+      }
+      .stack-time .col span { display: block; width: 100%; }
+      .stack-time .col:hover span { opacity: 0.75; }
+      .stack-time .col.empty::after {
+        content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--muted);
+      }
+      .stack-time .x {
+        grid-column: 2; display: flex; justify-content: space-between; margin-top: 4px;
+        font-family: var(--font-family-mono); font-size: var(--label-size); color: var(--muted-foreground);
+      }
+      .legend {
+        list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 12px;
+        font-size: var(--text-xs); color: var(--muted-foreground);
+      }
+      .legend li { display: inline-flex; align-items: center; gap: 6px; }
+      .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+      .tip {
+        position: absolute; z-index: 5; min-width: 128px; pointer-events: none;
+        padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--popover); color: var(--popover-foreground);
+        box-shadow: var(--elevation-tooltip); font-size: var(--text-xs);
+      }
+      .tip .when { font-family: var(--font-family-mono); font-size: var(--label-size); color: var(--muted-foreground); margin-bottom: 2px; }
+      .tip .row { display: flex; justify-content: space-between; gap: 14px; }
+      .tip .row b { font-weight: 600; font-variant-numeric: tabular-nums; }
+      .tip .row i { display: inline-block; width: 10px; height: 2px; margin-right: 6px; vertical-align: middle; }
+
+      /* 3. Popover and option rows. */
+      .popover {
+        width: 260px; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--popover); color: var(--popover-foreground); box-shadow: var(--elevation-overlay);
+      }
+      .popover .heading { padding: 8px 8px 4px; }
+      .option {
+        display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border-radius: 2px;
+        text-align: left; font-size: var(--text-base); line-height: var(--line-height-compact);
+      }
+      .option:hover { background: var(--accent); color: var(--accent-foreground); }
+      .option .detail { margin-left: auto; font-family: var(--font-family-mono); font-size: var(--label-size); color: var(--muted-foreground); }
+      .option .check { width: 14px; color: var(--primary); }
+      .popover hr { border: 0; border-top: 1px solid var(--border); margin: 4px -4px; }
+      .popover input {
+        width: 100%; height: var(--control-h); padding: 0 8px; margin-bottom: 4px;
+        border: 1px solid var(--input); border-radius: var(--radius);
+        background: transparent; color: inherit; font: inherit; font-size: var(--text-xs);
+      }
+
+      /* 4. Filter bar: the package's FilterChip in a row. */
+      .filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+      .chip {
+        display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        font-family: var(--font-family-mono); font-size: var(--label-size); color: var(--muted-foreground);
+      }
+      .chip:hover { background: var(--muted); }
+      .chip b { font-weight: 500; color: var(--foreground); }
+      .chip .x { margin-left: 2px; opacity: 0.7; }
+      .chip.add { border-style: dashed; }
+      .filterbar .clear { font-size: var(--text-xs); color: var(--muted-foreground); margin-left: 4px; }
+      .filterbar .clear:hover { color: var(--foreground); }
+      .filterbar .count { margin-left: auto; font-size: var(--text-xs); color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+
+      /* 5. Inline state text. */
+      .inline-state { padding: 10px 14px; font-size: var(--text-xs); color: var(--muted-foreground); }
+      .inline-state.loading::before {
+        content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 8px; vertical-align: 1px;
+        border-radius: var(--pill-radius); background: var(--muted-foreground); animation: pulse 1.2s ease-in-out infinite;
+      }
+      @keyframes pulse { 50% { opacity: 0.25; } }
+      @media (prefers-reduced-motion: reduce) { .inline-state.loading::before { animation: none; } }
+      .thead {
+        display: grid; grid-template-columns: 2fr 1fr 1fr; padding: 0 14px; height: var(--table-head-h); align-items: center;
+        border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+      }
+
+      /* 6. App switcher: the sidebar frame, after shell/sidebar. */
+      .frame {
+        display: flex; height: 430px; border: 1px solid var(--border); border-radius: var(--radius);
+        overflow: hidden; background: var(--background); position: relative;
+      }
+      .sidebar {
+        width: 16rem; flex-shrink: 0; display: flex; flex-direction: column;
+        background: var(--sidebar); color: var(--sidebar-foreground); border-right: 1px solid var(--sidebar-border);
+      }
+      .sidebar.rail { width: 3rem; }
+      .sidebar .sec { padding: 8px; }
+      .sidebar .grow { flex: 1; }
+      .sidebar .grouplabel { padding: 12px 10px 4px; }
+      .identity {
+        display: flex; align-items: center; gap: 10px; width: 100%; height: 48px; padding: 6px 8px;
+        border-radius: var(--radius); text-align: left;
+      }
+      .identity:hover, .identity[aria-expanded="true"] { background: var(--sidebar-accent); }
+      .identity .names { display: grid; flex: 1; min-width: 0; line-height: 1.25; }
+      .identity .names b { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .identity .names span { font-size: var(--text-xs); color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .mark {
+        display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0;
+        border-radius: var(--radius); background: var(--primary); color: var(--primary-foreground);
+      }
+      .mark.sm { width: 24px; height: 24px; }
+      .mark.sm svg { width: 14px; height: 14px; }
+      .mark.other { background: var(--muted); color: var(--foreground); border: 1px solid var(--border); }
+      .mark.avatar { background: var(--avatar); color: var(--avatar-foreground); font-size: var(--label-size); font-weight: 600; }
+      .nav {
+        display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 10px; border-radius: var(--radius);
+        color: var(--muted-foreground); line-height: var(--line-height-compact);
+      }
+      .nav:hover { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+      .nav[aria-current="page"] { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); font-weight: 500; }
+      .nav svg, .identity svg, .menu svg { width: 16px; height: 16px; flex-shrink: 0; }
+      .sidebar.rail .sec { padding: 8px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+      .sidebar.rail .nav { width: 32px; height: 32px; padding: 0; justify-content: center; }
+      .main { flex: 1; min-width: 0; }
+      .topbar {
+        display: flex; align-items: center; gap: 8px; height: var(--header-height); padding: 0 12px;
+        border-bottom: 1px solid var(--border);
+      }
+      .topbar .end { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+      .topbar .sep { width: 1px; height: 16px; background: var(--border); margin: 0 4px; }
+      .ghostblock { margin: 16px 18px; height: 56px; border: 1px dashed var(--border); border-radius: var(--radius); }
+      .menu {
+        position: absolute; z-index: 10; min-width: 248px; padding: 4px;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--popover); color: var(--popover-foreground); box-shadow: var(--elevation-overlay);
+      }
+      .menu .heading { padding: 8px 8px 4px; }
+      .menu .item { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 2px; }
+      .menu .item:hover { background: var(--accent); }
+      .menu .item .names { display: grid; flex: 1; line-height: 1.25; }
+      .menu .item .names span { font-size: var(--text-xs); color: var(--muted-foreground); }
+      .menu .item .here { font-family: var(--font-family-mono); font-size: var(--label-size); color: var(--muted-foreground); }
+      .menu .item .out { color: var(--muted-foreground); }
+      .menu hr { border: 0; border-top: 1px solid var(--border); margin: 4px -4px; }
+      .menu .foot { padding: 6px 8px; font-size: var(--text-xs); color: var(--muted-foreground); }
+      .frame.short { height: 150px; }
+      pre {
+        margin: 0; padding: 12px 14px; overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--code-bg); font-family: var(--font-family-mono); font-size: var(--text-xs); line-height: 1.5;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Icons: Tabler outlines, the set the package uses. -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <defs>
+        <g id="i-selector" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 9 4-4 4 4" /><path d="m16 15-4 4-4-4" /></g>
+        <g id="i-external" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" /><path d="m11 13 9-9" /><path d="M15 4h5v5" /></g>
+        <g id="i-refresh" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11A8.1 8.1 0 0 0 4.5 9M4 5v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></g>
+        <g id="i-shield" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a12 12 0 0 0 8.5 3A12 12 0 0 1 12 21 12 12 0 0 1 3.500 6 12 12 0 0 0 12 3" /><path d="m9 12 2 2 4-4" /></g>
+        <g id="i-file" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" /><path d="M9 9h1M9 13h6M9 17h6" /></g>
+        <g id="i-grid" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" /></g>
+        <g id="i-pr" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="18" r="2" /><circle cx="6" cy="6" r="2" /><circle cx="18" cy="18" r="2" /><path d="M6 8v8M11 6h5a2 2 0 0 1 2 2v8" /><path d="m14 9-3-3 3-3" /></g>
+        <g id="i-clock" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></g>
+        <g id="i-package" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 8 4.5v9L12 21l-8-4.500v-9L12 3" /><path d="m12 12 8-4.500M12 12v9M12 12 4 7.500" /></g>
+        <g id="i-list" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11M5 6v.01M5 12v.01M5 18v.01" /></g>
+        <g id="i-panel" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM9 4v16" /></g>
+        <g id="i-apps" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h4v4H4zM10 4h4v4h-4zM16 4h4v4h-4zM4 10h4v4H4zM10 10h4v4h-4zM16 10h4v4h-4zM4 16h4v4H4zM10 16h4v4h-4zM16 16h4v4h-4z" /></g>
+        <g id="i-check" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7" /></g>
+      </defs>
+    </svg>
+
+    <div class="page">
+      <header>
+        <div>
+          <h1>boop · component candidates</h1>
+          <p class="muted lede">
+            Components boop needs that <span class="mono">@donaldgifford/design-system</span> 0.3.2 does not have: one
+            new chart, four small controls that repo-guardian keeps local today, and the app switcher. Colours, fonts and
+            sizes are the package's tokens. The markup is hand-drawn, so this is a proposal.
+          </p>
+        </div>
+        <button class="btn" id="theme" style="margin-left: auto; flex-shrink: 0">Light theme</button>
+      </header>
+
+      <!-- ─── 1 ──────────────────────────────────────────────────────── -->
+      <h2>1. Stacked bars over time <span class="status new">new block</span></h2>
+      <p class="muted note">
+        For "runs by outcome" on the Estate page. The package's <span class="mono">TrendChart</span> draws one series and
+        <span class="mono">StackedBars</span> stacks by category with no time axis. This is one column per day (or hour on
+        a 1d range), stacked in the status tokens, with the legend and tooltip of <span class="mono">ChartCard</span>.
+      </p>
+      <div class="grid two">
+        <div class="card">
+          <div class="head">
+            <h3>Runs by outcome</h3>
+            <div class="desc">per day, last 30 days</div>
+            <div class="action">
+              <div class="segmented" role="group" aria-label="View">
+                <button aria-pressed="true">Chart</button>
+                <button aria-pressed="false">Table</button>
+              </div>
+            </div>
+          </div>
+          <div class="body">
+            <div class="stack-time" id="runs30"></div>
+            <ul class="legend" id="runs-legend"></ul>
+          </div>
+        </div>
+        <div class="card">
+          <div class="head">
+            <h3>Runs by outcome</h3>
+            <div class="desc">per hour, last 24 hours · a quiet fleet, with gaps</div>
+          </div>
+          <div class="body">
+            <div class="stack-time" id="runs24"></div>
+            <ul class="legend" id="runs-legend-2"></ul>
+          </div>
+        </div>
+      </div>
+      <p class="caption">
+        Proposed props, after <span class="mono">StackedBars</span>: <span class="mono">points</span> (each
+        <span class="mono">{ at, counts }</span>), <span class="mono">segments</span> (key, label, colour),
+        <span class="mono">rangeDays</span> for the x ticks, <span class="mono">label</span>, and a
+        <span class="mono">stackTimeTable()</span> for the card's table view. A bucket with no runs shows a baseline tick,
+        not a gap in the axis.
+      </p>
+
+      <!-- ─── 2 ──────────────────────────────────────────────────────── -->
+      <h2>2. Segmented control <span class="status move">local in repo-guardian</span></h2>
+      <p class="muted note">
+        The range control on every page, and any two-to-five way switch. It is the package's
+        <span class="mono">Tabs</span> list without panels. repo-guardian keeps it local (77 lines) because its version
+        binds to the router; the unbound control can move, and each app keeps its own binding.
+      </p>
+      <div class="card">
+        <div class="body" style="display: flex; flex-wrap: wrap; gap: 24px; align-items: center">
+          <div>
+            <div class="label" style="margin-bottom: 6px">Range</div>
+            <div class="segmented" role="group" aria-label="Range" data-seg>
+              <button aria-pressed="false">1d</button>
+              <button aria-pressed="false">7d</button>
+              <button aria-pressed="true">30d</button>
+              <button aria-pressed="false">90d</button>
+            </div>
+          </div>
+          <div>
+            <div class="label" style="margin-bottom: 6px">Pull request state</div>
+            <div class="segmented" role="group" aria-label="State" data-seg>
+              <button aria-pressed="true">Open <span class="mono muted">318</span></button>
+              <button aria-pressed="false">Merged</button>
+              <button aria-pressed="false">Closed</button>
+            </div>
+          </div>
+          <div>
+            <div class="label" style="margin-bottom: 6px">Time zone (exists: TimeZoneToggle)</div>
+            <div class="segmented" role="group" aria-label="Time zone" data-seg>
+              <button aria-pressed="true">Local</button>
+              <button aria-pressed="false">UTC</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── 3 ──────────────────────────────────────────────────────── -->
+      <h2>3. Popover option rows <span class="status move">local in repo-guardian</span></h2>
+      <p class="muted note">
+        The rows inside a picker popover: a group heading, an item with a mono detail column and a "current" mark, and a
+        separator. boop's owner scope needs them, and so does every filter chip's editor. The package's
+        <span class="mono">Popover</span> is the container.
+      </p>
+      <div class="grid three">
+        <div>
+          <div class="popover">
+            <div class="heading label">Owner scope</div>
+            <button class="option"><span class="check"><svg viewBox="0 0 24 24" width="14" height="14"><use href="#i-check" /></svg></span>All owners<span class="detail">142 repos</span></button>
+            <hr />
+            <button class="option"><span class="check"></span>donaldgifford<span class="detail">96</span></button>
+            <button class="option"><span class="check"></span>fartlab<span class="detail">31</span></button>
+            <button class="option"><span class="check"></span>acme-web<span class="detail">15</span></button>
+          </div>
+          <p class="caption">Owner scope, on every page header.</p>
+        </div>
+        <div>
+          <div class="popover">
+            <div class="heading label">Update type</div>
+            <button class="option"><span class="check"></span>major<span class="detail">41</span></button>
+            <button class="option"><span class="check"><svg viewBox="0 0 24 24" width="14" height="14"><use href="#i-check" /></svg></span>minor<span class="detail">127</span></button>
+            <button class="option"><span class="check"></span>patch<span class="detail">118</span></button>
+            <button class="option"><span class="check"></span>digest<span class="detail">22</span></button>
+            <button class="option"><span class="check"></span>lockFileMaintenance<span class="detail">10</span></button>
+          </div>
+          <p class="caption">A filter chip's editor.</p>
+        </div>
+        <div>
+          <div class="popover">
+            <input placeholder="Filter managers…" aria-label="Filter managers" />
+            <div class="heading label">Manager</div>
+            <button class="option"><span class="check"></span>gomod<span class="detail">88</span></button>
+            <button class="option"><span class="check"></span>github-actions<span class="detail">74</span></button>
+            <button class="option"><span class="check"></span>dockerfile<span class="detail">52</span></button>
+            <button class="option"><span class="check"></span>helm-values<span class="detail">29</span></button>
+          </div>
+          <p class="caption">With a text filter, for long lists.</p>
+        </div>
+      </div>
+
+      <!-- ─── 4 ──────────────────────────────────────────────────────── -->
+      <h2>4. Filter bar <span class="status move">local in repo-guardian</span></h2>
+      <p class="muted note">
+        The package has one <span class="mono">FilterChip</span>. A list page needs the row around it: the active chips,
+        a way to remove one, the dashed "add" chip, "clear", and the result count. repo-guardian's bar (176 lines) is tied
+        to its own filters; the generic part is the layout and the remove and clear behaviour.
+      </p>
+      <div class="card">
+        <div class="head">
+          <h3>Pull requests</h3>
+          <div class="desc mono">/api/v1/pull-requests</div>
+        </div>
+        <div class="body">
+          <div class="filterbar">
+            <button class="chip">state = <b>open</b><span class="x" aria-label="remove">×</span></button>
+            <button class="chip">update_type = <b>minor</b><span class="x" aria-label="remove">×</span></button>
+            <button class="chip">older_than = <b>14d</b><span class="x" aria-label="remove">×</span></button>
+            <button class="chip">manager = <b>gomod</b><span class="x" aria-label="remove">×</span></button>
+            <button class="chip add">+ filter</button>
+            <button class="clear">Clear</button>
+            <span class="count">23 of 318</span>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="margin-top: 14px">
+        <div class="body">
+          <div class="filterbar">
+            <button class="chip add">+ filter</button>
+            <span class="count">318 pull requests</span>
+          </div>
+        </div>
+      </div>
+      <p class="caption">Above: four filters active. Below: none, where only the add chip and the count show.</p>
+
+      <!-- ─── 5 ──────────────────────────────────────────────────────── -->
+      <h2>5. Inline loading and empty text <span class="status move">local in repo-guardian</span></h2>
+      <p class="muted note">
+        One line inside a panel or under a table head. The package's <span class="mono">EmptyState</span> is a page-level
+        block with an icon and a dashed border, and its skeletons stand in for layout, so neither fits here.
+      </p>
+      <div class="grid three">
+        <div class="card" style="gap: 0; padding-bottom: 0">
+          <div class="head" style="padding-bottom: 12px"><h3>Waiting updates</h3></div>
+          <div class="thead label"><span>Package</span><span>Section</span><span>Since</span></div>
+          <div class="inline-state loading">Loading…</div>
+        </div>
+        <div class="card" style="gap: 0; padding-bottom: 0">
+          <div class="head" style="padding-bottom: 12px"><h3>Waiting updates</h3></div>
+          <div class="thead label"><span>Package</span><span>Section</span><span>Since</span></div>
+          <div class="inline-state">Nothing is waiting on this dashboard.</div>
+        </div>
+        <div class="card" style="gap: 0; padding-bottom: 0">
+          <div class="head" style="padding-bottom: 12px"><h3>Live state</h3></div>
+          <div class="inline-state" style="border-top: 1px solid var(--border)">Live state unavailable. Showing the stored state.</div>
+        </div>
+      </div>
+
+      <!-- ─── 6 ──────────────────────────────────────────────────────── -->
+      <h2>6. App switcher <span class="status new">new shell part</span></h2>
+      <p class="muted note">
+        A list of links to the other apps, shown when a deployment configures one. It sits in the sidebar header, which
+        the package already documents as "the app switcher". Each entry is a plain link to another origin: no shared
+        session and no calls between apps. With no list configured, the header is the plain identity it is today.
+      </p>
+
+      <div class="grid two">
+        <div>
+          <div class="frame">
+            <aside class="sidebar">
+              <div class="sec">
+                <button class="identity" aria-expanded="true" aria-haspopup="menu">
+                  <span class="mark"><svg viewBox="0 0 24 24"><use href="#i-refresh" /></svg></span>
+                  <span class="names"><b>boop</b><span>renovate · fleet</span></span>
+                  <svg viewBox="0 0 24 24" class="muted"><use href="#i-selector" /></svg>
+                </button>
+              </div>
+              <div class="sec grow" style="padding-top: 0">
+                <div class="grouplabel label">Fleet</div>
+                <a class="nav" aria-current="page"><svg viewBox="0 0 24 24"><use href="#i-grid" /></svg>Estate</a>
+                <a class="nav"><svg viewBox="0 0 24 24"><use href="#i-pr" /></svg>Pull requests</a>
+                <a class="nav"><svg viewBox="0 0 24 24"><use href="#i-clock" /></svg>Waiting</a>
+                <a class="nav"><svg viewBox="0 0 24 24"><use href="#i-package" /></svg>Packages</a>
+                <a class="nav"><svg viewBox="0 0 24 24"><use href="#i-list" /></svg>Repositories</a>
+              </div>
+              <div class="sec">
+                <button class="identity">
+                  <span class="mark avatar">DG</span>
+                  <span class="names"><b>Donald Gifford</b><span>donald@fartlab.dev</span></span>
+                  <svg viewBox="0 0 24 24" class="muted"><use href="#i-selector" /></svg>
+                </button>
+              </div>
+            </aside>
+            <div class="main">
+              <div class="topbar">
+                <svg viewBox="0 0 24 24" width="16" height="16" class="muted"><use href="#i-panel" /></svg>
+                <span class="sep"></span>
+                <span>Estate</span>
+              </div>
+              <div class="ghostblock"></div>
+              <div class="ghostblock"></div>
+            </div>
+            <div class="menu" role="menu" style="left: calc(16rem + 6px); top: 8px">
+              <div class="heading label">Apps</div>
+              <a class="item" role="menuitem">
+                <span class="mark sm"><svg viewBox="0 0 24 24"><use href="#i-refresh" /></svg></span>
+                <span class="names"><b style="font-weight: 500">boop</b><span>renovate · fleet</span></span>
+                <span class="here">current</span>
+              </a>
+              <a class="item" role="menuitem">
+                <span class="mark sm other"><svg viewBox="0 0 24 24"><use href="#i-shield" /></svg></span>
+                <span class="names"><b style="font-weight: 500">Repo Guardian</b><span>compliance · read-only</span></span>
+                <svg viewBox="0 0 24 24" class="out"><use href="#i-external" /></svg>
+              </a>
+              <a class="item" role="menuitem">
+                <span class="mark sm other"><svg viewBox="0 0 24 24"><use href="#i-file" /></svg></span>
+                <span class="names"><b style="font-weight: 500">docz</b><span>design docs · review</span></span>
+                <svg viewBox="0 0 24 24" class="out"><use href="#i-external" /></svg>
+              </a>
+              <hr />
+              <div class="foot">Each app has its own sign-in.</div>
+            </div>
+          </div>
+          <p class="caption">Open, in boop. The current app is marked and is not a link; the others leave the page.</p>
+        </div>
+
+        <div class="grid" style="align-content: start">
+          <div>
+            <div class="frame short">
+              <aside class="sidebar">
+                <div class="sec">
+                  <button class="identity">
+                    <span class="mark"><svg viewBox="0 0 24 24"><use href="#i-refresh" /></svg></span>
+                    <span class="names"><b>boop</b><span>renovate · fleet</span></span>
+                    <svg viewBox="0 0 24 24" class="muted"><use href="#i-selector" /></svg>
+                  </button>
+                </div>
+              </aside>
+              <div class="main"><div class="topbar"><span>Estate</span></div></div>
+            </div>
+            <p class="caption">Closed, with a list configured: the up-down chevrons say it is a menu.</p>
+          </div>
+          <div>
+            <div class="frame short">
+              <aside class="sidebar">
+                <div class="sec">
+                  <a class="identity">
+                    <span class="mark"><svg viewBox="0 0 24 24"><use href="#i-refresh" /></svg></span>
+                    <span class="names"><b>boop</b><span>renovate · fleet</span></span>
+                  </a>
+                </div>
+              </aside>
+              <div class="main"><div class="topbar"><span>Estate</span></div></div>
+            </div>
+            <p class="caption">No list configured (the default): the plain identity, a link to the home page, as today.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid two" style="margin-top: 14px">
+        <div>
+          <div class="frame" style="height: 250px">
+            <aside class="sidebar rail">
+              <div class="sec">
+                <button class="mark" aria-expanded="true" aria-label="Apps"><svg viewBox="0 0 24 24" width="16" height="16"><use href="#i-refresh" /></svg></button>
+              </div>
+              <div class="sec grow" style="padding-top: 4px">
+                <a class="nav" aria-current="page"><svg viewBox="0 0 24 24"><use href="#i-grid" /></svg></a>
+                <a class="nav"><svg viewBox="0 0 24 24"><use href="#i-pr" /></svg></a>
+                <a class="nav"><svg viewBox="0 0 24 24"><use href="#i-clock" /></svg></a>
+                <a class="nav"><svg viewBox="0 0 24 24"><use href="#i-package" /></svg></a>
+              </div>
+              <div class="sec"><span class="mark avatar">DG</span></div>
+            </aside>
+            <div class="main">
+              <div class="topbar"><svg viewBox="0 0 24 24" width="16" height="16" class="muted"><use href="#i-panel" /></svg><span class="sep"></span><span>Estate</span></div>
+              <div class="ghostblock"></div>
+            </div>
+            <div class="menu" role="menu" style="left: calc(3rem + 6px); top: 8px">
+              <div class="heading label">Apps</div>
+              <a class="item"><span class="mark sm"><svg viewBox="0 0 24 24"><use href="#i-refresh" /></svg></span><span class="names"><b style="font-weight: 500">boop</b></span><span class="here">current</span></a>
+              <a class="item"><span class="mark sm other"><svg viewBox="0 0 24 24"><use href="#i-shield" /></svg></span><span class="names"><b style="font-weight: 500">Repo Guardian</b></span><svg viewBox="0 0 24 24" class="out"><use href="#i-external" /></svg></a>
+              <a class="item"><span class="mark sm other"><svg viewBox="0 0 24 24"><use href="#i-file" /></svg></span><span class="names"><b style="font-weight: 500">docz</b></span><svg viewBox="0 0 24 24" class="out"><use href="#i-external" /></svg></a>
+            </div>
+          </div>
+          <p class="caption">Collapsed to the icon rail: the app's mark opens the same menu.</p>
+        </div>
+        <div>
+          <div class="frame" style="height: 250px; flex-direction: column">
+            <div class="topbar" style="width: 100%">
+              <button class="identity" aria-expanded="true" style="width: auto; height: 32px; padding: 4px 6px; gap: 8px">
+                <span class="mark sm"><svg viewBox="0 0 24 24"><use href="#i-file" /></svg></span>
+                <b style="font-weight: 500">docz</b>
+                <svg viewBox="0 0 24 24" class="muted"><use href="#i-selector" /></svg>
+              </button>
+              <span class="sep"></span>
+              <span class="muted">Documents</span>
+              <div class="end"><button class="btn ghost">Search</button></div>
+            </div>
+            <div class="ghostblock" style="width: calc(100% - 36px)"></div>
+            <div class="menu" role="menu" style="left: 12px; top: calc(var(--header-height) + 4px)">
+              <div class="heading label">Apps</div>
+              <a class="item"><span class="mark sm"><svg viewBox="0 0 24 24"><use href="#i-file" /></svg></span><span class="names"><b style="font-weight: 500">docz</b><span>design docs · review</span></span><span class="here">current</span></a>
+              <a class="item"><span class="mark sm other"><svg viewBox="0 0 24 24"><use href="#i-refresh" /></svg></span><span class="names"><b style="font-weight: 500">boop</b><span>renovate · fleet</span></span><svg viewBox="0 0 24 24" class="out"><use href="#i-external" /></svg></a>
+              <a class="item"><span class="mark sm other"><svg viewBox="0 0 24 24"><use href="#i-shield" /></svg></span><span class="names"><b style="font-weight: 500">Repo Guardian</b><span>compliance · read-only</span></span><svg viewBox="0 0 24 24" class="out"><use href="#i-external" /></svg></a>
+            </div>
+          </div>
+          <p class="caption">A top-bar form, for an app with no sidebar. docz is drawn this way today.</p>
+        </div>
+      </div>
+
+      <h3 style="margin-top: 22px">What a deployment would configure</h3>
+      <p class="muted note" style="margin-top: 6px">
+        The same list goes to every app. An app finds itself by <span class="mono">id</span> and marks that entry
+        current. Names, subtitles and marks could instead be fixed in the package per known app, leaving only the URLs to
+        configure; that is an open point for the design-system RFC.
+      </p>
+      <pre>ui:
+  apps:                       # empty by default: no switcher
+    - id: boop
+      name: boop
+      subtitle: renovate · fleet
+      url: https://boop.fartlab.dev
+    - id: repo-guardian
+      name: Repo Guardian
+      subtitle: compliance · read-only
+      url: https://repo-guardian.fartlab.dev
+    - id: docz
+      name: docz
+      subtitle: design docs · review
+      url: https://docz.fartlab.dev</pre>
+    </div>
+
+    <script>
+      // Theme toggle: the package switches themes by the .dark class on <html>.
+      const themeButton = document.getElementById("theme");
+      themeButton.addEventListener("click", () => {
+        const dark = document.documentElement.classList.toggle("dark");
+        themeButton.textContent = dark ? "Light theme" : "Dark theme";
+      });
+
+      // Segmented controls: one pressed button per group.
+      for (const group of document.querySelectorAll("[data-seg]")) {
+        group.addEventListener("click", (event) => {
+          const button = event.target.closest("button");
+          if (!button) return;
+          for (const b of group.querySelectorAll("button")) b.setAttribute("aria-pressed", String(b === button));
+        });
+      }
+
+      // Stacked bars over time, from fixture counts.
+      const segments = [
+        { key: "succeeded", label: "Succeeded", color: "var(--success)" },
+        { key: "warned", label: "Warnings", color: "var(--warning)" },
+        { key: "failed", label: "Failed", color: "var(--destructive)" },
+      ];
+
+      // A small fixed generator, so the sketch draws the same bars every time.
+      function series(n, base, seed) {
+        let s = seed;
+        const next = () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+        return Array.from({ length: n }, (_, i) => {
+          const total = Math.round(base * (0.55 + next() * 0.6));
+          const failed = next() < 0.3 ? Math.round(total * next() * 0.12) : 0;
+          const warned = Math.round(total * next() * 0.1);
+          return { i, counts: { succeeded: Math.max(0, total - failed - warned), warned, failed } };
+        });
+      }
+
+      function drawStack(id, points, labelOf, ticks) {
+        const root = document.getElementById(id);
+        const totals = points.map((p) => segments.reduce((sum, s) => sum + p.counts[s.key], 0));
+        const top = Math.max(4, Math.ceil(Math.max(...totals) / 4) * 4);
+        const y = document.createElement("div");
+        y.className = "y";
+        for (const v of [top, (top * 3) / 4, top / 2, top / 4, 0]) {
+          const tick = document.createElement("span");
+          tick.textContent = v;
+          y.append(tick);
+        }
+        const plot = document.createElement("div");
+        plot.className = "plot";
+        const tip = document.createElement("div");
+        tip.className = "tip";
+        tip.hidden = true;
+        points.forEach((p, index) => {
+          const col = document.createElement("div");
+          col.className = totals[index] === 0 ? "col empty" : "col";
+          for (const s of segments) {
+            if (p.counts[s.key] === 0) continue;
+            const bar = document.createElement("span");
+            bar.style.height = `${(100 * p.counts[s.key]) / top}%`;
+            bar.style.background = s.color;
+            col.append(bar);
+          }
+          col.addEventListener("mouseenter", () => {
+            tip.replaceChildren();
+            const when = document.createElement("div");
+            when.className = "when";
+            when.textContent = labelOf(p.i);
+            tip.append(when);
+            for (const s of segments) {
+              const row = document.createElement("div");
+              row.className = "row";
+              const name = document.createElement("span");
+              const swatch = document.createElement("i");
+              swatch.style.background = s.color;
+              name.append(swatch, s.label);
+              const value = document.createElement("b");
+              value.textContent = p.counts[s.key];
+              row.append(name, value);
+              tip.append(row);
+            }
+            tip.hidden = false;
+            const left = col.offsetLeft + col.offsetWidth + 6;
+            tip.style.left = `${Math.min(left, plot.offsetWidth - 140)}px`;
+            tip.style.top = "8px";
+          });
+          col.addEventListener("mouseleave", () => (tip.hidden = true));
+          plot.append(col);
+        });
+        plot.append(tip);
+        const x = document.createElement("div");
+        x.className = "x";
+        for (const t of ticks) {
+          const tick = document.createElement("span");
+          tick.textContent = t;
+          x.append(tick);
+        }
+        root.append(y, plot, x);
+      }
+
+      function drawLegend(id) {
+        const list = document.getElementById(id);
+        for (const s of segments) {
+          const item = document.createElement("li");
+          const swatch = document.createElement("i");
+          swatch.style.background = s.color;
+          item.append(swatch, s.label);
+          list.append(item);
+        }
+      }
+
+      const days = series(30, 150, 7);
+      const dayLabel = (i) => new Date(Date.UTC(2026, 9, 23 + i)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+      drawStack("runs30", days, dayLabel, [0, 7, 14, 21, 29].map(dayLabel));
+      drawLegend("runs-legend");
+
+      const hours = series(24, 9, 3).map((p) => (p.i > 1 && p.i < 6 ? { ...p, counts: { succeeded: 0, warned: 0, failed: 0 } } : p));
+      drawStack("runs24", hours, (i) => `${String(i).padStart(2, "0")}:00`, ["00:00", "06:00", "12:00", "18:00", "23:00"]);
+      drawLegend("runs-legend-2");
+    </script>
+  </body>
+</html>
