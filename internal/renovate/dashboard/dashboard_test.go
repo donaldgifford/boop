@@ -118,3 +118,19 @@ func TestDiff(t *testing.T) {
 		t.Errorf("Diff(after, before) = %+v, want none", got)
 	}
 }
+
+func TestOutcome(t *testing.T) {
+	t.Parallel()
+	snap, err := dashboard.Parse(small(t))
+	if got := dashboard.Outcome(&snap, err); got != dashboard.OutcomeUnknownMarker {
+		t.Errorf("Outcome(unknown marker) = %q", got)
+	}
+	snap.Unknown = 0
+	if got := dashboard.Outcome(&snap, nil); got != dashboard.OutcomeParsed {
+		t.Errorf("Outcome(parsed) = %q", got)
+	}
+	snap, err = dashboard.Parse("not one")
+	if got := dashboard.Outcome(&snap, err); got != dashboard.OutcomeNotDashboard {
+		t.Errorf("Outcome(not a dashboard) = %q", got)
+	}
+}

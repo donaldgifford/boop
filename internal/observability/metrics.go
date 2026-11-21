@@ -59,6 +59,8 @@ const (
 	// The event store's (DESIGN-0004 § Observability).
 	StoreAppendTotal   = "boopd_store_append_total"
 	StoreAppendSeconds = "boopd_store_append_seconds"
+	// The dependency dashboard parser's (IMPL-0005 4.5).
+	DashboardParseTotal = "boopd_dashboard_parse_total"
 )
 
 // runBuckets span a pod start of seconds to a run of the full hour.
@@ -94,6 +96,7 @@ type Metrics struct {
 	floorRaised metric.Int64Counter
 	appends     metric.Int64Counter
 	appendTime  metric.Float64Histogram
+	dashParse   metric.Int64Counter
 }
 
 // NewMetrics creates the instruments on mp's boopd meter. Call it once
@@ -150,6 +153,7 @@ func NewMetrics(mp metric.MeterProvider) (*Metrics, error) {
 		metric.WithExplicitBucketBoundaries(temporalBuckets...))
 	add(err)
 	out.appendTime = appendTime
+	out.dashParse = counter(DashboardParseTotal, "Dependency dashboard bodies parsed, by outcome (parsed, unknown-marker, not-dashboard).")
 	if err := errors.Join(errs...); err != nil {
 		return nil, err
 	}
@@ -269,4 +273,10 @@ func (m *Metrics) StoreAppend(role, kind, outcome string) {
 // StoreAppendSeconds implements store.Metrics.
 func (m *Metrics) StoreAppendSeconds(role string, d time.Duration) {
 	m.appendTime.Record(context.Background(), d.Seconds(), metric.WithAttributes(attribute.String("role", role)))
+}
+
+// DashboardParse counts one dependency dashboard body parsed, by
+// dashboard.Outcome.
+func (m *Metrics) DashboardParse(outcome string) {
+	m.dashParse.Add(context.Background(), 1, metric.WithAttributes(attribute.String("outcome", outcome)))
 }

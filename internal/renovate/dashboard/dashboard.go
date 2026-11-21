@@ -189,6 +189,26 @@ func item(section string, m []string) Item {
 	return it
 }
 
+// Parse outcomes, the outcome label of boopd_dashboard_parse_total.
+const (
+	OutcomeParsed        = "parsed"
+	OutcomeUnknownMarker = "unknown-marker"
+	OutcomeNotDashboard  = "not-dashboard"
+)
+
+// Outcome names what Parse returned, for the metric: parsed, parsed
+// with a marker this package does not know, or not a dashboard.
+func Outcome(snap *Snapshot, err error) string {
+	switch {
+	case err != nil:
+		return OutcomeNotDashboard
+	case snap.Unknown > 0:
+		return OutcomeUnknownMarker
+	default:
+		return OutcomeParsed
+	}
+}
+
 // Tick is an item a human ticked.
 type Tick struct {
 	Marker  string

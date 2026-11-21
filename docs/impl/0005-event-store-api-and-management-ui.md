@@ -384,7 +384,7 @@ with one commit per numbered task. The PR split is in OQ1.
 - [x] 4.4 Testdata: the proxmox-go-sdk#34 bodies from before and after
   the pin fix, a body with every section, an unknown marker, and a bot
   rewrite versus a human tick.
-- [ ] 4.5 `boopd_dashboard_parse_total{outcome}`.
+- [x] 4.5 `boopd_dashboard_parse_total{outcome}`.
 
 #### Success Criteria
 
