@@ -381,7 +381,7 @@ with one commit per numbered task. The PR split is in OQ1.
     unknown ones).
   - Each item records its branch, title, dependencies and ticked state.
   - `Diff(before, after Snapshot) []Tick` finds what a human ticked.
-- [ ] 4.4 Testdata: the proxmox-go-sdk#34 bodies from before and after
+- [x] 4.4 Testdata: the proxmox-go-sdk#34 bodies from before and after
   the pin fix, a body with every section, an unknown marker, and a bot
   rewrite versus a human tick.
 - [ ] 4.5 `boopd_dashboard_parse_total{outcome}`.

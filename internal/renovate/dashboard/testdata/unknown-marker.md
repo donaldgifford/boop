@@ -12,4 +12,8 @@ This issue lists Renovate updates and detected dependencies. Read the [Dependenc
 
 ## Detected Dependencies
 
- - [ ] <!-- rebase-branch=renovate/ignored -->not an item
+ - `z 1.0.0` → [Updates: `2.0.0`]
+
+---
+
+ - [ ] <!-- manual job -->Check this box to trigger a request for Renovate to run again on this repository

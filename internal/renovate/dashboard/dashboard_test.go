@@ -26,8 +26,8 @@ import (
 )
 
 // small reads testdata/unknown-marker.md: an approval, a ticked global
-// box, an open PR, a marker this package does not know, and a checkbox
-// under Detected Dependencies that is not an item.
+// box, an open PR, a marker this package does not know, and the manual
+// job box after the closing rule.
 func small(t *testing.T) string {
 	t.Helper()
 	b, err := os.ReadFile("testdata/unknown-marker.md")
@@ -57,6 +57,11 @@ func TestParse(t *testing.T) {
 			Title: "fix(deps): update module x to v1.2.0", PR: 35,
 		},
 		{Marker: dashboard.MarkerOther, Raw: "frobnicate-branch", Branch: "renovate/y", Section: "Open", Title: "something new"},
+		{
+			Marker: dashboard.MarkerManualJob,
+			Raw:    "manual job",
+			Title:  "Check this box to trigger a request for Renovate to run again on this repository",
+		},
 	}
 	if len(snap.Items) != len(want) {
 		t.Fatalf("Parse() items = %+v, want %d", snap.Items, len(want))

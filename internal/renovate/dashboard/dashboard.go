@@ -143,7 +143,8 @@ func Parse(body string) (Snapshot, error) {
 			section = strings.TrimSpace(h)
 			continue
 		}
-		if section == detectedHeading {
+		if strings.TrimSpace(line) == "---" {
+			section = ""
 			continue
 		}
 		if m := checkbox.FindStringSubmatch(line); m != nil {
