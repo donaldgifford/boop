@@ -212,7 +212,7 @@ with one commit per numbered task. The PR split is in OQ1.
 
 - [x] 1.1 Status changes: DESIGN-0004 → Approved; ADR-0006 → Accepted,
   with "realised by DESIGN-0004".
-- [ ] 1.2 Go modules: `github.com/jackc/pgx/v5`,
+- [x] 1.2 Go modules: `github.com/jackc/pgx/v5`,
   `github.com/pressly/goose/v3`, `github.com/coreos/go-oidc/v3`,
   `github.com/getkin/kin-openapi`. Tools as `go tool` in `go.mod`:
   `oapi-codegen` v2.8.0 and `sqlc` (OQ4).
