@@ -236,7 +236,7 @@ with one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 2.1 `internal/store/migrations/0001_events.sql`:
+- [x] 2.1 `internal/store/migrations/0001_events.sql`:
   - `events`, partitioned by month on `occurred_at`;
   - a unique `key` (OQ7);
   - the indexes from DESIGN-0004;
