@@ -273,3 +273,27 @@ function buildRuns(): Run[] {
 }
 
 export const repositoryRuns = buildRuns();
+
+// The public status page (DESIGN-0004 § Estate view and status page):
+// aggregate-only, so no owner, repository or package name appears.
+export const status = {
+  state: "degraded",
+  // Against the real clock, not NOW: the page says how long ago it was computed.
+  updatedAt: new Date(Date.now() - 12_000).toISOString(),
+  version: "v0.9.2",
+  components: [
+    { name: "api", state: "operational", detail: "p95 84 ms" },
+    { name: "ingest", state: "operational", detail: "last delivery 40s ago · 0.2% failed" },
+    { name: "workers", state: "operational", detail: "2 pollers on the task queue" },
+    { name: "temporal", state: "operational", detail: "reachable · 3 ms" },
+    { name: "postgres", state: "operational", detail: "reachable · 2 ms" },
+    { name: "discovery", state: "operational", detail: "last pass 4m ago · 0 failures" },
+    { name: "deliveries", state: "operational", detail: "0 missed, 3 failed in 24h" },
+    { name: "github_budget", state: "degraded", detail: "1 of 3 installations below reserve" },
+  ],
+  releases: [
+    { id: "v0.9.2", date: "Nov 19", title: "v0.9.2", detail: "Sandboxed execution profiles.", running: true },
+    { id: "v0.9.1", date: "Nov 12", title: "v0.9.1", detail: "Webhook ingest and delivery records.", running: false },
+    { id: "v0.9.0", date: "Nov 3", title: "v0.9.0", detail: "Capacity leases across installations.", running: false },
+  ],
+};

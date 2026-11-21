@@ -10,7 +10,7 @@ import { IconSearch } from "@tabler/icons-react";
 import { Link, Outlet, useLocation, useMatchRoute } from "@tanstack/react-router";
 import { useState } from "react";
 
-import { AppSwitcher } from "../candidates/AppSwitcher";
+import { AppSwitcher } from "@donaldgifford/design-system/shell/app-switcher";
 import { configuredApps, ME } from "./config";
 import { GROUP_LABELS, labelFor, NAV, navGroups } from "./nav";
 

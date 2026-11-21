@@ -642,9 +642,9 @@ The look is the design system's. The app imports the package's
 - **Catalog:** the package's Storybook.
 - **Mockup:** the UI itself over fixture data (`just ui-dev`), built from
   the package's parts, so the mockup is what ships once the API replaces
-  the fixtures. `ui/design/candidates.html` is a static sketch of the
-  component candidates and the app switcher (INV-0005 findings 8 and 9),
-  drawn by hand on the package's tokens.
+  the fixtures. The components it first drafted locally (INV-0005
+  findings 8 and 9) and the status page parts are in the package since
+  0.4.0.
 
 ### Pages
 

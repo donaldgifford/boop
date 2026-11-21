@@ -9,7 +9,7 @@ import type { StackSegment } from "@donaldgifford/design-system/blocks/stacked-b
 import { TrendChart, trendTable } from "@donaldgifford/design-system/blocks/trend-chart";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@donaldgifford/design-system/components/card";
 
-import { StackedBarsOverTime, stackTimeTable } from "../candidates/StackedBarsOverTime";
+import { StackedBarsOverTime, stackTimeTable } from "@donaldgifford/design-system/blocks/stacked-bars-over-time";
 import { Endpoint, PageControls, useScope } from "../components/PageControls";
 import { ageBuckets, ecosystems, estate, installations, openPullsSeries, runsByDay, topPackages } from "../fixtures";
 
@@ -59,8 +59,8 @@ export function EstateView() {
         <ChartCard title="Pull request age" description="open pull requests by age" table={bucketsTable(ageBuckets, "Open")}>
           <BarBuckets buckets={ageBuckets} series="Open" label="Open pull requests by age" />
         </ChartCard>
-        <ChartCard title="Runs by outcome" description="per day · candidate block" table={stackTimeTable(runsByDay, OUTCOMES)}>
-          <StackedBarsOverTime points={runsByDay} segments={OUTCOMES} label="Runs per day by outcome" />
+        <ChartCard title="Runs by outcome" description="per day" table={stackTimeTable(runsByDay, OUTCOMES)}>
+          <StackedBarsOverTime points={runsByDay} segments={OUTCOMES} rangeDays={30} label="Runs per day by outcome" />
         </ChartCard>
         <ChartCard title="Top pending packages" description="repositories behind, by package" table={barListTable(topPackages, "Package")}>
           <BarList items={topPackages} label="Repositories behind, by package" />

@@ -25,8 +25,3 @@ ui-build:
 [group('ui')]
 ui-dev:
     cd ui && bun run dev
-
-# Open the static sketch of the component candidates
-[group('ui')]
-ui-sketch:
-    open ui/design/candidates.html

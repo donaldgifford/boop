@@ -6,8 +6,8 @@ import { IconChevronDown } from "@tabler/icons-react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 
-import { OptionHeading, OptionItem, OptionSeparator } from "../candidates/OptionRows";
-import { SegmentedControl } from "../candidates/SegmentedControl";
+import { OptionHeading, OptionItem, OptionSeparator } from "@donaldgifford/design-system/blocks/option-rows";
+import { SegmentedControl } from "@donaldgifford/design-system/blocks/segmented-control";
 import { owners } from "../fixtures";
 
 export const RANGES = ["1d", "7d", "30d", "90d"] as const;

@@ -7,7 +7,7 @@ import { Card, CardContent } from "@donaldgifford/design-system/components/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@donaldgifford/design-system/components/tabs";
 import { IconRefresh } from "@tabler/icons-react";
 
-import { InlineEmpty, InlineLoading } from "../candidates/InlineState";
+import { InlineEmpty, InlineLoading } from "@donaldgifford/design-system/blocks/inline-state";
 import { StateBadge } from "../components/badges";
 import { Endpoint } from "../components/PageControls";
 import { type Run, repository, repositoryRuns, repositoryTimeline } from "../fixtures";
