@@ -234,9 +234,14 @@ every `ingest.auditEvery` (15 min) and counts, per App and event:
 
 - `boopd_ingest_deliveries_failed_total`: deliveries whose last attempt
   was not 2xx (ingest answered 503, or GitHub could not connect);
-- `boopd_ingest_deliveries_missed_total`: deliveries GitHub has and
-  ingest never recorded. It stays at 0 until DESIGN-0004's store holds
-  ingest's records to compare against.
+- `boopd_ingest_deliveries_missed_total`: deliveries GitHub answered
+  2xx for and ingest never recorded. It needs `store.enabled`: ingest
+  records each delivery in the store, and the audit compares GitHub's
+  list against those records. Without the store it stays at 0.
+
+With the store on, the audit also records each failed, missed and
+redelivered delivery, so the UI's Deliveries page shows GitHub's status
+next to ingest's outcome.
 
 Both are worker metrics. With `prometheusRule.enabled` and ingest on,
 two alerts fire:

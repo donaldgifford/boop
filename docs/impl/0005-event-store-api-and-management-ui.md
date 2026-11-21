@@ -316,6 +316,41 @@ open:
 - **The append outcome label is `applied`**, as in DESIGN-0004's metrics
   table, not `appended`.
 
+## Findings (Phase 6)
+
+- **StoreSink runs after the answer is written** and before the handler
+  returns, so GitHub sees the 2xx only after ingest has recorded the
+  delivery. That is what lets the audit call a listed 2xx without a
+  `delivery.received` missed, without a grace period. A store failure is
+  logged and counted by `boopd_store_append_total{outcome="error"}`. It
+  never changes the answer. The append is bounded by
+  `StoreAppendTimeout` (5 s).
+- **Keys:**
+  - `delivery.received` is
+    `delivery:<guid>:received:<received at, RFC3339Nano>`, so a
+    redelivery of the same GUID is a new event.
+  - Derived events are `delivery:<guid>:<kind>[:i]`, with the received
+    key as their cause.
+  - Audit events are `audit:<guid>:<newest GitHub attempt id>:<kind>`.
+    A lost cursor re-reads to duplicates, and a later attempt is new.
+- **The audit writes attempt 1**, the row `delivery.received` writes,
+  so GitHub's status and ingest's outcome share one `webhook_deliveries`
+  row per GUID. Delivery IDs that are not UUIDs (only tests send them)
+  are not recorded.
+- **Missed takes precedence over redelivered.** A 2xx redelivery that
+  ingest has no record of is still missed.
+- **`boopd ingest` opens the store before dialling Temporal**, so a
+  missing DSN or an unmigrated schema fails at start.
+- **`docs/config.md`'s `store` example was not valid HCL.** It used
+  one-line blocks with two attributes, which HCL rejects, and is now
+  spelled out. No test decodes that example; `examples/boopd.hcl` only
+  mentions the block in a comment.
+- **Open from Phase 5:** a webhook decision's `cause_key` is still the
+  workflow's own key. The received key carries the receipt time, which
+  the workflow does not know. `Changed.DeliveryID` reaches the workflow,
+  so the API can join a decision to its delivery on `delivery_id`
+  instead.
+
 ## Implementation Phases
 
 Each phase ends with `just lint`, `just test` and its own checks green,
@@ -522,7 +557,7 @@ with one commit per numbered task. The PR split is in OQ1.
   with a 2xx at GitHub and no `delivery.received` is missed, and
   `boopd_ingest_deliveries_missed_total` starts counting (IMPL-0004
   OQ6).
-- [ ] 6.5 Tests: the handler with `StoreSink` against the test database
+- [x] 6.5 Tests: the handler with `StoreSink` against the test database
   (each derived kind; a store outage still answers 202); the audit's
   missed classification.
 

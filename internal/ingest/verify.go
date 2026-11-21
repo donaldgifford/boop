@@ -17,8 +17,11 @@ limitations under the License.
 // Package ingest is boopd's webhook ingest (DESIGN-0003): it verifies
 // the boop-bot App's deliveries, routes each one to Temporal signals on
 // the workflow that owns the repository or installation, and records
-// every delivery, including the ones it ignores. It talks only to
-// Temporal; it never calls GitHub and never holds an App key.
+// every delivery, including the ones it ignores. With the store enabled,
+// StoreSink appends delivery.received and the events derived from the
+// same delivery (pr.*, dashboard.*, installation.*) as boopd_ingest
+// (DESIGN-0004). It talks only to Temporal and the store; it never calls
+// GitHub and never holds an App key.
 package ingest
 
 import (

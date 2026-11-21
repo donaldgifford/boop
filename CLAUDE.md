@@ -136,7 +136,7 @@ internal/workflows/       # deterministic workflow code; InstallationWorkflow bu
 internal/activities/      # side effects, registered by name: discovery, CheckRepo, ReadRateLimit, AcquireBudget, AcquireCapacity, RunRenovate
 internal/observability/   # slog logger, OTel meter provider + Prometheus exporter, boopd metric set, /healthz and /readyz
 internal/worker/          # worker role: search attributes, register, start, promote, schedules, readiness, graceful stop
-internal/ingest/          # ingest role (DESIGN-0003): signature check, typed payloads, routing table, delivery records, handler, Run
+internal/ingest/          # ingest role (DESIGN-0003): signature check, typed payloads, routing table, delivery records, StoreSink, handler, Run
 internal/jobspec/         # Job + env builder for one Renovate run (ported from renovate-operator)
 internal/config/          # HCL config file via hclkit: decode, defaults, validation, secrets, BuildInput
 internal/profiles/        # pure profile resolver: extends + managers -> strictest profile
