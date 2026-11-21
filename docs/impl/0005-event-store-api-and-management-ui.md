@@ -683,7 +683,7 @@ with one commit per numbered task. The PR split is in OQ1.
 - [x] 9.6 `boopd api --config <file>`: the read-only pool, Temporal
   client, OIDC verifier, health and readiness (store version, issuer
   discovered), metrics, and graceful stop.
-- [ ] 9.7 Contract tests: every handler's response is validated against
+- [x] 9.7 Contract tests: every handler's response is validated against
   the embedded spec, with a cursor-binding test and the authn and authz
   matrix.
 
