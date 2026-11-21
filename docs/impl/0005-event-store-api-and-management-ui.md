@@ -373,7 +373,7 @@ with one commit per numbered task. The PR split is in OQ1.
   `currentVersion`, `depType`, `skipReason`). `RunResult.Dependencies`
   carries them, capped (OQ5). Refresh the testdata from a real report
   with deps.
-- [ ] 4.3 `internal/renovate/dashboard`: `Parse(body string) (Snapshot,
+- [x] 4.3 `internal/renovate/dashboard`: `Parse(body string) (Snapshot,
   error)`.
   - Sections are keyed by machine marker (`approve-branch`,
     `unschedule-branch`, `unlimit-branch`, `retry-branch`,
