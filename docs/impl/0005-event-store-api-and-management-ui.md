@@ -312,7 +312,7 @@ with one commit per numbered task. The PR split is in OQ1.
   - A duplicate skips its apply.
   - It updates `boopd_store_append_total{role,kind,outcome}` and
     `boopd_store_append_seconds`.
-- [ ] 3.3 sqlc queries in `internal/store/queries/*.sql` and the
+- [x] 3.3 sqlc queries in `internal/store/queries/*.sql` and the
   generated package `internal/store/db`. jsonb maps to `json.RawMessage`.
 - [ ] 3.4 Applies (`internal/store/apply_*.go`), one per kind in the
   DESIGN-0004 catalogue. Each applies the order guard: it compares the

@@ -1,0 +1,29 @@
+# sqlc generates internal/store/db from the goose migrations and the
+# queries here: `just generate-sql`, checked by `just lint-sql`.
+version: "2"
+sql:
+  - engine: postgresql
+    schema: migrations
+    queries: queries
+    gen:
+      go:
+        package: db
+        out: db
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true
+        overrides:
+          - db_type: jsonb
+            go_type: encoding/json.RawMessage
+          - db_type: jsonb
+            nullable: true
+            go_type: encoding/json.RawMessage
+          - db_type: timestamptz
+            go_type: time.Time
+          - db_type: timestamptz
+            nullable: true
+            go_type:
+              import: time
+              type: Time
+              pointer: true
+          - db_type: uuid
+            go_type: string
