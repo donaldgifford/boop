@@ -624,7 +624,7 @@ with one commit per numbered task. The PR split is in OQ1.
   `runs` past `retention.events`.
 - [x] 8.2 A daily Schedule (`store-maintenance`, overlap `SKIP`) when
   `store.enabled`.
-- [ ] 8.3 Tests (integration): each rule, with a clock override.
+- [x] 8.3 Tests (integration): each rule, with a clock override.
 
 #### Success Criteria
 
