@@ -19,6 +19,7 @@ Design docs, plans, and implementation docs can reference investigations by ID
 | INV-0002 | GraphQL config probe times out on large batches | Concluded | 2026-10-15 | Donald Gifford | [0002-graphql-config-probe-times-out-on-large-batches.md](0002-graphql-config-probe-times-out-on-large-batches.md) |
 | INV-0003 | Kata VMM choice for sandboxed runs: Cloud Hypervisor or Firecracker | Open | 2026-10-25 | Donald Gifford | [0003-kata-vmm-choice-for-sandboxed-runs-cloud-hypervisor-or.md](0003-kata-vmm-choice-for-sandboxed-runs-cloud-hypervisor-or.md) |
 | INV-0004 | Nix flake updates in boopd Jobs | Open | 2026-10-25 | Donald Gifford | [0004-nix-flake-updates-in-boopd-jobs.md](0004-nix-flake-updates-in-boopd-jobs.md) |
+| INV-0005 | boop UI: its own app on the design system, or a backend of repo-guardian's UI | Concluded | 2026-11-19 | Donald Gifford | [0005-boop-ui-its-own-app-on-the-design-system-or-a-backend-of-repo.md](0005-boop-ui-its-own-app-on-the-design-system-or-a-backend-of-repo.md) |
 <!-- markdownlint-restore -->
 <!-- END DOCZ AUTO-GENERATED -->
 <!-- BEGIN DOCZ AUTO-GENERATED -->

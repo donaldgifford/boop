@@ -10,6 +10,15 @@ created: 2026-10-18
 
 # DESIGN-0004: boopd API and management UI: event store, PR inventory and estate view
 
+> **Amended 2026-11-21 (INV-0005).** The UI is built on
+> `@donaldgifford/design-system`. repo-guardian's UI is the example for
+> how to use the package and for the toolchain, and no UI code is copied
+> from it. The amendment changes the UI goal, the non-goals,
+> [The UI](#the-ui), [Independence from repo-guardian](#independence-from-repo-guardian),
+> [Visual design](#visual-design), the page frame, the UI rollout step
+> and resolved OQ1, OQ2 and OQ17. The store, the API and what each page
+> shows are unchanged.
+
 <!--toc:start-->
 - [Overview](#overview)
 - [Goals and Non-Goals](#goals-and-non-goals)
@@ -69,9 +78,10 @@ This design adds three pieces:
 - a versioned **HTTP API** over it (`/api/v1`, OpenAPI 3.1), which the UI
   and other tools use;
 - a **management UI** with an estate view, a PR inventory, waiting
-  updates, repository timelines and a status page. Its look, stack and
-  API conventions follow the pattern repo-guardian v2 established, with
-  its code copied, never depended on.
+  updates, repository timelines and a status page. It is built on
+  `@donaldgifford/design-system` with the stack repo-guardian v2's UI
+  uses. The API follows repo-guardian v2's conventions. boop never
+  depends on repo-guardian.
 
 It realises ADR-0006 (Postgres product store written by activities). The
 foundation is meant to carry later features without a rewrite:
@@ -103,10 +113,11 @@ results, and approving from the UI.
 - **A versioned, additive API** that the UI, CI and future correlators
   share: OpenAPI 3.1, open enums, keyset cursors, RFC 9457 errors and
   OIDC bearer tokens.
-- **repo-guardian v2's pattern, copied:** the same tokens, fonts,
-  primitives, layout and BFF structure, so the two apps follow one
-  pattern. boop copies what it reuses into this repository and has no
-  build, runtime or link dependency on repo-guardian
+- **One design, from the design system:** tokens, fonts, primitives,
+  blocks and shell chrome come from `@donaldgifford/design-system`, so
+  boop looks and behaves like the other apps that use it. repo-guardian
+  v2's UI is the example for using the package and for the stack. boop
+  has no build, runtime or session dependency on repo-guardian
   ([Independence from repo-guardian](#independence-from-repo-guardian)).
 - **No extra GitHub API spend for the inventory** beyond one cheap
   reconcile per discovery pass (OQ5). Webhooks and Renovate's report
@@ -128,17 +139,23 @@ results, and approving from the UI.
 - **Scheduling from the store.** Temporal owns execution state, and the
   store owns results (ADR-0006). Nothing in the store drives a run.
 - **Any dependency on repo-guardian:** no imported package, shared
-  module, git submodule, cross-link or app switcher. Copying is the only
-  form of reuse.
-- **A shared design system.** One will exist later, as its own project,
-  and both apps will consume its components instead of copying each
-  other. It is not designed here.
+  module, git submodule, generated client or runtime call. Go code is
+  reused by copying. The UI is built on the design system.
+- **Designing design-system components.** A generic component that boop
+  needs and the package lacks is built in the design system's
+  repository, under its own process (INV-0005 OQ7). This design names
+  the gaps and does not design the components.
+- **An app switcher.** A switcher listing boop, repo-guardian and docz is
+  a design-system shell part, designed there (INV-0005 OQ8). This design
+  has only an optional configured external link
+  ([The UI](#the-ui)).
 - **A combined UI.** Running boop and repo-guardian in one UI would be a
   third app, built on the shared design system. The two are designed
   alike so that it stays possible, but each runs independently and
   nothing here prepares for that app.
-- **A light theme.** It is dark only for now, as in repo-guardian
-  (DESIGN-0036 OQ1 there); the tokens make light a later swap.
+- **A light theme.** It is dark only at first, as in repo-guardian
+  (INV-0005 OQ3). The package has both themes, so light is a later
+  toggle.
 - **Multi-tenant SaaS concerns** (billing, per-tenant databases).
 
 ## Background
@@ -185,14 +202,15 @@ unless boop needs something different:
 | Auth | go-oidc bearer access tokens (ID tokens refused); BFF with code + PKCE, encrypted `__Host-` cookie | same |
 | AuthZ | groups to orgs, filtered in SQL, 404 when not visible | same, plus an `operators` list for actions (OQ8) |
 | Store | Postgres (CNPG), pgx/v5, goose migrations in a `migrate` Job, sqlc, read-only role for the API | same, plus append-only writer roles |
-| UI | Bun + Hono BFF serving a React 19 SPA, separate image; Tailwind v4, Radix/shadcn-style primitives, TanStack Router/Query, Recharts, inline SVG icons | same (OQ1, OQ2) |
+| UI | Bun + Hono BFF serving a React 19 SPA, separate image; `@donaldgifford/design-system` (Tailwind v4, Base UI primitives, Recharts, Tabler icons), TanStack Router/Query | the same stack and versions, built on the package (OQ1, OQ2) |
 | Live data | polling, a 30 s status cache, no SSE | same (OQ10) |
 | Status page | public, aggregate-only, privacy-guard test | same (OQ9) |
 | Event tables | per-kind tables (`repository_events`, `result_events`), no retention | one append-only `events` log with projections and retention (OQ3, OQ6) |
 
-In every row, "same" means the pattern and, where useful, code copied
-into this repository. It never means an import or a reference to
-repo-guardian's code.
+In every row, "same" means the pattern. For Go code it can also mean
+code copied into this repository. For the UI it means the same package
+and toolchain, with repo-guardian's `ui/` read as the example. It never
+means an import or a reference to repo-guardian's code.
 
 The difference that matters is the event model. boop's UI is mostly
 built from events (PR lifecycles, dashboard edits, runs), so the log is
@@ -502,18 +520,36 @@ clients:                     # azp -> groups, for machine clients
 
 ### The UI
 
-The stack is repo-guardian v2's (OQ1), in `ui/` of this repository:
+The UI lives in `ui/` of this repository and starts empty. It is built
+on `@donaldgifford/design-system`, with repo-guardian v2's `ui/` as the
+example for layout, tools and versions (INV-0005 finding 7):
 
 - **`ui/server/`:** the Bun + Hono BFF. It handles OIDC, sessions,
   `/api/*` proxying to the `api` Service only (GET and HEAD, plus the
   action POSTs with an Origin check), static files and health. The CSP
-  is `'self'` only.
+  is `'self'` only. It is written here with the libraries and file
+  layout of repo-guardian's `ui/server` (`openid-client`, `jose`), and
+  repo-guardian's server tests are ported as the behaviour to meet
+  (INV-0005 OQ6).
 - **`ui/web/`:** Vite + React 19 + TypeScript.
   - TanStack Router (code-based routes) and TanStack Query (30 s
     `staleTime`, retry on 5xx only).
   - openapi-fetch on the generated types.
-  - Tailwind v4 `@theme` tokens, Radix-based primitives in the shadcn
-    style, Recharts, inline SVG icons.
+  - The package's `globals.css` (Tailwind v4, tokens, fonts), its
+    primitives (Base UI), blocks (tables, charts on Recharts, timeline)
+    and shell parts, and Tabler icons.
+- **The package:** pinned exactly as a devDependency and installed from
+  GitHub Packages, which needs a token even to read. `ui/.npmrc` maps
+  the `@donaldgifford` scope and references `NPM_TOKEN`; CI, the image
+  build (as a build secret) and Renovate each supply it. Renovate gives
+  the package its own pull request, never grouped or automerged.
+- **Toolchain:** Bun 1.3.14 and no Node, TypeScript with repo-guardian's
+  strict flags (the package ships source, so boop's compiler checks it),
+  and ESLint. Renovate moves the pins from there.
+- **External links:** an optional list of links (label and URL) from the
+  chart reaches the SPA through the BFF's `/ui/config` and renders as a
+  sidebar group that opens new tabs. It is empty by default, and the UI
+  knows nothing about what a link points to (INV-0005 OQ4).
 - **Tests:**
   - `bun test` with happy-dom and Testing Library;
   - Playwright against a mock OIDC issuer and a seeded Postgres with the
@@ -525,107 +561,107 @@ The stack is repo-guardian v2's (OQ1), in `ui/` of this repository:
 
 ### Independence from repo-guardian
 
-boop's UI and API are a separate app. repo-guardian v2 is a source to
-copy from, so boop does not start from scratch and the two follow one
-pattern for design, layout and structure. The rules:
+boop's UI and API are a separate app. The rules:
 
-- **Copy, never depend.** Code that boop reuses is copied into `ui/` or
-  `internal/` and owned here from then on. That covers the BFF's OIDC
-  and session code, the primitives, the shell, the tokens, the API
-  problem and cursor helpers, and the test harness. The import note
-  names the source path and repo-guardian commit, as CLAUDE.md does for
-  `internal/platform` (copied from renovate-operator `0183661`).
-- **No dependency of any kind:**
+- **No dependency of any kind on repo-guardian:**
   - no npm or Go module from repo-guardian;
   - no git submodule;
   - no generated client of its API;
   - no shared image or chart;
   - no runtime calls between the two;
-  - no links between them in the UI.
-- **Copies diverge freely.** A fix in one app is copied to the other by
-  hand when it applies. Nothing keeps them in sync automatically.
-- **Later, a design system.** When a shared design system exists, boop
-  replaces its copied primitives and tokens with the design system's
-  components. It never switches to repo-guardian's. That is a later
-  project, not part of this design.
+  - no shared session.
+- **Go code: copy, never depend.** Go code that boop reuses (the API's
+  problem and cursor helpers, authn) is copied into `internal/` and
+  owned here from then on. The import note names the source path and
+  repo-guardian commit, as CLAUDE.md does for `internal/platform`
+  (copied from renovate-operator `0183661`). Copies diverge freely.
+- **UI: built on the design system, nothing copied.** The look and the
+  components come from `@donaldgifford/design-system`. repo-guardian's
+  `ui/` is read as the example of an app on the package. boop writes its
+  own BFF, shell composition, pages and test harness.
+- **The design system is the shared thing.** A dependency on the package
+  is not a dependency on repo-guardian. A problem or a gap in the
+  package becomes an issue or a pull request there, and boop does not
+  patch or fork it.
+- **Generic components go to the package first.** A component that is
+  not about boop's domain is built in the design system against a local
+  link from boop, released, then pinned here (INV-0005 OQ7). INV-0005
+  finding 8 lists the known candidates: stacked bars over time, a
+  segmented control, popover option rows, a filter-chip bar and
+  one-line loading and empty text. boop's own components (the update
+  row, dashboard-item sections, the state-to-badge mapping) stay here.
+- **Links are configuration.** The only link out of the UI is the
+  optional external link list ([The UI](#the-ui)).
 
 ### Visual design
 
-The tokens are identical to repo-guardian v2 (`ui/web/src/index.css`
-`@theme` there):
+The look is the design system's. The app imports the package's
+`globals.css` once and defines no tokens of its own.
 
-| Token | Value | Used for |
-| --- | --- | --- |
-| `background` | `#17191d` | page, insets |
-| `panel` | `#1f2227` | cards, top bar, sidebar, drawer |
-| `panel-2` | `#262a30` | current nav item, selected tab, row hover, meter track |
-| `border` | `#31363d` | every 1px hairline |
-| `foreground` | `#e8eaed` | text |
-| `muted-foreground` | `#9aa1ab` | secondary text, axes |
-| `accent` | `#5fa8f5` | links, brand mark, primary series, focus ring |
-| `ok` | `#3fb950` | merged, succeeded, operational |
-| `warn` | `#d9a020` | waiting, degraded, stalled |
-| `bad` | `#f2554d` | errored, failed, down, lost delivery |
-| `info` | `#7aa7ff` | open PR, running |
-| `avatar` | `#3a4c6d` | avatar square |
+- **Tokens:** the package's, in OKLCH with shadcn semantic names
+  (`background`, `card`, `border`, `muted-foreground`, `primary`, and
+  the status tokens `success`, `warning`, `destructive`, `info`,
+  `pending`, `approved`, `ignored`, `running`). No utility class or
+  `var()` in `ui/` names a colour outside that set.
+- **Theme:** dark only at first, by the `.dark` class on `<html>`.
+- **Fonts:** IBM Plex Sans and JetBrains Mono, bundled by the package
+  with no CDN. Mono is semantic: repository slugs, PR numbers, branch
+  names, package names and versions, purls, event kinds and timestamps.
+- **Scale and shape:** the package's (a 3px radius, its type scale, its
+  KPI value size). Outline is the default button variant.
+- **Badges:** the package's `Badge` variants. boop's state table:
+  - `merged`, `succeeded`, `operational`: `success`;
+  - `open`: `info`;
+  - `running`: `running`;
+  - `waiting`, `rate-limited`, `stalled`, `degraded`: `warning`;
+  - `pending-approval`: `pending`;
+  - `errored`, `failed`, `missed`, `down`: `destructive`;
+  - `closed`, `ignored`: `ignored`.
 
-- **Fonts:** IBM Plex Sans (400/500/600) and JetBrains Mono (400/500),
-  bundled through `@fontsource`, Latin subsets, with no CDN. Mono is
-  semantic: repository slugs, PR numbers, branch names, package names
-  and versions, purls, event kinds and timestamps.
-- **Scale:**
-  - root 14px; tables 13px; page titles 20/600;
-  - KPI values 22/600 with tabular numbers;
-  - mono 12px badges; mono 11px chart axes.
-- **Shape:** 3px radius everywhere, no shadows except the drawer edge,
-  and no gradients except chart area fills. Outline is the default
-  button variant.
-- **Badges:** the same recipe as repo-guardian, tone at 18% background and text
-  mixed 65% with white. boop's tone table:
-  - `merged`, `succeeded`, `operational`: ok;
-  - `open`, `running`: info;
-  - `waiting`, `pending-approval`, `rate-limited`, `stalled`,
-    `degraded`: warn;
-  - `errored`, `failed`, `missed`, `down`: bad;
-  - `closed`, `ignored`: mute.
-
-  Unknown values get mute, because enums are open.
-- **Charts:** magnitude is drawn in `accent`; status uses the four
-  status tones and nothing else. There is no categorical palette, and
-  bar lists of at most 8 rows replace donuts.
-- **Shell:**
-  - a 40px top bar with the brand (a boop mark in `accent`, then
-    "boop", then a muted "renovate · fleet"), the Local/UTC toggle and
-    an avatar menu;
-  - a 220px sidebar driven by a `NAV` array, which becomes a drawer
-    below 900px;
+  Unknown values get `muted`, because enums are open.
+- **Charts:** magnitude is drawn in the package's first chart colour;
+  status uses the status tokens and nothing else. There is no
+  categorical palette, and bar lists of at most 8 rows replace donuts.
+- **Shell:** the package's frame, composed as repo-guardian composes it:
+  - a full-height sidebar that collapses to an icon rail and is a sheet
+    below 768px;
+  - its header holds the app identity (a boop mark, "boop", "renovate ·
+    fleet");
+  - its body is driven by a `NAV` array, plus the external links group
+    when configured;
+  - its footer holds the account menu;
+  - a top bar with the sidebar trigger, the breadcrumbs, the search
+    button and the Local/UTC toggle;
   - a main column at most 1400px wide.
-- **Page anatomy:** breadcrumbs, a title with a badge, a muted subtitle
-  naming the endpoint in mono, and controls on the right: an owner scope
-  popover and a range control (`1d|7d|30d|90d`). Scope and range live in
-  the URL. Detail opens in a 470px right drawer deep-linked by `?open=`.
-- **Reference mockup:** `ui/design/boop-mockup.html` is the reference,
-  kept in step with the UI. It starts as a copy of repo-guardian's
-  mockup, restyled for boop's pages.
+- **Page anatomy:** the package's `PageHeader` with a title and badge, a
+  muted subtitle naming the endpoint in mono, and controls on the right:
+  an owner scope popover and a range control (`1d|7d|30d|90d`). Scope
+  and range live in the URL. Detail opens in the package's
+  `DetailPanel`, beside the list on a wide screen and over it on a
+  narrow one, deep-linked by `?open=`.
+- **Catalog:** the package's Storybook. boop keeps no HTML mockup; the
+  pages are built from the package's parts.
 
 ### Pages
 
 ```text
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ ● boop  renovate · fleet                                 Local|UTC   [DG]    │
-├────────────┬─────────────────────────────────────────────────────────────────┤
-│ FLEET      │ Estate                                    owner ▾  1d 7d 30d 90d │
-│ ▌Estate    │ /api/v1/estate                                                   │
-│  Pull reqs │ ┌────────┐┌────────┐┌────────┐┌────────┐┌────────┐┌────────┐     │
-│  Waiting   │ │repos   ││open PRs││waiting ││oldest  ││runs 24h││lost    │     │
-│  Packages  │ │  142   ││  318   ││   57   ││ 41 d   ││ 98.6 % ││ dlvr 0 │     │
-│  Repos     │ └────────┘└────────┘└────────┘└────────┘└────────┘└────────┘     │
-│ ACTIVITY   │ ┌ open PRs, 30d ─────────────────┐┌ PR age ───────────────────┐  │
-│  Runs      │ │ ▁▂▃▃▄▅▅▆▆▇▇▆▆▅▅▆▆▇ (accent)    ││ <1d ███  1-7d █████ ...   │  │
-│  Events    │ └────────────────────────────────┘└───────────────────────────┘  │
-│  Delivers  │ ┌ runs by outcome ───────────────┐┌ top pending packages ─────┐  │
-│ SYSTEM     │ │ ok/warn/bad stacked bars       ││ pkg:npm/react   23 repos  │  │
-│  Status    │ └────────────────────────────────┘└───────────────────────────┘  │
+┌────────────┬─────────────────────────────────────────────────────────────────┐
+│ ● boop     │ [<] Estate                               search   Local|UTC     │
+│ renovate   ├─────────────────────────────────────────────────────────────────┤
+│  · fleet   │ Estate                                   owner ▾  1d 7d 30d 90d │
+│ FLEET      │ /api/v1/estate                                                  │
+│ ▌Estate    │ ┌────────┐┌────────┐┌────────┐┌────────┐┌────────┐┌────────┐    │
+│  Pull reqs │ │repos   ││open PRs││waiting ││oldest  ││runs 24h││lost    │    │
+│  Waiting   │ │  142   ││  318   ││   57   ││ 41 d   ││ 98.6 % ││ dlvr 0 │    │
+│  Packages  │ └────────┘└────────┘└────────┘└────────┘└────────┘└────────┘    │
+│  Repos     │ ┌ open PRs, 30d ─────────────────┐┌ PR age ───────────────────┐ │
+│ ACTIVITY   │ │ ▁▂▃▃▄▅▅▆▆▇▇▆▆▅▅▆▆▇             ││ <1d ███  1-7d █████ ...   │ │
+│  Runs      │ └────────────────────────────────┘└───────────────────────────┘ │
+│  Events    │ ┌ runs by outcome ───────────────┐┌ top pending packages ─────┐ │
+│  Delivers  │ │ stacked bars over time         ││ pkg:npm/react   23 repos  │ │
+│ SYSTEM     │ └────────────────────────────────┘└───────────────────────────┘ │
+│  Status    │                                                                 │
+│ [DG] Donald│                                                                 │
 └────────────┴─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -770,8 +806,9 @@ All new values are off by default:
   through `api.ingress` or `api.httpRoute` when they are enabled.
 - **`ui`**: a Deployment of `boopd-ui` (tag defaults to `appVersion`),
   Service, PDB, `existingSecret` (`oidc-client-secret`, `session-keys`),
-  `PUBLIC_URL`, and `ui.ingress` or `ui.httpRoute` for the whole host,
-  as in DESIGN-0003. The render fails if `ui.enabled` is set without
+  `PUBLIC_URL`, `ui.links` (the optional external links, empty by
+  default), and `ui.ingress` or `ui.httpRoute` for the whole host, as in
+  DESIGN-0003. The render fails if `ui.enabled` is set without
   `api.enabled` and `api.auth`.
 - **NetworkPolicies:**
   - ui → api;
@@ -985,8 +1022,10 @@ The IMPL splits this into phases. In order:
    periods without webhooks.
 4. **API:** the read endpoints, recheck, authz and the contract tests.
 5. **UI:**
-   - the BFF, shell and tokens copied into `ui/` from repo-guardian v2
-     (no dependency on it);
+   - `ui/` scaffolded on `@donaldgifford/design-system`, with the BFF
+     and shell written here (repo-guardian v2's `ui/` is the example);
+   - generic component gaps built in the design system as pages need
+     them;
    - Estate, Pull requests, Waiting and Repository first;
    - then Packages, Runs, Events, Deliveries and Status.
 6. **Retention:** `StoreMaintenanceWorkflow`.
@@ -1008,12 +1047,13 @@ None open. The answered questions are listed under
 ## Resolved Questions
 
 Answered 2026-10-18: option a for every question, and OQ2 decided as
-"copy, never depend". The body above is written to these decisions.
+"copy, never depend". OQ1, OQ2 and OQ17 were amended on 2026-11-21 by
+INV-0005. The body above is written to these decisions.
 
 | OQ | Question | Decision |
 | - | - | - |
-| 1 | Which UI architecture? | **a**: a Bun + Hono BFF serving a React 19 SPA, as its own `boopd-ui` image (pattern copied from repo-guardian v2) |
-| 2 | How is UI code shared with repo-guardian? | **Copy, never depend** (decided 2026-10-18): code is copied in and owned here; a future design system is a separate project; a combined UI is a third app ([Independence](#independence-from-repo-guardian)) |
+| 1 | Which UI architecture? | **a**: a Bun + Hono BFF serving a React 19 SPA, as its own `boopd-ui` image. Amended 2026-11-21: built on `@donaldgifford/design-system`, with repo-guardian v2's UI as the example |
+| 2 | How is UI code shared with repo-guardian? | **Copy, never depend** (decided 2026-10-18). Amended 2026-11-21 (INV-0005): the UI is built on the design system package and nothing is copied from repo-guardian's UI; Go code is still reused by copying; a combined UI is still a third app ([Independence](#independence-from-repo-guardian)) |
 | 3 | Event model? | **a**: append-only `events`, projections applied in the same transaction, one apply per kind, rebuildable by replay |
 | 4 | Who writes? | **a**: ingest appends directly as `boopd_ingest`; the worker appends through activities; the API is read-only and its actions are recorded by the workflow |
 | 5 | PR state without webhooks? | **a**: webhooks first, plus `ReconcilePullRequests` in every discovery pass |
@@ -1028,7 +1068,7 @@ Answered 2026-10-18: option a for every question, and OQ2 decided as
 | 14 | UI actions in v1? | **a**: recheck only, operators only, audited through the workflow |
 | 15 | Who provisions Postgres? | **a**: the operator (CNPG in the homelab); the chart takes the DSN Secret and runs the migrate Job |
 | 16 | Order with DESIGN-0003? | **a**: DESIGN-0003 first with its log sink, then the store, then the sink swaps to the store |
-| 17 | Brand? | **a**: the same token values (copied), a "boop" wordmark with an accent mark, "renovate · fleet" |
+| 17 | Brand? | **a**: a "boop" wordmark with an accent mark, "renovate · fleet". Amended 2026-11-21: the token values are the design system's |
 | 18 | Live phase in lists? | **a**: lists read the stored `state`; only the repository page queries Temporal |
 
 ## References
@@ -1038,11 +1078,18 @@ Answered 2026-10-18: option a for every question, and OQ2 decided as
 - DESIGN-0001 § RepoWorkflow (state, phases, `RunResult`)
 - DESIGN-0003 (webhook ingest; delivery records, delivery audit, repository events)
 - INV-0001 § Beyond v1 (evals, security findings)
+- [INV-0005](../investigation/0005-boop-ui-its-own-app-on-the-design-system-or-a-backend-of-repo.md)
+  (boop UI: its own app on the design system; the 2026-11-21 amendment)
+- [design-system](https://github.com/donaldgifford/design-system):
+  `README.md`, RFC-0001, ADR-0003 (Tailwind v4, shadcn and Base UI),
+  ADR-0004 (tokens), the
+  [Storybook](https://donaldgifford.github.io/design-system/)
 - repo-guardian v2:
   - DESIGN-0027 (read-only API, business UI and status page)
-  - DESIGN-0036 (frontend design refresh: tokens, type, shell, charts)
+  - DESIGN-0036 (frontend design refresh: shell, charts)
+  - DESIGN-0039 (adopting the design system) and IMPL-0037
   - IMPL-0031
-  - `ui/design/repo-guardian-mockup.html`
+  - `ui/` (the example of an app on the package)
   - INV-0009 and INV-0018
 - [Package URL (purl) specification](https://github.com/package-url/purl-spec)
 - [RFC 9457: Problem Details for HTTP APIs](https://www.rfc-editor.org/rfc/rfc9457)
