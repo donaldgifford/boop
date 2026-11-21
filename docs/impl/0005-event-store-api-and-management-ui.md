@@ -580,7 +580,7 @@ with one commit per numbered task. The PR split is in OQ1.
   each one that closed or merged since. Its cost goes through the budget
   `ReadRateLimit` already watches.
 - [x] 7.3 `fakegithub`: the search query and the PR GET.
-- [ ] 7.4 Tests: reconcile against fakegithub (opened, merged and closed
+- [x] 7.4 Tests: reconcile against fakegithub (opened, merged and closed
   while ingest was off); the order guard keeps a newer webhook state.
 
 #### Success Criteria
