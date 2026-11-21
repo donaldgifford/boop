@@ -23,8 +23,12 @@ func TestDiscoverySchedules(t *testing.T) {
 	if s.ID != "discovery/boop-bot" || s.Every != 6*time.Hour || s.Workflow != workflows.DiscoveryWorkflowName || s.TaskQueue != "boopd" {
 		t.Errorf("schedule = %+v", s)
 	}
-	if in, ok := s.Args[0].(*workflows.DiscoveryInput); !ok || in.App != "boop-bot" {
-		t.Errorf("args = %+v, want the app's DiscoveryInput", s.Args)
+	if in, ok := s.Args[0].(*workflows.DiscoveryInput); !ok || in.App != "boop-bot" || in.Record {
+		t.Errorf("args = %+v, want the app's DiscoveryInput, not recording", s.Args)
+	}
+	cfg.Store.Enabled = true
+	if in := worker.DiscoverySchedules(cfg, "boopd")[0].Args[0].(*workflows.DiscoveryInput); !in.Record {
+		t.Errorf("args with the store enabled = %+v, want Record", in)
 	}
 	if got[1].ID != "discovery/other" || got[1].Every != time.Hour {
 		t.Errorf("second schedule = %+v", got[1])

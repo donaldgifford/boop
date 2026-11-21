@@ -178,3 +178,45 @@ func TestTargetedDiscoveryID(t *testing.T) {
 		t.Errorf("TargetedDiscoveryID = %q", got)
 	}
 }
+
+// With Record, the pass ends by recording discovery.finished with its
+// totals; without it, nothing is recorded.
+func TestDiscoveryWorkflow_RecordsThePass(t *testing.T) {
+	t.Parallel()
+	for _, record := range []bool{true, false} {
+		var suite testsuite.WorkflowTestSuite
+		suite.SetLogger(log.NewStructuredLogger(slog.New(slog.DiscardHandler)))
+		env := suite.NewTestWorkflowEnvironment()
+		env.RegisterWorkflowWithOptions(DiscoveryWorkflow, workflow.RegisterOptions{Name: DiscoveryWorkflowName})
+		env.RegisterActivityWithOptions(func(context.Context, *ListInstallationsInput) ([]InstallationInfo, error) {
+			return []InstallationInfo{{ID: 1}, {ID: 2}}, nil
+		}, activity.RegisterOptions{Name: ListInstallationsActivity})
+		env.RegisterActivityWithOptions(func(_ context.Context, in *DiscoverInput) (*DiscoverSummary, error) {
+			return &DiscoverSummary{InstallationID: in.InstallationID, Seen: 5, Onboarded: 1, ProbeCost: 2}, nil
+		}, activity.RegisterOptions{Name: DiscoverInstallationActivity})
+		var recorded []RecordedEvent
+		env.RegisterActivityWithOptions(func(_ context.Context, in *RecordEventsInput) error {
+			recorded = append(recorded, in.Events...)
+			return nil
+		}, activity.RegisterOptions{Name: RecordEventsActivity})
+		env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, "", SuspendSignal, mock.Anything).Return(nil)
+
+		env.ExecuteWorkflow(DiscoveryWorkflowName, &DiscoveryInput{App: "main", Record: record})
+		if err := env.GetWorkflowError(); err != nil {
+			t.Fatalf("workflow: %v", err)
+		}
+		if !record {
+			if len(recorded) != 0 {
+				t.Errorf("recorded %+v without Record, want nothing", recorded)
+			}
+			continue
+		}
+		if len(recorded) != 1 || recorded[0].Kind != KindDiscoveryFinished || recorded[0].Discovery == nil {
+			t.Fatalf("recorded = %+v, want one discovery.finished", recorded)
+		}
+		d := recorded[0].Discovery
+		if d.App != "main" || d.Seen != 10 || d.Onboarded != 2 || d.ProbeCost != 4 || d.StartedAt.After(d.FinishedAt) {
+			t.Errorf("discovery.finished = %+v", d)
+		}
+	}
+}

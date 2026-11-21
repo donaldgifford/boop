@@ -17,6 +17,7 @@ limitations under the License.
 package workflows
 
 import (
+	"fmt"
 	"slices"
 
 	"go.temporal.io/sdk/workflow"
@@ -82,7 +83,32 @@ func DiscoveryWorkflow(ctx workflow.Context, in *DiscoveryInput) (*DiscoveryResu
 		out.Onboarded += sum.Onboarded
 		out.ProbeCost += sum.ProbeCost
 	}
+	if in.Record && workflow.GetVersion(ctx, storeRecordChange, workflow.DefaultVersion, 1) >= 1 {
+		recordPass(ctx, out)
+	}
 	return out, nil
+}
+
+// recordPass records the pass as discovery.finished (IMPL-0005 5.8). It
+// is the pass's last step, so it waits; the activity retries without
+// limit, and a pass that cannot record is still a pass.
+func recordPass(ctx workflow.Context, out *DiscoveryResult) {
+	info := workflow.GetInfo(ctx)
+	now := workflow.Now(ctx)
+	ev := RecordedEvent{
+		Key:        fmt.Sprintf("wf:%s:%s:0", info.WorkflowExecution.ID, info.WorkflowExecution.RunID),
+		Kind:       KindDiscoveryFinished,
+		OccurredAt: now,
+		Summary:    fmt.Sprintf("discovery %s: %d seen, %d onboarded, %d failed", out.App, out.Seen, out.Onboarded, out.Failed),
+		Discovery: &RecordDiscovery{
+			App: out.App, StartedAt: info.WorkflowStartTime, FinishedAt: now,
+			Seen: out.Seen, Onboarded: out.Onboarded, Failed: out.Failed, ProbeCost: out.ProbeCost,
+		},
+	}
+	err := workflow.ExecuteActivity(storeOptions(ctx, 0), RecordEventsActivity, &RecordEventsInput{Events: []RecordedEvent{ev}}).Get(ctx, nil)
+	if err != nil {
+		workflow.GetLogger(ctx).Warn("discovery pass not recorded", "app", out.App, "error", err)
+	}
 }
 
 // targeted keeps the listed installations whose IDs were asked for. The

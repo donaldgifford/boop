@@ -447,7 +447,7 @@ with one commit per numbered task. The PR split is in OQ1.
   The workflow decodes it when present (`ReceiveAsync` into a value,
   tolerating an empty payload) and records `action.recheck`. Tests with
   and without a payload (OQ9).
-- [ ] 5.8 `DiscoveryWorkflow` records `discovery.finished`, and
+- [x] 5.8 `DiscoveryWorkflow` records `discovery.finished`, and
   `discovered` signals record `repo.onboarded{via: discovery}` the first
   time.
 - [ ] 5.9 Workflow versioning: gate the new activity calls with
