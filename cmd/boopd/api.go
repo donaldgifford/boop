@@ -130,12 +130,16 @@ func runAPIRole(ctx context.Context, path string, stdout, stderr io.Writer, list
 	}()
 	wg.Go(func() { authn.Start(discoverCtx) })
 
+	status := api.NewStatusPage(&api.StatusOptions{
+		Reader: st, Temporal: c, TaskQueue: tcfg.TaskQueue, Version: version, Logger: log,
+	})
 	return api.Run(ctx, &api.RunOptions{
 		Handler: api.Options{
 			Reader:             st,
 			Authn:              authn,
 			Authz:              authz,
 			Temporal:           c,
+			Status:             status,
 			StatusRequiresAuth: !cfg.API.StatusPublic,
 			Logger:             log,
 			Metrics:            metrics,

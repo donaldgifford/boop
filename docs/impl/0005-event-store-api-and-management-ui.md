@@ -733,7 +733,7 @@ with one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 10.1 Read endpoints over sqlc queries:
+- [x] 10.1 Read endpoints over sqlc queries:
   - `/me`, `/installations`, `/repositories` (+ `/{id}`, `/events`,
     `/runs`, `/dependencies`);
   - `/pull-requests` (+ detail), `/dashboard-items`, `/packages`,
@@ -741,20 +741,20 @@ with one commit per numbered task. The PR split is in OQ1.
   - `/runs`, `/events`, `/deliveries`.
 
   Each runs in a read-only transaction with a 5 s statement timeout.
-- [ ] 10.2 `/repositories/{id}` adds the Temporal `state` Query (a 2 s
+- [x] 10.2 `/repositories/{id}` adds the Temporal `state` Query (a 2 s
   deadline, falling back to stored state with `live: false`).
-- [ ] 10.3 `POST /repositories/{id}/recheck` (operators):
+- [x] 10.3 `POST /repositories/{id}/recheck` (operators):
   - it signals `recheck{actor, request_id}` and answers 202;
   - 409 `workflow_missing` when there is no workflow;
   - 503 when Temporal is unreachable;
   - a per-replica dedupe of one per repository per minute.
-- [ ] 10.4 `/estate` and `/estate/series`, computed on read and cached
+- [x] 10.4 `/estate` and `/estate/series`, computed on read and cached
   60 s per (scope, range, metric). The p95 is logged per query for the
   rollup decision.
-- [ ] 10.5 `/status`: computed every 30 s into a cache (components,
+- [x] 10.5 `/status`: computed every 30 s into a cache (components,
   fleet numbers, version), with `TestStatus_PrivacyGuard` (no free-text
   fields outside an allowlist).
-- [ ] 10.6 Tests (integration):
+- [x] 10.6 Tests (integration):
   - each endpoint over seeded data;
   - visibility filtering;
   - recheck's responses against the dev server;

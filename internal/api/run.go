@@ -98,6 +98,9 @@ func Run(ctx context.Context, o *RunOptions) error {
 			}
 		})
 	}
+	if st := o.Handler.Status; st != nil {
+		wg.Go(func() { st.Run(metricsCtx) })
+	}
 	if o.Listening != nil {
 		o.Listening(ln.Addr().String())
 	}

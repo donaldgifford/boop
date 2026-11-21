@@ -37,17 +37,42 @@ import (
 	"github.com/donaldgifford/boop/internal/api/gen"
 	"github.com/donaldgifford/boop/internal/api/oidctest"
 	"github.com/donaldgifford/boop/internal/store"
+	"github.com/donaldgifford/boop/internal/store/db"
 )
 
 const audience = "boopd-api"
 
 var quiet = slog.New(slog.NewTextHandler(io.Discard, nil))
 
-// ownerReader knows two owners and answers Owners by filtering them over
-// the scope, the way the SQL predicate does. It records every scope.
+// ownerReader knows two owners with one repository each, and answers
+// Owners and Repositories by filtering them over the scope, the way the
+// SQL predicate does. It records every scope. The other reads run
+// against Postgres (TestAPI_* integration tests); calling one here
+// panics on the nil embedded Reader.
 type ownerReader struct {
+	boopapi.Reader
+
 	mu     sync.Mutex
 	scopes []store.Scope
+}
+
+var fixtureRepos = []db.ListRepositoriesRow{
+	{ID: 1, InstallationID: 10, Owner: "acme-web", Slug: "acme-web/site", State: "idle", SortSlug: "acme-web/site"},
+	{ID: 2, InstallationID: 20, Owner: "acme-pay", Slug: "acme-pay/ledger", State: "idle", SortSlug: "acme-pay/ledger"},
+}
+
+func (r *ownerReader) Repositories(_ context.Context, scope store.Scope, p *db.ListRepositoriesParams) ([]db.ListRepositoriesRow, error) {
+	r.mu.Lock()
+	r.scopes = append(r.scopes, scope)
+	r.mu.Unlock()
+	var out []db.ListRepositoriesRow
+	for i := range fixtureRepos {
+		repo := &fixtureRepos[i]
+		if (scope.All || slices.Contains(scope.Owners, repo.Owner)) && (p.ID == nil || *p.ID == repo.ID) {
+			out = append(out, *repo)
+		}
+	}
+	return out, nil
 }
 
 func (*ownerReader) Ping(context.Context) error { return nil }
@@ -231,8 +256,8 @@ func TestAuthn_ClockSkew(t *testing.T) {
 }
 
 // TestAuthz_Matrix: who passes the gates in front of each kind of
-// operation. A pass reaches the handler, which answers 501 until Phase
-// 10; a refusal never reaches the reader.
+// operation. A refusal never reaches the handler; a pass does, and
+// answers from the fake reader (recheck answers 503: no Temporal).
 func TestAuthz_Matrix(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -245,16 +270,30 @@ func TestAuthz_Matrix(t *testing.T) {
 		want   int
 	}{
 		{name: "no visible owner: list is 403", method: http.MethodGet, path: "/repositories", token: nobody, want: http.StatusForbidden},
-		{name: "no visible owner: status answers", method: http.MethodGet, path: "/status", token: nobody, want: http.StatusNotImplemented},
-		{name: "visible owner: list passes", method: http.MethodGet, path: "/repositories", token: team, want: http.StatusNotImplemented},
+		{name: "no visible owner: status answers", method: http.MethodGet, path: "/status", token: nobody, want: http.StatusOK},
+		{name: "visible owner: list passes", method: http.MethodGet, path: "/repositories", token: team, want: http.StatusOK},
+		{
+			name: "invisible owner filter is 404", method: http.MethodGet, path: "/repositories?owner=acme-pay", token: team,
+			want: http.StatusNotFound,
+		},
+		{
+			name: "visible owner filter passes", method: http.MethodGet, path: "/repositories?owner=ACME-WEB", token: team,
+			want: http.StatusOK,
+		},
+		{name: "invisible repository is 404", method: http.MethodGet, path: "/repositories/2", token: team, want: http.StatusNotFound},
+		{name: "deliveries need every owner", method: http.MethodGet, path: "/deliveries", token: team, want: http.StatusForbidden},
 		{name: "non-operator recheck is 403", method: http.MethodPost, path: "/repositories/1/recheck", token: team, want: http.StatusForbidden},
 		{
 			name: "no visible owner recheck is 403", method: http.MethodPost, path: "/repositories/1/recheck", token: nobody,
 			want: http.StatusForbidden,
 		},
 		{
-			name: "operator recheck passes", method: http.MethodPost, path: "/repositories/1/recheck", token: platform,
-			want: http.StatusNotImplemented,
+			name: "operator recheck of an unknown repository is 404", method: http.MethodPost, path: "/repositories/9/recheck",
+			token: platform, want: http.StatusNotFound,
+		},
+		{
+			name: "operator recheck passes the gates", method: http.MethodPost, path: "/repositories/1/recheck", token: platform,
+			want: http.StatusServiceUnavailable,
 		},
 	}
 	for _, tt := range tests {
@@ -267,9 +306,28 @@ func TestAuthz_Matrix(t *testing.T) {
 		if resp.Status != tt.want {
 			t.Errorf("%s: %s %s = %d, want %d: %s", tt.name, tt.method, tt.path, resp.Status, tt.want, resp.Body)
 		}
+		if resp.Status < 400 {
+			continue
+		}
 		if p := decode[gen.Problem](t, resp); p.RequestId == nil || *p.RequestId == "" {
 			t.Errorf("%s: problem without request_id: %s", tt.name, resp.Body)
 		}
+	}
+}
+
+// TestRepositories_ScopedInTheReader: the list is filtered by the scope
+// the reader receives, never after it.
+func TestRepositories_ScopedInTheReader(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	list := decode[gen.RepositoryList](t, h.client.Get("/repositories", h.issuer.Valid(t, "team-web")))
+	if len(list.Items) != 1 || list.Items[0].Owner != "acme-web" {
+		t.Errorf("team-web repositories = %+v, want acme-web's only", list.Items)
+	}
+	h.reader.mu.Lock()
+	defer h.reader.mu.Unlock()
+	if len(h.reader.scopes) == 0 || h.reader.scopes[0].All || !slices.Equal(h.reader.scopes[0].Owners, []string{"acme-web"}) {
+		t.Errorf("reader scopes = %+v, want acme-web only", h.reader.scopes)
 	}
 }
 
@@ -280,8 +338,8 @@ func TestPublicRoutes(t *testing.T) {
 	if resp.Status != http.StatusOK || !bytes.Equal(resp.Body, api.Spec) {
 		t.Errorf("openapi.yaml = %d, %.40s; want 200 and the embedded spec", resp.Status, resp.Body)
 	}
-	if resp := h.client.Get("/status", ""); resp.Status == http.StatusUnauthorized {
-		t.Error("public /status = 401 without a token")
+	if resp := h.client.Get("/status", ""); resp.Status != http.StatusOK {
+		t.Errorf("public /status = %d without a token, want 200", resp.Status)
 	}
 
 	closed := newHarness(t, func(o *boopapi.Options) { o.StatusRequiresAuth = true })
@@ -316,7 +374,7 @@ func TestRequestMetrics_LabelByRoute(t *testing.T) {
 	h.client.Get("/me", "")
 	h.metrics.mu.Lock()
 	defer h.metrics.mu.Unlock()
-	want := []string{"GET /api/v1/repositories/{id} 501", "unmatched 401"}
+	want := []string{"GET /api/v1/repositories/{id} 404", "unmatched 401"}
 	if !slices.Equal(h.metrics.requests, want) {
 		t.Errorf("requests = %v, want %v", h.metrics.requests, want)
 	}

@@ -28,10 +28,9 @@ import (
 	"net/http"
 	"time"
 
-	"go.temporal.io/sdk/client"
-
 	"github.com/donaldgifford/boop/internal/api/gen"
 	"github.com/donaldgifford/boop/internal/store"
+	"github.com/donaldgifford/boop/internal/store/db"
 )
 
 // BaseURL is where the API is mounted; it matches the spec's server URL.
@@ -45,6 +44,21 @@ const BaseURL = "/api/v1"
 type Reader interface {
 	Ping(ctx context.Context) error
 	Owners(ctx context.Context, scope store.Scope) ([]string, error)
+	Installations(ctx context.Context, scope store.Scope, p *db.ListInstallationsParams) ([]db.ListInstallationsRow, error)
+	Repositories(ctx context.Context, scope store.Scope, p *db.ListRepositoriesParams) ([]db.ListRepositoriesRow, error)
+	Events(ctx context.Context, scope store.Scope, p *db.ListEventsParams) ([]db.Event, error)
+	Runs(ctx context.Context, scope store.Scope, p *db.ListRunsParams) ([]db.ListRunsRow, error)
+	Dependencies(ctx context.Context, scope store.Scope, p *db.ListDependenciesParams) ([]db.ListDependenciesRow, error)
+	Updates(ctx context.Context, scope store.Scope, p *db.ListUpdatesParams) ([]db.ListUpdatesRow, error)
+	Packages(ctx context.Context, scope store.Scope, p *db.ListPackagesParams) ([]db.ListPackagesRow, error)
+	PullRequests(ctx context.Context, scope store.Scope, p *db.ListPullRequestsParams) ([]db.ListPullRequestsRow, error)
+	DashboardItems(ctx context.Context, scope store.Scope, p *db.ListDashboardItemsParams) ([]db.ListDashboardItemsRow, error)
+	BranchUpdates(ctx context.Context, repoIDs []int64, branches []string) ([]db.BranchUpdatesRow, error)
+	PullRequestTimeline(ctx context.Context, repoID int64, number, limit int32) ([]db.Event, error)
+	Deliveries(ctx context.Context, p *db.ListDeliveriesParams) ([]db.ListDeliveriesRow, error)
+	Estate(ctx context.Context, scope store.Scope, now, rangeStart time.Time) (*store.Estate, error)
+	Series(ctx context.Context, scope store.Scope, metric string, origin, last time.Time, step time.Duration) ([]store.SeriesPoint, error)
+	Status(ctx context.Context, now time.Time) (*store.StatusNumbers, error)
 }
 
 // Options configures the API handler.
@@ -56,10 +70,14 @@ type Options struct {
 	Authn *Authenticator
 	Authz *AuthzConfig
 
-	// Temporal sends recheck's signal; the client is lazy, so the API
-	// starts and serves reads while Temporal is away.
-	Temporal client.Client
+	// Temporal answers the state Query and takes recheck's signal; nil
+	// answers every repository not live and every recheck 503. The
+	// command's client is lazy, so the API serves reads while Temporal is
+	// away.
+	Temporal Temporal
 
+	// Status serves /status from its cache; nil answers unknown.
+	Status *StatusPage
 	// StatusRequiresAuth is api.status_public = false: /status then needs
 	// a valid token like every other route, though no visible owner.
 	StatusRequiresAuth bool

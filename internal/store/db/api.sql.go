@@ -7,7 +7,1526 @@ package db
 
 import (
 	"context"
+	"encoding/json"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const branchUpdates = `-- name: BranchUpdates :many
+SELECT b.repo_id, r.owner, r.slug, b.branch, b.pr_number, b.package_file, b.package_name, b.dep_name,
+       b.manager, b.datasource, b.update_type, b.from_version, b.to_version, b.purl_from, b.purl_to, b.run_id
+FROM branch_updates b
+JOIN repositories r ON r.id = b.repo_id
+JOIN (SELECT unnest($1::bigint[]) AS repo_id, unnest($2::text[]) AS branch) k
+  ON k.repo_id = b.repo_id AND k.branch = b.branch
+ORDER BY b.repo_id, b.branch, b.package_file, b.package_name
+`
+
+type BranchUpdatesParams struct {
+	RepoIds  []int64
+	Branches []string
+}
+
+type BranchUpdatesRow struct {
+	RepoID      int64
+	Owner       string
+	Slug        string
+	Branch      string
+	PrNumber    *int32
+	PackageFile string
+	PackageName string
+	DepName     string
+	Manager     string
+	Datasource  string
+	UpdateType  string
+	FromVersion string
+	ToVersion   string
+	PurlFrom    *string
+	PurlTo      *string
+	RunID       string
+}
+
+// The updates on the given (repository, branch) pairs, for a page of
+// pull requests.
+func (q *Queries) BranchUpdates(ctx context.Context, arg BranchUpdatesParams) ([]BranchUpdatesRow, error) {
+	rows, err := q.db.Query(ctx, branchUpdates, arg.RepoIds, arg.Branches)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BranchUpdatesRow
+	for rows.Next() {
+		var i BranchUpdatesRow
+		if err := rows.Scan(
+			&i.RepoID,
+			&i.Owner,
+			&i.Slug,
+			&i.Branch,
+			&i.PrNumber,
+			&i.PackageFile,
+			&i.PackageName,
+			&i.DepName,
+			&i.Manager,
+			&i.Datasource,
+			&i.UpdateType,
+			&i.FromVersion,
+			&i.ToVersion,
+			&i.PurlFrom,
+			&i.PurlTo,
+			&i.RunID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const estateAgeBuckets = `-- name: EstateAgeBuckets :one
+SELECT
+    coalesce(sum(CASE WHEN p.opened_at > $1::timestamptz THEN 1 ELSE 0 END), 0)::int AS under_1d,
+    coalesce(sum(CASE WHEN p.opened_at <= $1::timestamptz AND p.opened_at > $2::timestamptz THEN 1 ELSE 0 END), 0)::int AS under_7d,
+    coalesce(sum(CASE WHEN p.opened_at <= $2::timestamptz AND p.opened_at > $3::timestamptz THEN 1 ELSE 0 END), 0)::int AS under_30d,
+    coalesce(sum(CASE WHEN p.opened_at <= $3::timestamptz AND p.opened_at > $4::timestamptz THEN 1 ELSE 0 END), 0)::int AS under_90d,
+    coalesce(sum(CASE WHEN p.opened_at <= $4::timestamptz THEN 1 ELSE 0 END), 0)::int AS over_90d
+FROM pull_requests p
+JOIN repositories r ON r.id = p.repo_id
+WHERE p.state = 'open' AND p.opened_at IS NOT NULL
+  AND ($5::boolean OR lower(r.owner) = ANY($6::text[]))
+`
+
+type EstateAgeBucketsParams struct {
+	D1        time.Time
+	D7        time.Time
+	D30       time.Time
+	D90       time.Time
+	AllOwners bool
+	Owners    []string
+}
+
+type EstateAgeBucketsRow struct {
+	Under1d  int32
+	Under7d  int32
+	Under30d int32
+	Under90d int32
+	Over90d  int32
+}
+
+// Open pull requests by age: under a day, a week, 30 days, 90 days, and
+// older. The boundaries are opened_at thresholds: d1 is a day before
+// now, and so on.
+func (q *Queries) EstateAgeBuckets(ctx context.Context, arg EstateAgeBucketsParams) (EstateAgeBucketsRow, error) {
+	row := q.db.QueryRow(ctx, estateAgeBuckets,
+		arg.D1,
+		arg.D7,
+		arg.D30,
+		arg.D90,
+		arg.AllOwners,
+		arg.Owners,
+	)
+	var i EstateAgeBucketsRow
+	err := row.Scan(
+		&i.Under1d,
+		&i.Under7d,
+		&i.Under30d,
+		&i.Under90d,
+		&i.Over90d,
+	)
+	return i, err
+}
+
+const estateEcosystems = `-- name: EstateEcosystems :many
+SELECT b.manager::text AS label, count(DISTINCT (p.repo_id, p.number))::int AS count
+FROM pull_requests p
+JOIN repositories r ON r.id = p.repo_id
+JOIN branch_updates b ON b.repo_id = p.repo_id AND b.branch = p.branch
+WHERE p.state = 'open' AND ($1::boolean OR lower(r.owner) = ANY($2::text[]))
+GROUP BY b.manager
+ORDER BY count DESC, label
+`
+
+type EstateEcosystemsParams struct {
+	AllOwners bool
+	Owners    []string
+}
+
+type EstateEcosystemsRow struct {
+	Label string
+	Count int32
+}
+
+// Open pull requests by Renovate manager, most first.
+func (q *Queries) EstateEcosystems(ctx context.Context, arg EstateEcosystemsParams) ([]EstateEcosystemsRow, error) {
+	rows, err := q.db.Query(ctx, estateEcosystems, arg.AllOwners, arg.Owners)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EstateEcosystemsRow
+	for rows.Next() {
+		var i EstateEcosystemsRow
+		if err := rows.Scan(&i.Label, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const estateNumbers = `-- name: EstateNumbers :one
+SELECT
+    (SELECT count(*) FROM repositories r
+     WHERE r.onboarded_at IS NOT NULL AND r.offboarded_at IS NULL
+       AND ($1::boolean OR lower(r.owner) = ANY($2::text[])))::int AS repositories,
+    (SELECT count(*) FROM pull_requests p JOIN repositories r ON r.id = p.repo_id
+     WHERE p.state = 'open' AND ($1::boolean OR lower(r.owner) = ANY($2::text[])))::int AS open_prs,
+    (SELECT count(*) FROM dashboard_items d JOIN repositories r ON r.id = d.repo_id
+     WHERE d.ticked_at IS NULL AND ($1::boolean OR lower(r.owner) = ANY($2::text[])))::int AS waiting,
+    (SELECT min(p.opened_at) FROM pull_requests p JOIN repositories r ON r.id = p.repo_id
+     WHERE p.state = 'open' AND ($1::boolean OR lower(r.owner) = ANY($2::text[]))) AS oldest_open,
+    (SELECT count(*) FROM runs ru JOIN repositories r ON r.id = ru.repo_id
+     WHERE ru.started_at >= $3::timestamptz AND ($1::boolean OR lower(r.owner) = ANY($2::text[])))::int AS runs_24h,
+    (SELECT count(*) FROM runs ru JOIN repositories r ON r.id = ru.repo_id
+     WHERE ru.finished_at >= $3::timestamptz AND ru.outcome <> ''
+       AND ($1::boolean OR lower(r.owner) = ANY($2::text[])))::int AS finished_24h,
+    (SELECT count(*) FROM runs ru JOIN repositories r ON r.id = ru.repo_id
+     WHERE ru.finished_at >= $3::timestamptz AND ru.outcome = 'Succeeded'
+       AND ($1::boolean OR lower(r.owner) = ANY($2::text[])))::int AS succeeded_24h,
+    (SELECT count(*) FROM webhook_deliveries w LEFT JOIN installations i ON i.id = w.installation_id
+     WHERE coalesce(w.received_at, w.audited_at) >= $3::timestamptz
+       AND (w.missed OR w.github_status = 0 OR w.github_status >= 400)
+       AND ($1::boolean OR lower(i.account_login) = ANY($2::text[])))::int AS lost_deliveries_24h,
+    (SELECT count(*) FROM pull_requests p JOIN repositories r ON r.id = p.repo_id
+     WHERE p.merged_at >= $4::timestamptz AND ($1::boolean OR lower(r.owner) = ANY($2::text[])))::int AS merged_in_range
+`
+
+type EstateNumbersParams struct {
+	AllOwners  bool
+	Owners     []string
+	DayStart   time.Time
+	RangeStart time.Time
+}
+
+type EstateNumbersRow struct {
+	Repositories      int32
+	OpenPrs           int32
+	Waiting           int32
+	OldestOpen        interface{}
+	Runs24h           int32
+	Finished24h       int32
+	Succeeded24h      int32
+	LostDeliveries24h int32
+	MergedInRange     int32
+}
+
+// The estate's point-in-time numbers for a scope (DESIGN-0004 § Estate).
+func (q *Queries) EstateNumbers(ctx context.Context, arg EstateNumbersParams) (EstateNumbersRow, error) {
+	row := q.db.QueryRow(ctx, estateNumbers,
+		arg.AllOwners,
+		arg.Owners,
+		arg.DayStart,
+		arg.RangeStart,
+	)
+	var i EstateNumbersRow
+	err := row.Scan(
+		&i.Repositories,
+		&i.OpenPrs,
+		&i.Waiting,
+		&i.OldestOpen,
+		&i.Runs24h,
+		&i.Finished24h,
+		&i.Succeeded24h,
+		&i.LostDeliveries24h,
+		&i.MergedInRange,
+	)
+	return i, err
+}
+
+const latestSpends = `-- name: LatestSpends :many
+SELECT DISTINCT ON (r.installation_id) r.installation_id, ru.spend
+FROM runs ru
+JOIN repositories r ON r.id = ru.repo_id
+WHERE ru.finished_at IS NOT NULL AND ru.spend <> '{}'::jsonb
+ORDER BY r.installation_id, ru.finished_at DESC
+`
+
+type LatestSpendsRow struct {
+	InstallationID int64
+	Spend          json.RawMessage
+}
+
+// Each installation's latest finished run's spend, for the status page's
+// GitHub budget.
+func (q *Queries) LatestSpends(ctx context.Context) ([]LatestSpendsRow, error) {
+	rows, err := q.db.Query(ctx, latestSpends)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LatestSpendsRow
+	for rows.Next() {
+		var i LatestSpendsRow
+		if err := rows.Scan(&i.InstallationID, &i.Spend); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDashboardItems = `-- name: ListDashboardItems :many
+SELECT d.repo_id, r.owner, r.slug, d.marker, d.branch, d.section, d.title, d.deps, d.first_seen_at,
+       d.last_seen_at, d.ticked_at, d.ticked_by
+FROM dashboard_items d
+JOIN repositories r ON r.id = d.repo_id
+WHERE ($1::boolean OR lower(r.owner) = ANY($2::text[]))
+  AND ($3::bigint IS NULL OR d.repo_id = $3::bigint)
+  AND ($4::text IS NULL OR d.section = $4::text)
+  AND ($5::timestamptz IS NULL OR d.first_seen_at < $5::timestamptz)
+  AND ($6::timestamptz IS NULL OR
+       (d.first_seen_at, d.repo_id, d.marker, d.branch) >
+       ($6::timestamptz, $7::bigint, $8::text, $9::text))
+ORDER BY d.first_seen_at, d.repo_id, d.marker, d.branch
+LIMIT $10
+`
+
+type ListDashboardItemsParams struct {
+	AllOwners   bool
+	Owners      []string
+	RepoID      *int64
+	Section     *string
+	SeenBefore  *time.Time
+	AfterAt     *time.Time
+	AfterRepo   *int64
+	AfterMarker *string
+	AfterBranch *string
+	Lim         int32
+}
+
+type ListDashboardItemsRow struct {
+	RepoID      int64
+	Owner       string
+	Slug        string
+	Marker      string
+	Branch      string
+	Section     string
+	Title       string
+	Deps        json.RawMessage
+	FirstSeenAt time.Time
+	LastSeenAt  time.Time
+	TickedAt    *time.Time
+	TickedBy    *string
+}
+
+// Dependency Dashboard items, oldest first seen first.
+func (q *Queries) ListDashboardItems(ctx context.Context, arg ListDashboardItemsParams) ([]ListDashboardItemsRow, error) {
+	rows, err := q.db.Query(ctx, listDashboardItems,
+		arg.AllOwners,
+		arg.Owners,
+		arg.RepoID,
+		arg.Section,
+		arg.SeenBefore,
+		arg.AfterAt,
+		arg.AfterRepo,
+		arg.AfterMarker,
+		arg.AfterBranch,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDashboardItemsRow
+	for rows.Next() {
+		var i ListDashboardItemsRow
+		if err := rows.Scan(
+			&i.RepoID,
+			&i.Owner,
+			&i.Slug,
+			&i.Marker,
+			&i.Branch,
+			&i.Section,
+			&i.Title,
+			&i.Deps,
+			&i.FirstSeenAt,
+			&i.LastSeenAt,
+			&i.TickedAt,
+			&i.TickedBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDeliveries = `-- name: ListDeliveries :many
+SELECT w.delivery_id, w.attempt, w.app, w.event, w.action, w.outcome, w.github_status, w.missed,
+       w.installation_id, w.repo_id, w.received_at, w.audited_at,
+       coalesce(w.received_at, w.audited_at, 'epoch'::timestamptz)::timestamptz AS sort_at
+FROM webhook_deliveries w
+WHERE ($1::text IS NULL OR w.event = $1::text)
+  AND ($2::text IS NULL OR w.outcome = $2::text)
+  AND ($3::int IS NULL OR w.github_status = $3::int)
+  AND ($4::boolean IS NULL OR w.missed = $4::boolean)
+  AND ($5::timestamptz IS NULL OR
+       (coalesce(w.received_at, w.audited_at, 'epoch'::timestamptz), w.delivery_id::text, w.attempt) <
+       ($5::timestamptz, $6::text, $7::int))
+ORDER BY coalesce(w.received_at, w.audited_at, 'epoch'::timestamptz) DESC, w.delivery_id::text DESC, w.attempt DESC
+LIMIT $8
+`
+
+type ListDeliveriesParams struct {
+	Event         *string
+	Outcome       *string
+	GithubStatus  *int32
+	Missed        *bool
+	AfterAt       *time.Time
+	AfterDelivery *string
+	AfterAttempt  *int32
+	Lim           int32
+}
+
+type ListDeliveriesRow struct {
+	DeliveryID     string
+	Attempt        int32
+	App            string
+	Event          string
+	Action         string
+	Outcome        string
+	GithubStatus   *int32
+	Missed         bool
+	InstallationID *int64
+	RepoID         *int64
+	ReceivedAt     *time.Time
+	AuditedAt      *time.Time
+	SortAt         time.Time
+}
+
+// Webhook deliveries, newest first by received time (audit time for a
+// delivery ingest never recorded). Unscoped: the handler needs every
+// owner.
+func (q *Queries) ListDeliveries(ctx context.Context, arg ListDeliveriesParams) ([]ListDeliveriesRow, error) {
+	rows, err := q.db.Query(ctx, listDeliveries,
+		arg.Event,
+		arg.Outcome,
+		arg.GithubStatus,
+		arg.Missed,
+		arg.AfterAt,
+		arg.AfterDelivery,
+		arg.AfterAttempt,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDeliveriesRow
+	for rows.Next() {
+		var i ListDeliveriesRow
+		if err := rows.Scan(
+			&i.DeliveryID,
+			&i.Attempt,
+			&i.App,
+			&i.Event,
+			&i.Action,
+			&i.Outcome,
+			&i.GithubStatus,
+			&i.Missed,
+			&i.InstallationID,
+			&i.RepoID,
+			&i.ReceivedAt,
+			&i.AuditedAt,
+			&i.SortAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDependencies = `-- name: ListDependencies :many
+SELECT d.repo_id, r.owner, r.slug, d.manager, d.package_file, d.package_name, d.dep_name, d.datasource,
+       d.current_value, d.current_version, d.purl
+FROM dependencies d
+JOIN repositories r ON r.id = d.repo_id
+WHERE ($1::boolean OR lower(r.owner) = ANY($2::text[]))
+  AND ($3::bigint IS NULL OR d.repo_id = $3::bigint)
+  AND ($4::text IS NULL OR d.manager = $4::text)
+  AND ($5::text IS NULL OR d.purl = $5::text)
+  AND ($6::text IS NULL OR d.purl = $7::text OR d.purl LIKE $6::text)
+  AND ($8::bigint IS NULL OR
+       (d.repo_id, d.manager, d.package_file, d.package_name) >
+       ($8::bigint, $9::text, $10::text, $11::text))
+ORDER BY d.repo_id, d.manager, d.package_file, d.package_name
+LIMIT $12
+`
+
+type ListDependenciesParams struct {
+	AllOwners    bool
+	Owners       []string
+	RepoID       *int64
+	Manager      *string
+	PurlExact    *string
+	PurlPrefix   *string
+	PurlBase     *string
+	AfterRepo    *int64
+	AfterManager *string
+	AfterFile    *string
+	AfterName    *string
+	Lim          int32
+}
+
+type ListDependenciesRow struct {
+	RepoID         int64
+	Owner          string
+	Slug           string
+	Manager        string
+	PackageFile    string
+	PackageName    string
+	DepName        string
+	Datasource     string
+	CurrentValue   string
+	CurrentVersion string
+	Purl           *string
+}
+
+// Dependencies by repository, manager, file and name. purl_exact matches
+// a versioned purl; purl_prefix (a LIKE pattern) every version of one.
+func (q *Queries) ListDependencies(ctx context.Context, arg ListDependenciesParams) ([]ListDependenciesRow, error) {
+	rows, err := q.db.Query(ctx, listDependencies,
+		arg.AllOwners,
+		arg.Owners,
+		arg.RepoID,
+		arg.Manager,
+		arg.PurlExact,
+		arg.PurlPrefix,
+		arg.PurlBase,
+		arg.AfterRepo,
+		arg.AfterManager,
+		arg.AfterFile,
+		arg.AfterName,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDependenciesRow
+	for rows.Next() {
+		var i ListDependenciesRow
+		if err := rows.Scan(
+			&i.RepoID,
+			&i.Owner,
+			&i.Slug,
+			&i.Manager,
+			&i.PackageFile,
+			&i.PackageName,
+			&i.DepName,
+			&i.Datasource,
+			&i.CurrentValue,
+			&i.CurrentVersion,
+			&i.Purl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEvents = `-- name: ListEvents :many
+SELECT e.id, e.key, e.occurred_at, e.recorded_at, e.kind, e.source, e.installation_id, e.repo_id,
+       e.pr_number, e.actor_login, e.actor_type, e.cause_key, e.summary, e.data
+FROM events e
+WHERE ($1::boolean OR EXISTS (
+        SELECT 1 FROM repositories r WHERE r.id = e.repo_id AND lower(r.owner) = ANY($2::text[])))
+  AND ($3::bigint IS NULL OR e.repo_id = $3::bigint)
+  AND ($4::text IS NULL OR e.kind = $4::text OR
+       (right($4::text, 1) = '.' AND starts_with(e.kind, $4::text)))
+  AND ($5::text IS NULL OR e.source = $5::text)
+  AND ($6::text IS NULL OR e.actor_login = $6::text)
+  AND ($7::text IS NULL OR e.cause_key = $7::text)
+  AND ($8::timestamptz IS NULL OR e.occurred_at >= $8::timestamptz)
+  AND ($9::timestamptz IS NULL OR e.occurred_at < $9::timestamptz)
+  AND ($10::timestamptz IS NULL OR
+       (e.occurred_at, e.id) < ($10::timestamptz, $11::bigint))
+ORDER BY e.occurred_at DESC, e.id DESC
+LIMIT $12
+`
+
+type ListEventsParams struct {
+	AllOwners bool
+	Owners    []string
+	RepoID    *int64
+	Kind      *string
+	Source    *string
+	Actor     *string
+	CauseKey  *string
+	Since     *time.Time
+	Until     *time.Time
+	AfterAt   *time.Time
+	AfterID   *int64
+	Lim       int32
+}
+
+// The audit log, newest first. An event about a repository is visible
+// with its owner; one about none needs every owner.
+func (q *Queries) ListEvents(ctx context.Context, arg ListEventsParams) ([]Event, error) {
+	rows, err := q.db.Query(ctx, listEvents,
+		arg.AllOwners,
+		arg.Owners,
+		arg.RepoID,
+		arg.Kind,
+		arg.Source,
+		arg.Actor,
+		arg.CauseKey,
+		arg.Since,
+		arg.Until,
+		arg.AfterAt,
+		arg.AfterID,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Event
+	for rows.Next() {
+		var i Event
+		if err := rows.Scan(
+			&i.ID,
+			&i.Key,
+			&i.OccurredAt,
+			&i.RecordedAt,
+			&i.Kind,
+			&i.Source,
+			&i.InstallationID,
+			&i.RepoID,
+			&i.PrNumber,
+			&i.ActorLogin,
+			&i.ActorType,
+			&i.CauseKey,
+			&i.Summary,
+			&i.Data,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInstallations = `-- name: ListInstallations :many
+SELECT i.id, i.app, i.account_login, i.account_type, i.suspended, i.removed_at,
+       (SELECT count(*) FROM repositories r
+        WHERE r.installation_id = i.id AND r.onboarded_at IS NOT NULL AND r.offboarded_at IS NULL)::int AS repositories,
+       lr.spend AS last_spend, lr.finished_at AS last_finished_at
+FROM installations i
+LEFT JOIN LATERAL (
+    SELECT ru.spend, ru.finished_at
+    FROM runs ru
+    JOIN repositories r ON r.id = ru.repo_id
+    WHERE r.installation_id = i.id AND ru.finished_at IS NOT NULL AND ru.spend <> '{}'::jsonb
+    ORDER BY ru.finished_at DESC
+    LIMIT 1
+) lr ON true
+WHERE ($1::boolean OR lower(i.account_login) = ANY($2::text[]))
+  AND ($3::bigint IS NULL OR i.id > $3::bigint)
+ORDER BY i.id
+LIMIT $4
+`
+
+type ListInstallationsParams struct {
+	AllOwners bool
+	Owners    []string
+	AfterID   *int64
+	Lim       int32
+}
+
+type ListInstallationsRow struct {
+	ID             int64
+	App            string
+	AccountLogin   string
+	AccountType    string
+	Suspended      bool
+	RemovedAt      *time.Time
+	Repositories   int32
+	LastSpend      json.RawMessage
+	LastFinishedAt *time.Time
+}
+
+// Installations by id, with onboarded repositories and the spend of the
+// installation's latest finished run that recorded one.
+func (q *Queries) ListInstallations(ctx context.Context, arg ListInstallationsParams) ([]ListInstallationsRow, error) {
+	rows, err := q.db.Query(ctx, listInstallations,
+		arg.AllOwners,
+		arg.Owners,
+		arg.AfterID,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListInstallationsRow
+	for rows.Next() {
+		var i ListInstallationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.App,
+			&i.AccountLogin,
+			&i.AccountType,
+			&i.Suspended,
+			&i.RemovedAt,
+			&i.Repositories,
+			&i.LastSpend,
+			&i.LastFinishedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPackages = `-- name: ListPackages :many
+WITH p AS (
+    SELECT split_part(b.purl_from, '@', 1)::text AS purl,
+           count(DISTINCT b.repo_id)::int AS repositories,
+           count(*)::int AS updates,
+           array_agg(DISTINCT b.from_version ORDER BY b.from_version)::text[] AS from_versions,
+           array_agg(DISTINCT b.to_version ORDER BY b.to_version)::text[] AS to_versions,
+           array_agg(DISTINCT b.manager ORDER BY b.manager)::text[] AS managers
+    FROM branch_updates b
+    JOIN repositories r ON r.id = b.repo_id
+    WHERE b.purl_from IS NOT NULL
+      AND ($4::boolean OR lower(r.owner) = ANY($5::text[]))
+      AND ($6::text IS NULL OR b.manager = $6::text)
+    GROUP BY 1
+)
+SELECT p.purl, p.repositories, p.updates, p.from_versions, p.to_versions, p.managers
+FROM p
+WHERE $1::int IS NULL
+   OR p.repositories < $1::int
+   OR (p.repositories = $1::int AND p.purl > $2::text)
+ORDER BY p.repositories DESC, p.purl
+LIMIT $3
+`
+
+type ListPackagesParams struct {
+	AfterRepos *int32
+	AfterPurl  *string
+	Lim        int32
+	AllOwners  bool
+	Owners     []string
+	Manager    *string
+}
+
+type ListPackagesRow struct {
+	Purl         string
+	Repositories int32
+	Updates      int32
+	FromVersions []string
+	ToVersions   []string
+	Managers     []string
+}
+
+// Pending updates grouped by purl without version, most repositories
+// first.
+func (q *Queries) ListPackages(ctx context.Context, arg ListPackagesParams) ([]ListPackagesRow, error) {
+	rows, err := q.db.Query(ctx, listPackages,
+		arg.AfterRepos,
+		arg.AfterPurl,
+		arg.Lim,
+		arg.AllOwners,
+		arg.Owners,
+		arg.Manager,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPackagesRow
+	for rows.Next() {
+		var i ListPackagesRow
+		if err := rows.Scan(
+			&i.Purl,
+			&i.Repositories,
+			&i.Updates,
+			&i.FromVersions,
+			&i.ToVersions,
+			&i.Managers,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPullRequests = `-- name: ListPullRequests :many
+SELECT p.repo_id, r.owner, r.slug, p.number, p.branch, p.state, p.title, p.labels, p.automerge, p.url,
+       p.opened_at, p.merged_at, p.closed_at, p.gh_updated_at,
+       coalesce(p.opened_at, p.gh_updated_at)::timestamptz AS sort_at
+FROM pull_requests p
+JOIN repositories r ON r.id = p.repo_id
+WHERE ($1::boolean OR lower(r.owner) = ANY($2::text[]))
+  AND ($3::bigint IS NULL OR p.repo_id = $3::bigint)
+  AND ($4::int IS NULL OR p.number = $4::int)
+  AND ($5::text IS NULL OR p.state = $5::text)
+  AND ($6::boolean IS NULL OR p.automerge = $6::boolean)
+  AND ($7::text IS NULL OR $7::text = ANY(p.labels))
+  AND ($8::timestamptz IS NULL OR p.opened_at < $8::timestamptz)
+  AND ($9::text IS NULL OR EXISTS (
+        SELECT 1 FROM branch_updates b
+        WHERE b.repo_id = p.repo_id AND b.branch = p.branch AND b.manager = $9::text))
+  AND ($10::text IS NULL OR EXISTS (
+        SELECT 1 FROM branch_updates b
+        WHERE b.repo_id = p.repo_id AND b.branch = p.branch AND b.update_type = $10::text))
+  AND ($11::text IS NULL OR EXISTS (
+        SELECT 1 FROM branch_updates b
+        WHERE b.repo_id = p.repo_id AND b.branch = p.branch AND b.purl_from = $11::text))
+  AND ($12::text IS NULL OR EXISTS (
+        SELECT 1 FROM branch_updates b
+        WHERE b.repo_id = p.repo_id AND b.branch = p.branch
+          AND (b.purl_from = $13::text OR b.purl_from LIKE $12::text)))
+  AND ($14::timestamptz IS NULL OR
+       (coalesce(p.opened_at, p.gh_updated_at), p.repo_id, p.number) >
+       ($14::timestamptz, $15::bigint, $16::int))
+ORDER BY coalesce(p.opened_at, p.gh_updated_at), p.repo_id, p.number
+LIMIT $17
+`
+
+type ListPullRequestsParams struct {
+	AllOwners    bool
+	Owners       []string
+	RepoID       *int64
+	Number       *int32
+	State        *string
+	Automerge    *bool
+	Label        *string
+	OpenedBefore *time.Time
+	Manager      *string
+	UpdateType   *string
+	PurlExact    *string
+	PurlPrefix   *string
+	PurlBase     *string
+	AfterAt      *time.Time
+	AfterRepo    *int64
+	AfterNumber  *int32
+	Lim          int32
+}
+
+type ListPullRequestsRow struct {
+	RepoID      int64
+	Owner       string
+	Slug        string
+	Number      int32
+	Branch      string
+	State       string
+	Title       string
+	Labels      []string
+	Automerge   bool
+	Url         string
+	OpenedAt    *time.Time
+	MergedAt    *time.Time
+	ClosedAt    *time.Time
+	GhUpdatedAt time.Time
+	SortAt      time.Time
+}
+
+// Pull requests, oldest opened first (GitHub's updated_at when never
+// seen opened).
+func (q *Queries) ListPullRequests(ctx context.Context, arg ListPullRequestsParams) ([]ListPullRequestsRow, error) {
+	rows, err := q.db.Query(ctx, listPullRequests,
+		arg.AllOwners,
+		arg.Owners,
+		arg.RepoID,
+		arg.Number,
+		arg.State,
+		arg.Automerge,
+		arg.Label,
+		arg.OpenedBefore,
+		arg.Manager,
+		arg.UpdateType,
+		arg.PurlExact,
+		arg.PurlPrefix,
+		arg.PurlBase,
+		arg.AfterAt,
+		arg.AfterRepo,
+		arg.AfterNumber,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPullRequestsRow
+	for rows.Next() {
+		var i ListPullRequestsRow
+		if err := rows.Scan(
+			&i.RepoID,
+			&i.Owner,
+			&i.Slug,
+			&i.Number,
+			&i.Branch,
+			&i.State,
+			&i.Title,
+			&i.Labels,
+			&i.Automerge,
+			&i.Url,
+			&i.OpenedAt,
+			&i.MergedAt,
+			&i.ClosedAt,
+			&i.GhUpdatedAt,
+			&i.SortAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRepositories = `-- name: ListRepositories :many
+SELECT r.id, r.installation_id, r.owner, r.slug, r.state, r.profile, r.onboarded_at, r.offboarded_at,
+       r.next_due, r.last_run_id, r.last_run_at, r.last_outcome,
+       (SELECT count(*) FROM pull_requests p WHERE p.repo_id = r.id AND p.state = 'open')::int AS open_prs,
+       (SELECT count(*) FROM dashboard_items d WHERE d.repo_id = r.id AND d.ticked_at IS NULL)::int AS waiting,
+       lower(r.slug)::text AS sort_slug
+FROM repositories r
+WHERE ($1::boolean OR lower(r.owner) = ANY($2::text[]))
+  AND ($3::bigint IS NULL OR r.id = $3::bigint)
+  AND ($4::text IS NULL OR lower(r.slug) LIKE $4::text)
+  AND ($5::text IS NULL OR r.state = $5::text)
+  AND ($6::text IS NULL OR r.profile = $6::text)
+  AND ($7::boolean IS NULL OR
+       EXISTS (SELECT 1 FROM pull_requests p WHERE p.repo_id = r.id AND p.state = 'open') = $7::boolean)
+  AND ($8::text IS NULL OR
+       (lower(r.slug), r.id) > ($8::text, $9::bigint))
+ORDER BY lower(r.slug), r.id
+LIMIT $10
+`
+
+type ListRepositoriesParams struct {
+	AllOwners  bool
+	Owners     []string
+	ID         *int64
+	SlugPrefix *string
+	State      *string
+	Profile    *string
+	HasOpenPrs *bool
+	AfterSlug  *string
+	AfterID    *int64
+	Lim        int32
+}
+
+type ListRepositoriesRow struct {
+	ID             int64
+	InstallationID int64
+	Owner          string
+	Slug           string
+	State          string
+	Profile        string
+	OnboardedAt    *time.Time
+	OffboardedAt   *time.Time
+	NextDue        *time.Time
+	LastRunID      *string
+	LastRunAt      *time.Time
+	LastOutcome    *string
+	OpenPrs        int32
+	Waiting        int32
+	SortSlug       string
+}
+
+// Repositories by lower(slug), id, with open pull requests and unticked
+// dashboard items.
+func (q *Queries) ListRepositories(ctx context.Context, arg ListRepositoriesParams) ([]ListRepositoriesRow, error) {
+	rows, err := q.db.Query(ctx, listRepositories,
+		arg.AllOwners,
+		arg.Owners,
+		arg.ID,
+		arg.SlugPrefix,
+		arg.State,
+		arg.Profile,
+		arg.HasOpenPrs,
+		arg.AfterSlug,
+		arg.AfterID,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRepositoriesRow
+	for rows.Next() {
+		var i ListRepositoriesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.InstallationID,
+			&i.Owner,
+			&i.Slug,
+			&i.State,
+			&i.Profile,
+			&i.OnboardedAt,
+			&i.OffboardedAt,
+			&i.NextDue,
+			&i.LastRunID,
+			&i.LastRunAt,
+			&i.LastOutcome,
+			&i.OpenPrs,
+			&i.Waiting,
+			&i.SortSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRuns = `-- name: ListRuns :many
+SELECT ru.id, ru.repo_id, r.owner, r.slug, run_cause(ru.cause_key)::text AS cause, ru.cause_key,
+       ru.outcome, ru.repository_result, ru.started_at, ru.finished_at, ru.queued_ms, ru.duration_ms,
+       ru.renovate_version, ru.spend, ru.problems,
+       coalesce((SELECT jsonb_array_length(coalesce(e.data->'updates', '[]'::jsonb))
+                 FROM events e
+                 WHERE e.key = 'run:' || ru.id || ':finished' AND e.occurred_at = ru.finished_at
+                 LIMIT 1), 0)::int AS updates
+FROM runs ru
+JOIN repositories r ON r.id = ru.repo_id
+WHERE ($1::boolean OR lower(r.owner) = ANY($2::text[]))
+  AND ($3::bigint IS NULL OR ru.repo_id = $3::bigint)
+  AND ($4::text IS NULL OR ru.outcome = $4::text)
+  AND ($5::text IS NULL OR run_cause(ru.cause_key) = $5::text)
+  AND ($6::timestamptz IS NULL OR ru.started_at >= $6::timestamptz)
+  AND ($7::timestamptz IS NULL OR ru.started_at < $7::timestamptz)
+  AND ($8::timestamptz IS NULL OR
+       (ru.started_at, ru.id) < ($8::timestamptz, $9::text))
+ORDER BY ru.started_at DESC, ru.id DESC
+LIMIT $10
+`
+
+type ListRunsParams struct {
+	AllOwners bool
+	Owners    []string
+	RepoID    *int64
+	Outcome   *string
+	Cause     *string
+	Since     *time.Time
+	Until     *time.Time
+	AfterAt   *time.Time
+	AfterID   *string
+	Lim       int32
+}
+
+type ListRunsRow struct {
+	ID               string
+	RepoID           int64
+	Owner            string
+	Slug             string
+	Cause            string
+	CauseKey         *string
+	Outcome          string
+	RepositoryResult string
+	StartedAt        time.Time
+	FinishedAt       *time.Time
+	QueuedMs         *int64
+	DurationMs       *int64
+	RenovateVersion  string
+	Spend            json.RawMessage
+	Problems         json.RawMessage
+	Updates          int32
+}
+
+// Runs, newest first, with the repository's owner and slug, the derived
+// cause and the update count of the run's run.finished.
+func (q *Queries) ListRuns(ctx context.Context, arg ListRunsParams) ([]ListRunsRow, error) {
+	rows, err := q.db.Query(ctx, listRuns,
+		arg.AllOwners,
+		arg.Owners,
+		arg.RepoID,
+		arg.Outcome,
+		arg.Cause,
+		arg.Since,
+		arg.Until,
+		arg.AfterAt,
+		arg.AfterID,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRunsRow
+	for rows.Next() {
+		var i ListRunsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.RepoID,
+			&i.Owner,
+			&i.Slug,
+			&i.Cause,
+			&i.CauseKey,
+			&i.Outcome,
+			&i.RepositoryResult,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.QueuedMs,
+			&i.DurationMs,
+			&i.RenovateVersion,
+			&i.Spend,
+			&i.Problems,
+			&i.Updates,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUpdates = `-- name: ListUpdates :many
+SELECT b.repo_id, r.owner, r.slug, b.branch, b.pr_number, b.package_file, b.package_name, b.dep_name,
+       b.manager, b.datasource, b.update_type, b.from_version, b.to_version, b.purl_from, b.purl_to, b.run_id
+FROM branch_updates b
+JOIN repositories r ON r.id = b.repo_id
+WHERE ($1::boolean OR lower(r.owner) = ANY($2::text[]))
+  AND ($3::text IS NULL OR b.purl_from = $3::text)
+  AND ($4::text IS NULL OR b.purl_from = $5::text OR b.purl_from LIKE $4::text)
+  AND ($6::text IS NULL OR b.from_version = $6::text)
+  AND ($7::text IS NULL OR b.to_version = $7::text)
+  AND ($8::text IS NULL OR b.update_type = $8::text)
+  AND ($9::bigint IS NULL OR
+       (b.repo_id, b.branch, b.package_file, b.package_name) >
+       ($9::bigint, $10::text, $11::text, $12::text))
+ORDER BY b.repo_id, b.branch, b.package_file, b.package_name
+LIMIT $13
+`
+
+type ListUpdatesParams struct {
+	AllOwners   bool
+	Owners      []string
+	PurlExact   *string
+	PurlPrefix  *string
+	PurlBase    *string
+	FromVersion *string
+	ToVersion   *string
+	UpdateType  *string
+	AfterRepo   *int64
+	AfterBranch *string
+	AfterFile   *string
+	AfterName   *string
+	Lim         int32
+}
+
+type ListUpdatesRow struct {
+	RepoID      int64
+	Owner       string
+	Slug        string
+	Branch      string
+	PrNumber    *int32
+	PackageFile string
+	PackageName string
+	DepName     string
+	Manager     string
+	Datasource  string
+	UpdateType  string
+	FromVersion string
+	ToVersion   string
+	PurlFrom    *string
+	PurlTo      *string
+	RunID       string
+}
+
+// Proposed updates by repository, branch, file and name; purl matches
+// purl_from as in ListDependencies.
+func (q *Queries) ListUpdates(ctx context.Context, arg ListUpdatesParams) ([]ListUpdatesRow, error) {
+	rows, err := q.db.Query(ctx, listUpdates,
+		arg.AllOwners,
+		arg.Owners,
+		arg.PurlExact,
+		arg.PurlPrefix,
+		arg.PurlBase,
+		arg.FromVersion,
+		arg.ToVersion,
+		arg.UpdateType,
+		arg.AfterRepo,
+		arg.AfterBranch,
+		arg.AfterFile,
+		arg.AfterName,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUpdatesRow
+	for rows.Next() {
+		var i ListUpdatesRow
+		if err := rows.Scan(
+			&i.RepoID,
+			&i.Owner,
+			&i.Slug,
+			&i.Branch,
+			&i.PrNumber,
+			&i.PackageFile,
+			&i.PackageName,
+			&i.DepName,
+			&i.Manager,
+			&i.Datasource,
+			&i.UpdateType,
+			&i.FromVersion,
+			&i.ToVersion,
+			&i.PurlFrom,
+			&i.PurlTo,
+			&i.RunID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const pullRequestTimeline = `-- name: PullRequestTimeline :many
+SELECT e.id, e.key, e.occurred_at, e.recorded_at, e.kind, e.source, e.installation_id, e.repo_id,
+       e.pr_number, e.actor_login, e.actor_type, e.cause_key, e.summary, e.data
+FROM events e
+WHERE e.repo_id = $1 AND e.pr_number = $2
+ORDER BY e.occurred_at, e.id
+LIMIT $3
+`
+
+type PullRequestTimelineParams struct {
+	RepoID *int64
+	Number *int32
+	Lim    int32
+}
+
+// One pull request's events, oldest first, at most @lim.
+func (q *Queries) PullRequestTimeline(ctx context.Context, arg PullRequestTimelineParams) ([]Event, error) {
+	rows, err := q.db.Query(ctx, pullRequestTimeline, arg.RepoID, arg.Number, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Event
+	for rows.Next() {
+		var i Event
+		if err := rows.Scan(
+			&i.ID,
+			&i.Key,
+			&i.OccurredAt,
+			&i.RecordedAt,
+			&i.Kind,
+			&i.Source,
+			&i.InstallationID,
+			&i.RepoID,
+			&i.PrNumber,
+			&i.ActorLogin,
+			&i.ActorType,
+			&i.CauseKey,
+			&i.Summary,
+			&i.Data,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const seriesMerged = `-- name: SeriesMerged :many
+SELECT date_bin($1::interval, p.merged_at, $2::timestamptz)::timestamptz AS at, count(*)::int AS count
+FROM pull_requests p
+JOIN repositories r ON r.id = p.repo_id
+WHERE p.merged_at >= $2::timestamptz
+  AND ($3::boolean OR lower(r.owner) = ANY($4::text[]))
+GROUP BY 1
+ORDER BY 1
+`
+
+type SeriesMergedParams struct {
+	Step      pgtype.Interval
+	Origin    time.Time
+	AllOwners bool
+	Owners    []string
+}
+
+type SeriesMergedRow struct {
+	At    time.Time
+	Count int32
+}
+
+// Pull requests merged per bucket.
+func (q *Queries) SeriesMerged(ctx context.Context, arg SeriesMergedParams) ([]SeriesMergedRow, error) {
+	rows, err := q.db.Query(ctx, seriesMerged,
+		arg.Step,
+		arg.Origin,
+		arg.AllOwners,
+		arg.Owners,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SeriesMergedRow
+	for rows.Next() {
+		var i SeriesMergedRow
+		if err := rows.Scan(&i.At, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const seriesOpenPRs = `-- name: SeriesOpenPRs :many
+SELECT g.at::timestamptz AS at, count(p.repo_id)::int AS count
+FROM generate_series($1::timestamptz, $2::timestamptz, $3::interval) AS g(at)
+LEFT JOIN (
+    SELECT p.repo_id, p.opened_at, coalesce(p.merged_at, p.closed_at) AS ended_at
+    FROM pull_requests p JOIN repositories r ON r.id = p.repo_id
+    WHERE p.opened_at IS NOT NULL AND ($4::boolean OR lower(r.owner) = ANY($5::text[]))
+) p ON p.opened_at < g.at + $3::interval AND (p.ended_at IS NULL OR p.ended_at >= g.at + $3::interval)
+GROUP BY g.at
+ORDER BY g.at
+`
+
+type SeriesOpenPRsParams struct {
+	Origin    time.Time
+	Last      time.Time
+	Step      pgtype.Interval
+	AllOwners bool
+	Owners    []string
+}
+
+type SeriesOpenPRsRow struct {
+	At    time.Time
+	Count int32
+}
+
+// Pull requests open at each bucket's end.
+func (q *Queries) SeriesOpenPRs(ctx context.Context, arg SeriesOpenPRsParams) ([]SeriesOpenPRsRow, error) {
+	rows, err := q.db.Query(ctx, seriesOpenPRs,
+		arg.Origin,
+		arg.Last,
+		arg.Step,
+		arg.AllOwners,
+		arg.Owners,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SeriesOpenPRsRow
+	for rows.Next() {
+		var i SeriesOpenPRsRow
+		if err := rows.Scan(&i.At, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const seriesRuns = `-- name: SeriesRuns :many
+SELECT date_bin($1::interval, ru.started_at, $2::timestamptz)::timestamptz AS at, ru.outcome, count(*)::int AS count
+FROM runs ru
+JOIN repositories r ON r.id = ru.repo_id
+WHERE ru.started_at >= $2::timestamptz
+  AND ($3::boolean OR lower(r.owner) = ANY($4::text[]))
+GROUP BY 1, 2
+ORDER BY 1, 2
+`
+
+type SeriesRunsParams struct {
+	Step      pgtype.Interval
+	Origin    time.Time
+	AllOwners bool
+	Owners    []string
+}
+
+type SeriesRunsRow struct {
+	At      time.Time
+	Outcome string
+	Count   int32
+}
+
+// Runs started per bucket and outcome.
+func (q *Queries) SeriesRuns(ctx context.Context, arg SeriesRunsParams) ([]SeriesRunsRow, error) {
+	rows, err := q.db.Query(ctx, seriesRuns,
+		arg.Step,
+		arg.Origin,
+		arg.AllOwners,
+		arg.Owners,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SeriesRunsRow
+	for rows.Next() {
+		var i SeriesRunsRow
+		if err := rows.Scan(&i.At, &i.Outcome, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const seriesWaiting = `-- name: SeriesWaiting :many
+SELECT g.at::timestamptz AS at, count(d.repo_id)::int AS count
+FROM generate_series($1::timestamptz, $2::timestamptz, $3::interval) AS g(at)
+LEFT JOIN (
+    SELECT d.repo_id, d.first_seen_at, d.ticked_at
+    FROM dashboard_items d JOIN repositories r ON r.id = d.repo_id
+    WHERE ($4::boolean OR lower(r.owner) = ANY($5::text[]))
+) d ON d.first_seen_at < g.at + $3::interval AND (d.ticked_at IS NULL OR d.ticked_at >= g.at + $3::interval)
+GROUP BY g.at
+ORDER BY g.at
+`
+
+type SeriesWaitingParams struct {
+	Origin    time.Time
+	Last      time.Time
+	Step      pgtype.Interval
+	AllOwners bool
+	Owners    []string
+}
+
+type SeriesWaitingRow struct {
+	At    time.Time
+	Count int32
+}
+
+// Dashboard items unticked at each bucket's end.
+func (q *Queries) SeriesWaiting(ctx context.Context, arg SeriesWaitingParams) ([]SeriesWaitingRow, error) {
+	rows, err := q.db.Query(ctx, seriesWaiting,
+		arg.Origin,
+		arg.Last,
+		arg.Step,
+		arg.AllOwners,
+		arg.Owners,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SeriesWaitingRow
+	for rows.Next() {
+		var i SeriesWaitingRow
+		if err := rows.Scan(&i.At, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const statusNumbers = `-- name: StatusNumbers :one
+SELECT
+    (SELECT count(*) FROM repositories r WHERE r.onboarded_at IS NOT NULL AND r.offboarded_at IS NULL)::int AS repositories,
+    (SELECT count(*) FROM pull_requests p WHERE p.state = 'open')::int AS open_prs,
+    (SELECT count(*) FROM runs ru WHERE ru.started_at >= $1::timestamptz)::int AS runs_24h,
+    (SELECT count(*) FROM webhook_deliveries w
+     WHERE coalesce(w.received_at, w.audited_at) >= $1::timestamptz)::int AS deliveries_24h,
+    (SELECT count(*) FROM webhook_deliveries w
+     WHERE coalesce(w.received_at, w.audited_at) >= $1::timestamptz AND w.github_status IS NOT NULL
+       AND (w.github_status = 0 OR w.github_status >= 400))::int AS failed_24h,
+    (SELECT count(*) FROM webhook_deliveries w
+     WHERE coalesce(w.received_at, w.audited_at) >= $1::timestamptz AND w.missed)::int AS missed_24h,
+    (SELECT max(w.received_at) FROM webhook_deliveries w) AS last_delivery,
+    (SELECT max(dp.finished_at) FROM discovery_passes dp) AS last_discovery
+`
+
+type StatusNumbersRow struct {
+	Repositories  int32
+	OpenPrs       int32
+	Runs24h       int32
+	Deliveries24h int32
+	Failed24h     int32
+	Missed24h     int32
+	LastDelivery  interface{}
+	LastDiscovery interface{}
+}
+
+// The status page's aggregates: fleet totals, deliveries in the last
+// 24 h, and the ages of the latest delivery and discovery pass.
+func (q *Queries) StatusNumbers(ctx context.Context, dayStart time.Time) (StatusNumbersRow, error) {
+	row := q.db.QueryRow(ctx, statusNumbers, dayStart)
+	var i StatusNumbersRow
+	err := row.Scan(
+		&i.Repositories,
+		&i.OpenPrs,
+		&i.Runs24h,
+		&i.Deliveries24h,
+		&i.Failed24h,
+		&i.Missed24h,
+		&i.LastDelivery,
+		&i.LastDiscovery,
+	)
+	return i, err
+}
 
 const visibleOwners = `-- name: VisibleOwners :many
 
@@ -24,7 +1543,10 @@ type VisibleOwnersParams struct {
 }
 
 // The API role's reads (DESIGN-0004 § The API). Every query is scoped:
-// `(@all_owners::boolean OR lower(owner) = ANY(@owners::text[]))`.
+// `(@all_owners::boolean OR lower(owner) = ANY(@owners::text[]))`, so a
+// row outside the caller's owners is indistinguishable from a missing
+// one. Lists are keyset-paged: the after_* arguments are the last row's
+// sort key, NULL on the first page, and lim is the page size plus one.
 // The installation accounts in scope that the store knows, for /me.
 func (q *Queries) VisibleOwners(ctx context.Context, arg VisibleOwnersParams) ([]string, error) {
 	rows, err := q.db.Query(ctx, visibleOwners, arg.AllOwners, arg.Owners)

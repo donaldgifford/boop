@@ -86,6 +86,9 @@ type repo struct {
 	// acquires numbers acquire Updates for their UpdateIDs.
 	acquires int
 	phase    string
+	// budgetWaitUntil is the end of the current budget wait; zero when
+	// none. Only the state Query reads it.
+	budgetWaitUntil time.Time
 
 	// sandboxV is sandboxChange's version for this execution.
 	sandboxV workflow.Version
@@ -127,7 +130,7 @@ func RepoWorkflow(ctx workflow.Context, in *RepoState) error {
 	if r.s.LastRun != nil {
 		r.lastStart = r.s.LastRun.StartedAt
 	}
-	if err := workflow.SetQueryHandler(ctx, StateQuery, func() (RepoState, error) { return r.s, nil }); err != nil {
+	if err := workflow.SetQueryHandler(ctx, StateQuery, func() (RepoView, error) { return r.view(ctx), nil }); err != nil {
 		return err
 	}
 	r.sandboxV = workflow.GetVersion(ctx, sandboxChange, workflow.DefaultVersion, 1)
@@ -157,6 +160,18 @@ func RepoWorkflow(ctx workflow.Context, in *RepoState) error {
 		}
 		r.upsert(ctx, r.idlePhase())
 	}
+}
+
+// view is the state Query's answer.
+func (r *repo) view(ctx workflow.Context) RepoView {
+	v := RepoView{RepoState: r.s, Phase: r.phase}
+	switch {
+	case r.phase == PhaseRunning:
+		v.RunningSince = r.lastStart
+	case r.phase == PhaseAcquiring && r.budgetWaitUntil.After(workflow.Now(ctx)):
+		v.Phase, v.BudgetWaitUntil = PhaseWaitingBudget, r.budgetWaitUntil
+	}
+	return v
 }
 
 // idlePhase is the phase between runs: needs-sandbox after a run that
@@ -598,9 +613,13 @@ func (r *repo) acquireFrom(ctx workflow.Context, prio Priority, activity string)
 			workflow.GetLogger(ctx).Warn("acquire failed", "error", err)
 			wait = backoffBase
 		case res.Granted:
+			r.budgetWaitUntil = time.Time{}
 			return res.LeaseID, nil
 		default:
 			wait = max(res.RetryAt.Sub(workflow.Now(ctx)), time.Second)
+			if activity == AcquireBudgetActivity {
+				r.budgetWaitUntil = workflow.Now(ctx).Add(wait)
+			}
 			if !waited && activity == AcquireBudgetActivity {
 				r.noteState(ctx, KindRunBudgetWait, "waiting for the installation's rate-limit budget", res.RetryAt)
 			}

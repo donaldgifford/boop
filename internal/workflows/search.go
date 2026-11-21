@@ -52,4 +52,8 @@ const (
 	// in, waiting for its next cadence or a recheck (DESIGN-0005
 	// § Failing closed).
 	PhaseNeedsSandbox = "needs-sandbox"
+	// PhaseWaitingBudget is reported by the state Query only, for an
+	// acquire waiting on the installation's budget; the search attribute
+	// stays PhaseAcquiring.
+	PhaseWaitingBudget = "waiting-budget"
 )
