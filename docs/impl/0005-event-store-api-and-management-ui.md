@@ -250,7 +250,7 @@ with one commit per numbered task. The PR split is in OQ1.
   - `store_meta(schema_version)`.
 
   Keys and columns are as in DESIGN-0004 § Tables.
-- [ ] 2.3 `0003_grants.sql`: grants to the existing roles `boopd_worker`,
+- [x] 2.3 `0003_grants.sql`: grants to the existing roles `boopd_worker`,
   `boopd_ingest` and `boopd_ro` (OQ8). `events` has no UPDATE or DELETE
   for anyone but the owner, and `boopd_ro` has
   `default_transaction_read_only`.
