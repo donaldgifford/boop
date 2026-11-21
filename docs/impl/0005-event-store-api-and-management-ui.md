@@ -832,7 +832,7 @@ store code, so 9.1 is the one task that unblocks the rest of the UI.
 
 #### Tasks
 
-- [ ] 11.1 Scaffold `ui/` to INV-0005 finding 7. The mockup has
+- [x] 11.1 Scaffold `ui/` to INV-0005 finding 7. The mockup has
   `package.json`, `tsconfig.json` with the strict flags and
   `web/vite.config.ts` with Tailwind. Still to add: `server/`,
   `scripts/` and `e2e/`, `bunfig.toml`, ESLint and the dev proxy.

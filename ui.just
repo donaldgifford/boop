@@ -11,10 +11,10 @@
 ui-install:
     @cd ui && NPM_TOKEN="${NPM_TOKEN:-$(gh auth token)}" bun install --frozen-lockfile
 
-# Typecheck the UI (ESLint joins in IMPL-0005 11.1)
+# Typecheck and lint the UI
 [group('ui')]
 ui-lint:
-    cd ui && bun run typecheck
+    cd ui && bun run typecheck && bun run lint
 
 # Run the UI's unit tests (the BFF and the SPA) with bun test
 [group('ui')]

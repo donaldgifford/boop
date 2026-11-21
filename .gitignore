@@ -70,3 +70,5 @@ dev/
 # UI (Bun, Vite)
 ui/node_modules/
 ui/dist/
+ui/test-results/
+ui/playwright-report/
