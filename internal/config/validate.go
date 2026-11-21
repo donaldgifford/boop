@@ -80,7 +80,25 @@ func (b *builder) validate(cfg *Config, raw *fileSchema) {
 		}
 	}
 	b.validateSandbox(cfg, raw)
+	b.validateStore(raw.Store)
 	b.validateApps(raw.Apps)
+}
+
+// validateStore checks the store block's secret refs.
+func (b *builder) validateStore(s *storeBlock) {
+	if s == nil {
+		return
+	}
+	for what, ref := range map[string]*secretRefBlock{
+		"store.owner_dsn_secret_ref":  s.OwnerDSNSecretRef,
+		"store.dsn_secret_ref":        s.DSNSecretRef,
+		"store.ingest_dsn_secret_ref": s.IngestDSNSecretRef,
+		"store.ro_dsn_secret_ref":     s.RODSNSecretRef,
+	} {
+		if ref != nil {
+			b.validateSecretRef(ref, what)
+		}
+	}
 }
 
 func (b *builder) validateRenovate(r *Renovate, raw *renovateBlock) {

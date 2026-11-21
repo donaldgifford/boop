@@ -117,6 +117,25 @@ func (c *Config) ReadWebhookSecrets() error {
 	return errors.Join(errs...)
 }
 
+// ErrNoStoreDSN is returned by ReadStoreDSN when the file names no ref
+// for the DSN a role needs.
+var ErrNoStoreDSN = errors.New("store DSN secret ref not configured")
+
+// ReadStoreDSN reads one store DSN from the file ref names under
+// SecretsDir, trimmed of surrounding whitespace. what names the ref in
+// errors, such as "store.owner_dsn_secret_ref". A role reads only its own
+// DSN, once at start.
+func (c *Config) ReadStoreDSN(ref *SecretRef, what string) (Secret, error) {
+	if ref == nil {
+		return Secret{}, fmt.Errorf("%s: %w", what, ErrNoStoreDSN)
+	}
+	v, err := readSecret(ref.Path(c.SecretsDir))
+	if err != nil {
+		return Secret{}, fmt.Errorf("%s: %w", what, err)
+	}
+	return Secret{value: bytes.TrimSpace(v.value)}, nil
+}
+
 // composeRedisURL builds RedisURL from RedisEndpoint and, when named, the
 // password Secret. url.UserPassword escapes the password, so it need not
 // be URL-safe. The endpoint's user, if any, is kept.

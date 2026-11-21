@@ -91,6 +91,8 @@ sandbox { … } # optional: the sandboxed tier (DESIGN-0005)
 
 ingest { … } # optional: webhook ingest timings
 
+store { … } # optional: the Postgres product store (DESIGN-0004)
+
 app "boop-bot" { … } # one or more; webhook { … } inside enables ingest for it
 ```
 
@@ -108,6 +110,7 @@ app "boop-bot" { … } # one or more; webhook { … } inside enables ingest for 
 | `profile_rule` | block | none | Maps presets and managers to a profile. |
 | `sandbox` | block | none | The sandboxed tier: where runs of repository code execute (DESIGN-0005). |
 | `ingest` | block | defaults | Webhook ingest's path and the timings webhook events run by. |
+| `store` | block | disabled | The Postgres product store and the DSN each role reads (DESIGN-0004). |
 | `app` | block, labelled | at least one | A GitHub App whose installations are discovered. |
 
 ## renovate
@@ -448,6 +451,49 @@ ingest {
 
 The worker reads `settle` and `min_interval` through `PlanRun` before each
 run, so a change applies to running RepoWorkflows from their next run.
+
+## store
+
+The Postgres product store (DESIGN-0004): an event log and the
+projections the API reads. Off unless `enabled = true`.
+
+```hcl
+store {
+  enabled = true
+
+  owner_dsn_secret_ref  { name = "boopd-store" key = "owner-dsn" }  # migrate, rebuild
+  dsn_secret_ref        { name = "boopd-store" key = "worker-dsn" } # worker
+  ingest_dsn_secret_ref { name = "boopd-store" key = "ingest-dsn" } # ingest
+  ro_dsn_secret_ref     { name = "boopd-store" key = "ro-dsn" }     # api
+
+  retention {
+    events            = "9600h" # 400 days
+    delivery_payloads = "720h"  # 30 days
+    offboarded        = "2160h" # 90 days
+  }
+}
+```
+
+| Setting | Type | Default | Description |
+| - | - | - | - |
+| `enabled` | bool | `false` | Records runs, decisions, deliveries and pull requests in the store from the worker and ingest. |
+| `owner_dsn_secret_ref` | block | none | The DSN of `boopd_owner`, which owns the schema. Read by `boopd migrate` and `boopd store rebuild` only. |
+| `dsn_secret_ref` | block | none | The worker's DSN, as `boopd_worker`. |
+| `ingest_dsn_secret_ref` | block | none | Ingest's DSN, as `boopd_ingest`. |
+| `ro_dsn_secret_ref` | block | none | The API's read-only DSN, as `boopd_ro`. |
+| `retention` | block | see below | How long the store keeps what. |
+
+Each ref is a `name` and `key` like the App's `private_key_secret_ref`.
+Each role reads only its own DSN; one that needs a DSN the file does not
+name stops at start.
+
+### retention
+
+| Setting | Type | Default | Description |
+| - | - | - | - |
+| `events` | duration | `9600h` (400 days) | How long events and runs are kept. Events are dropped a month partition at a time. |
+| `delivery_payloads` | duration | `720h` (30 days) | How long a delivery's decoded payload subset is kept. The delivery row and its events stay. |
+| `offboarded` | duration | `2160h` (90 days) | How long an offboarded repository's projections stay after `repo.offboarded`. |
 
 ## Secrets
 

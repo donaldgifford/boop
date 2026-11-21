@@ -258,7 +258,7 @@ with one commit per numbered task. The PR split is in OQ1.
   embedded files, under an advisory lock, with the version table
   `goose_boopd_version`. `RequireVersion(ctx, pool, n)` makes a role
   refuse to start below the schema it needs.
-- [ ] 2.5 `boopd migrate --config <file>` in `cmd/boopd`, using the
+- [x] 2.5 `boopd migrate --config <file>` in `cmd/boopd`, using the
   owner DSN from `store.owner_dsn_secret_ref` (migrate only).
 - [ ] 2.6 Tests (integration): up from empty and idempotent re-run;
   role grants (a `boopd_ro` INSERT fails, a `boopd_ingest` UPDATE on

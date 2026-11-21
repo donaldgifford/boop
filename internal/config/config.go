@@ -61,6 +61,13 @@ const (
 	DefaultDiscoveryEvery = 6 * time.Hour
 )
 
+// Store retention defaults (DESIGN-0004 § Retention).
+const (
+	DefaultRetainEvents           = 400 * 24 * time.Hour
+	DefaultRetainDeliveryPayloads = 30 * 24 * time.Hour
+	DefaultRetainOffboarded       = 90 * 24 * time.Hour
+)
+
 // Ingest defaults and bounds (DESIGN-0003 § boopd.hcl).
 const (
 	DefaultIngestPath  = "/webhooks/github"
@@ -102,7 +109,36 @@ type Config struct {
 	Sandbox *Sandbox
 	// Ingest is the ingest block, defaulted when absent.
 	Ingest Ingest
-	Apps   []*App
+	// Store is the store block, defaulted (and disabled) when absent.
+	Store Store
+	Apps  []*App
+}
+
+// Store is the store block: the Postgres product store (DESIGN-0004).
+// Each ref is nil when the file does not name it; a role that needs a
+// DSN fails at start without its own.
+type Store struct {
+	// Enabled turns on recording in the worker and ingest.
+	Enabled bool
+	// OwnerDSNSecretRef is for migrate and rebuild only.
+	OwnerDSNSecretRef *SecretRef
+	// DSNSecretRef is the worker's.
+	DSNSecretRef *SecretRef
+	// IngestDSNSecretRef is ingest's.
+	IngestDSNSecretRef *SecretRef
+	// RODSNSecretRef is the API's read-only DSN.
+	RODSNSecretRef *SecretRef
+	Retention      Retention
+}
+
+// Retention is store.retention.
+type Retention struct {
+	// Events is how long events and runs are kept.
+	Events time.Duration
+	// DeliveryPayloads is how long a delivery's payload subset is kept.
+	DeliveryPayloads time.Duration
+	// Offboarded is how long an offboarded repository's projections stay.
+	Offboarded time.Duration
 }
 
 // Ingest is the ingest block: webhook ingest's path and the timings
@@ -370,6 +406,7 @@ func (b *builder) build(raw *fileSchema) *Config {
 	}
 	cfg.SecretsDir = derefOr(raw.SecretsDir, DefaultSecretsDir)
 	cfg.Ingest = b.ingest(raw.Ingest)
+	cfg.Store = b.store(raw.Store)
 	cfg.Sandbox = b.sandbox(raw.Sandbox, &cfg.Runs)
 	cfg.Profiles = b.profiles(raw.Profiles)
 	for i := range raw.ProfileRules {
@@ -476,6 +513,36 @@ func (b *builder) ingest(in *ingestBlock) Ingest {
 		MinInterval: b.durationAtLeast(in.MinInterval, DefaultMinInterval, 0, "min_interval"),
 		AuditEvery:  b.durationAtLeast(in.AuditEvery, DefaultAuditEvery, MinAuditEvery, "audit_every"),
 	}
+}
+
+func (b *builder) store(in *storeBlock) Store {
+	if in == nil {
+		in = &storeBlock{}
+	}
+	r := in.Retention
+	if r == nil {
+		r = &retentionBlock{}
+	}
+	return Store{
+		Enabled:            derefOr(in.Enabled, false),
+		OwnerDSNSecretRef:  secretRef(in.OwnerDSNSecretRef),
+		DSNSecretRef:       secretRef(in.DSNSecretRef),
+		IngestDSNSecretRef: secretRef(in.IngestDSNSecretRef),
+		RODSNSecretRef:     secretRef(in.RODSNSecretRef),
+		Retention: Retention{
+			Events:           b.duration(r.Events, DefaultRetainEvents),
+			DeliveryPayloads: b.duration(r.DeliveryPayloads, DefaultRetainDeliveryPayloads),
+			Offboarded:       b.duration(r.Offboarded, DefaultRetainOffboarded),
+		},
+	}
+}
+
+// secretRef converts an optional ref block; nil stays nil.
+func secretRef(r *secretRefBlock) *SecretRef {
+	if r == nil {
+		return nil
+	}
+	return &SecretRef{Name: r.Name, Key: r.Key}
 }
 
 // duration evaluates an optional duration attribute: def when absent.

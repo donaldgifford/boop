@@ -35,6 +35,7 @@ const usage = `usage:
   boopd config validate <file>
   boopd worker --config <file>
   boopd ingest --config <file>
+  boopd migrate --config <file>
 `
 
 func main() {
@@ -52,6 +53,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runWorker(args[1:], stdout, stderr)
 	case len(args) >= 1 && args[0] == "ingest":
 		return runIngest(args[1:], stdout, stderr)
+	case len(args) >= 1 && args[0] == "migrate":
+		return runMigrate(args[1:], stdout, stderr)
 	default:
 		return write(stderr, exitUsage, "%s", usage)
 	}
