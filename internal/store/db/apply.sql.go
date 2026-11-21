@@ -94,31 +94,6 @@ func (q *Queries) EnsureRepository(ctx context.Context, arg EnsureRepositoryPara
 	return err
 }
 
-const insertRunStarted = `-- name: InsertRunStarted :exec
-INSERT INTO runs (id, repo_id, cause_key, started_at, queued_ms, updated_at)
-VALUES ($1, $2, $3, $4, $5, $4)
-ON CONFLICT (id) DO NOTHING
-`
-
-type InsertRunStartedParams struct {
-	ID        string
-	RepoID    int64
-	CauseKey  *string
-	StartedAt time.Time
-	QueuedMs  *int64
-}
-
-func (q *Queries) InsertRunStarted(ctx context.Context, arg InsertRunStartedParams) error {
-	_, err := q.db.Exec(ctx, insertRunStarted,
-		arg.ID,
-		arg.RepoID,
-		arg.CauseKey,
-		arg.StartedAt,
-		arg.QueuedMs,
-	)
-	return err
-}
-
 const recordRepositoryRun = `-- name: RecordRepositoryRun :one
 UPDATE repositories
 SET last_run_id = $1::text, last_run_at = $2::timestamptz, last_outcome = $3::text
@@ -348,6 +323,8 @@ ON CONFLICT (app, started_at) DO UPDATE SET
     onboarded = excluded.onboarded,
     failed = excluded.failed,
     probe_cost = excluded.probe_cost
+WHERE discovery_passes.finished_at IS NULL
+   OR discovery_passes.finished_at <= excluded.finished_at
 `
 
 type UpsertDiscoveryPassParams struct {
@@ -360,6 +337,7 @@ type UpsertDiscoveryPassParams struct {
 	ProbeCost  int32
 }
 
+// UpsertDiscoveryPass records a pass; a later finish of the same pass wins.
 func (q *Queries) UpsertDiscoveryPass(ctx context.Context, arg UpsertDiscoveryPassParams) error {
 	_, err := q.db.Exec(ctx, upsertDiscoveryPass,
 		arg.App,
@@ -518,6 +496,7 @@ VALUES
     ($1, $2, $3, $4, $5, $6, $7::timestamptz,
      $8::bigint, $9, $10, $11, $7)
 ON CONFLICT (id) DO UPDATE SET
+    cause_key = coalesce(excluded.cause_key, runs.cause_key),
     outcome = excluded.outcome,
     repository_result = excluded.repository_result,
     started_at = excluded.started_at,
@@ -557,6 +536,35 @@ func (q *Queries) UpsertRunFinished(ctx context.Context, arg UpsertRunFinishedPa
 		arg.RenovateVersion,
 		arg.Spend,
 		arg.Problems,
+	)
+	return err
+}
+
+const upsertRunStarted = `-- name: UpsertRunStarted :exec
+INSERT INTO runs (id, repo_id, cause_key, started_at, queued_ms, updated_at)
+VALUES ($1, $2, $3, $4, $5, $4)
+ON CONFLICT (id) DO UPDATE SET
+    cause_key = coalesce(runs.cause_key, excluded.cause_key),
+    queued_ms = coalesce(runs.queued_ms, excluded.queued_ms)
+`
+
+type UpsertRunStartedParams struct {
+	ID        string
+	RepoID    int64
+	CauseKey  *string
+	StartedAt time.Time
+	QueuedMs  *int64
+}
+
+// UpsertRunStarted records a run's start. When run.finished came first,
+// only what it lacks is filled in, so either order ends the same.
+func (q *Queries) UpsertRunStarted(ctx context.Context, arg UpsertRunStartedParams) error {
+	_, err := q.db.Exec(ctx, upsertRunStarted,
+		arg.ID,
+		arg.RepoID,
+		arg.CauseKey,
+		arg.StartedAt,
+		arg.QueuedMs,
 	)
 	return err
 }

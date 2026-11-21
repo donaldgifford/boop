@@ -89,7 +89,7 @@ func applyRunStarted(ctx context.Context, q *db.Queries, e *Event) error {
 	}); err != nil {
 		return err
 	}
-	if err := q.InsertRunStarted(ctx, db.InsertRunStartedParams{
+	if err := q.UpsertRunStarted(ctx, db.UpsertRunStartedParams{
 		ID:        d.RunID,
 		RepoID:    e.RepoID,
 		CauseKey:  nullText(e.CauseKey),

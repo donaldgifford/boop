@@ -320,7 +320,7 @@ with one commit per numbered task. The PR split is in OQ1.
 - [x] 3.5 `boopd store rebuild --config <file>`: truncate the
   projections, then stream `events` in `(occurred_at, id)` order through
   the same applies, in batches. The owner DSN is required.
-- [ ] 3.6 Tests (integration), per kind:
+- [x] 3.6 Tests (integration), per kind:
   - apply a fixture;
   - re-apply (no-op);
   - apply an older event (ignored).

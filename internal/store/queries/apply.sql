@@ -132,10 +132,14 @@ SET last_run_id = @run_id::text, last_run_at = @finished_at::timestamptz, last_o
 WHERE id = @id AND (last_run_at IS NULL OR last_run_at <= @finished_at)
 RETURNING id;
 
--- name: InsertRunStarted :exec
+-- name: UpsertRunStarted :exec
+-- UpsertRunStarted records a run's start. When run.finished came first,
+-- only what it lacks is filled in, so either order ends the same.
 INSERT INTO runs (id, repo_id, cause_key, started_at, queued_ms, updated_at)
 VALUES (@id, @repo_id, sqlc.narg(cause_key), @started_at, sqlc.narg(queued_ms), @started_at)
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+    cause_key = coalesce(runs.cause_key, excluded.cause_key),
+    queued_ms = coalesce(runs.queued_ms, excluded.queued_ms);
 
 -- name: UpsertRunFinished :exec
 INSERT INTO runs
@@ -145,6 +149,7 @@ VALUES
     (@id, @repo_id, sqlc.narg(cause_key), @outcome, @repository_result, @started_at, @finished_at::timestamptz,
      @duration_ms::bigint, @renovate_version, @spend, @problems, @finished_at)
 ON CONFLICT (id) DO UPDATE SET
+    cause_key = coalesce(excluded.cause_key, runs.cause_key),
     outcome = excluded.outcome,
     repository_result = excluded.repository_result,
     started_at = excluded.started_at,
@@ -195,6 +200,7 @@ ON CONFLICT (id) DO UPDATE SET
 WHERE installations.updated_at <= excluded.updated_at;
 
 -- name: UpsertDiscoveryPass :exec
+-- UpsertDiscoveryPass records a pass; a later finish of the same pass wins.
 INSERT INTO discovery_passes (app, started_at, finished_at, seen, onboarded, failed, probe_cost)
 VALUES (@app, @started_at, @finished_at::timestamptz, @seen, @onboarded, @failed, @probe_cost)
 ON CONFLICT (app, started_at) DO UPDATE SET
@@ -202,4 +208,6 @@ ON CONFLICT (app, started_at) DO UPDATE SET
     seen = excluded.seen,
     onboarded = excluded.onboarded,
     failed = excluded.failed,
-    probe_cost = excluded.probe_cost;
+    probe_cost = excluded.probe_cost
+WHERE discovery_passes.finished_at IS NULL
+   OR discovery_passes.finished_at <= excluded.finished_at;
