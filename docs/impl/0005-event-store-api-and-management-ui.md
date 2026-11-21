@@ -254,7 +254,7 @@ with one commit per numbered task. The PR split is in OQ1.
   `boopd_ingest` and `boopd_ro` (OQ8). `events` has no UPDATE or DELETE
   for anyone but the owner, and `boopd_ro` has
   `default_transaction_read_only`.
-- [ ] 2.4 `internal/store/migrate.go`: a goose Provider over the
+- [x] 2.4 `internal/store/migrate.go`: a goose Provider over the
   embedded files, under an advisory lock, with the version table
   `goose_boopd_version`. `RequireVersion(ctx, pool, n)` makes a role
   refuse to start below the schema it needs.
