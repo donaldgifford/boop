@@ -855,7 +855,7 @@ store code, so 9.1 is the one task that unblocks the rest of the UI.
     never grouped or automerged, and lets Renovate read the registry;
   - `globals.css` imported once from the SPA's entry, and `.dark` set on
     `<html>`.
-- [ ] 11.3 The BFF in `ui/server`, written here with repo-guardian's
+- [x] 11.3 The BFF in `ui/server`, written here with repo-guardian's
   libraries and file layout (INV-0005 OQ6):
   - config from the environment, validated at start;
   - OIDC code + PKCE as the confidential client `boopd-ui`;
