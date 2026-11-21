@@ -450,7 +450,7 @@ with one commit per numbered task. The PR split is in OQ1.
 - [x] 5.8 `DiscoveryWorkflow` records `discovery.finished`, and
   `discovered` signals record `repo.onboarded{via: discovery}` the first
   time.
-- [ ] 5.9 Workflow versioning: gate the new activity calls with
+- [x] 5.9 Workflow versioning: gate the new activity calls with
   `workflow.GetVersion("store-record", …)`. Extend IMPL-0004's replay
   histories, then replay.
 - [ ] 5.10 Tests:

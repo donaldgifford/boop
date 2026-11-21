@@ -44,9 +44,13 @@ func TestRecordReplayHistories(t *testing.T) {
 	register := func(name string, fn any) {
 		w.RegisterActivityWithOptions(fn, activity.RegisterOptions{Name: name})
 	}
-	register(workflows.PlanRunActivity, func(context.Context, *workflows.PlanRunInput) (*workflows.RunPlan, error) {
-		return &workflows.RunPlan{Profile: "default", Cadence: time.Hour}, nil
+	// Repository 104 records to the store (IMPL-0005 5.9); the others
+	// run as the store disabled does.
+	register(workflows.PlanRunActivity, func(_ context.Context, in *workflows.PlanRunInput) (*workflows.RunPlan, error) {
+		return &workflows.RunPlan{Profile: "default", Cadence: time.Hour, Record: in.RepoID == 104}, nil
 	})
+	register(workflows.RecordRunActivity, func(context.Context, *workflows.RecordRunInput) error { return nil })
+	register(workflows.RecordEventsActivity, func(context.Context, *workflows.RecordEventsInput) error { return nil })
 	register(workflows.AcquireBudgetActivity, func(_ context.Context, in *workflows.AcquireInput) (*workflows.AcquireResult, error) {
 		return &workflows.AcquireResult{Granted: true, LeaseID: in.UpdateID}, nil
 	})
@@ -131,6 +135,27 @@ func TestRecordReplayHistories(t *testing.T) {
 		t.Fatal(err)
 	}
 	write(ctx, t, srv.Client, run, "repo-needs-sandbox-then-recheck.json")
+
+	// Recording to the store: onboarded, a run, a recheck from the API
+	// with its actor, a second run (IMPL-0005 5.9).
+	run = start(workflows.RepoWorkflowID(104), workflows.RepoWorkflowName, &workflows.RepoState{
+		RepoID: 104, Slug: "boop-e2e/recorded", DefaultBranch: "main", InstallationID: 1,
+		DiscoveryInterval: time.Hour, LastSeen: now, NextDue: now,
+	})
+	waitState(ctx, t, srv.Client, 104, func(s *workflows.RepoState) bool { return s.LastRun != nil })
+	signal(ctx, t, srv.Client, 104, workflows.RecheckSignal, workflows.Recheck{Actor: "dg@example.com", RequestID: "req-1"})
+	waitState(ctx, t, srv.Client, 104, func(s *workflows.RepoState) bool { return s.CauseKey != "" && s.RecordSeq >= 4 })
+	if err := srv.Client.TerminateWorkflow(ctx, workflows.RepoWorkflowID(104), "", "recorded"); err != nil {
+		t.Fatal(err)
+	}
+	write(ctx, t, srv.Client, run, "repo-store-record-run-recheck.json")
+
+	// A discovery pass that records itself.
+	run = start(workflows.DiscoveryScheduleID("recorded"), workflows.DiscoveryWorkflowName, &workflows.DiscoveryInput{App: "recorded", Record: true})
+	if err := run.Get(ctx, nil); err != nil {
+		t.Fatalf("recording DiscoveryWorkflow: %v", err)
+	}
+	write(ctx, t, srv.Client, run, "discovery-store-record.json")
 
 	// A discovery pass over two installations.
 	run = start(workflows.DiscoveryScheduleID("main"), workflows.DiscoveryWorkflowName, &workflows.DiscoveryInput{App: "main"})
