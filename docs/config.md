@@ -507,6 +507,10 @@ name stops at start.
 | `delivery_payloads` | duration | `720h` (30 days) | How long a delivery's decoded payload subset is kept. The delivery row and its events stay. |
 | `offboarded` | duration | `2160h` (90 days) | How long an offboarded repository's projections stay after `repo.offboarded`. |
 
+With `enabled`, the worker starts a daily `store-maintenance` Schedule
+that applies these rules. It also keeps the `events` partitions two
+months ahead. A duration of `0` keeps everything for that rule.
+
 ## Secrets
 
 Secrets are files, never values in this file and never environment

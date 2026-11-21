@@ -377,6 +377,28 @@ open:
 - GitHub's search returns at most 1000 results, so a fleet with more open
   bot PRs than that on one account syncs only the first 1000 per pass.
 
+## Findings (Phase 8)
+
+- **The events cutoff is rounded down to its month.** `drop_partitions`
+  deletes idempotency keys and default-partition rows older than the
+  time it is given. With the exact cutoff, a partition that stays would
+  lose its events' keys. Rounding to the month keeps events, keys and
+  the default partition expiring together, a month at a time.
+- **The offboarded rule needed a grant.** Migration 0004 gives
+  `boopd_worker` DELETE on `dashboard_items` and `dashboards`, which
+  ingest otherwise owns. `SchemaVersion` is now 4, so a worker or ingest
+  from this build refuses to start until `boopd migrate` has run.
+- **One activity, one rule.** `StoreMaintenanceWorkflow` runs
+  `MaintainStore` for each rule in turn, at low priority with three
+  attempts. A failed rule is counted, and the next day's pass catches
+  up. The rule names live in both packages (depguard), and a test keeps
+  them in step.
+- **The clock override is the workflow's start time**, passed as
+  `MaintainStoreInput.Now`. `ensure_partitions` still uses the
+  database's clock, which is right for creating months ahead.
+- A retention of `0` keeps everything for that rule. Partitions are
+  still created.
+
 ## Implementation Phases
 
 Each phase ends with `just lint`, `just test` and its own checks green,
