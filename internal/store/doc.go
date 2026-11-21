@@ -20,4 +20,16 @@ limitations under the License.
 //
 // Migrate applies the embedded schema as the owner role. Every other role
 // calls RequireVersion at start and refuses to run below SchemaVersion.
+//
+// Writers record what happened with Store.Append. Each Event carries a
+// Kind from the catalogue (Kinds) and that kind's typed, versioned Data.
+// Append records the idempotency key first, so a retried event is a
+// no-op, then inserts the event and runs the kind's apply on the
+// projections, all in one transaction. Every apply compares the source
+// timestamp with the row's guard column and ignores older data, so events
+// arriving out of order converge on the same rows.
+//
+// Rebuild truncates the projections and replays the log through the same
+// applies; it equals the incremental result. The queries live in
+// queries/ and are generated into the db package by sqlc.
 package store

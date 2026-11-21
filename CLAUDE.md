@@ -128,7 +128,7 @@ artifacts on every release.
 ## Layout
 
 ```text
-cmd/boopd/                # main package: `boopd worker`, `boopd ingest`, `boopd config validate`
+cmd/boopd/                # main package: `boopd worker`, `boopd ingest`, `boopd migrate`, `boopd store rebuild`, `boopd config validate`
 internal/                 # library code; not importable outside this module
 internal/platform/        # GitHub discovery, config probe, token minting
 internal/temporal/        # Temporal client config, worker, versioning, schedules
@@ -142,6 +142,8 @@ internal/config/          # HCL config file via hclkit: decode, defaults, valida
 internal/profiles/        # pure profile resolver: extends + managers -> strictest profile
 internal/kube/            # Job lifecycle Runner: suspended create, Secret, unsuspend, log follow, exit, delete
 internal/renovate/        # log scanner + report parser: progress, Repository finished, update tuples
+internal/store/           # Postgres event store (DESIGN-0004): goose migrations, Append + per-kind applies, Rebuild; sqlc queries in queries/, generated db/
+internal/store/storetest/ # throwaway Postgres container with the four roles, for integration tests
 test/stub-renovate/       # stub Renovate image for e2e (bake target stub-renovate; never pushed)
 test/stub-github/         # test/fakegithub over TLS as an image for the chart e2e (bake target stub-github; never pushed)
 test/e2e/                 # k3d e2e suite, build tag e2e; `just e2e`

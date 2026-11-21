@@ -228,6 +228,32 @@ open:
 - **`store_meta.schema_version`** is what `RequireVersion` reads, since
   every role can read it and only the owner can read goose's table.
 
+## Findings (Phase 3)
+
+- **Kinds with no projection** (`pr.checkbox`, `action.recheck`) have no
+  apply. Their events are recorded, and their tests check that no
+  projection changes.
+- **Repository state names.** `run.stalled` sets `stalled`,
+  `run.capacity-denied` sets `waiting`, and `run.budget-wait` sets
+  `rate-limited`. A `run.finished` that `Failed` or `TimedOut` sets
+  `errored`; any other outcome sets `idle`.
+- **A run seen before its repository's onboarding** creates a placeholder
+  row whose lifecycle guard is `-infinity`, so the onboarding still
+  applies when it arrives.
+- **Arrival order.** Rebuild equals the incremental result for the
+  recorded log, which delivers PR, delivery, run, installation and
+  dashboard-tick events out of order. Two orders still differ:
+  - a tick that arrives before the rewrite that first lists its item is
+    dropped incrementally;
+  - an offboarding that arrives before its onboarding leaves
+    `onboarded_at` empty.
+
+  GitHub and the worker do not produce either today. Run `boopd store
+  rebuild` if one is ever seen.
+- **Rebuild is one transaction as the owner.** Writers block on the
+  truncated tables until it commits, then apply on top, so no event is
+  lost or applied twice.
+
 ## Implementation Phases
 
 Each phase ends with `just lint`, `just test` and its own checks green,
