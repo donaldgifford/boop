@@ -216,7 +216,7 @@ with one commit per numbered task. The PR split is in OQ1.
   `github.com/pressly/goose/v3`, `github.com/coreos/go-oidc/v3`,
   `github.com/getkin/kin-openapi`. Tools as `go tool` in `go.mod`:
   `oapi-codegen` v2.8.0 and `sqlc` (OQ4).
-- [ ] 1.3 `mise.toml`: pins for `bun` (1.3.14) and `vacuum`. Playwright
+- [x] 1.3 `mise.toml`: pins for `bun` (1.3.14) and `vacuum`. Playwright
   runs from its pinned image, not mise.
 - [ ] 1.4 Test database (OQ2): `internal/store/storetest` starts a
   pinned `postgres:17` container through Docker for tests under the

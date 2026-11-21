@@ -36,6 +36,9 @@ git-cliff = "latest"
 actionlint = "latest"
 # renovate: datasource=github-releases depName=casey/just
 just = "latest"
+# OpenAPI linter for api/openapi.yaml (just lint-api).
+# renovate: datasource=github-releases depName=daveshanley/vacuum extractVersion=^v(?<version>.+)$
+vacuum = "0.42.1"
 
 # tools
 # renovate: datasource=github-releases depName=mikefarah/yq
