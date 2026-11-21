@@ -143,7 +143,9 @@ func TestGrants_EventsAreAppendOnly(t *testing.T) {
 
 	t.Run("ingest writes only its projections", func(t *testing.T) {
 		conn := connect(t, srv.RoleDSN(storetest.RoleIngest))
-		if _, err := conn.Exec(ctx, "INSERT INTO runs (id, repo_id, started_at, updated_at) VALUES ('r', 1, now(), now())"); !insufficientPrivilege(err) {
+		if _, err := conn.Exec(ctx, "INSERT INTO runs (id, repo_id, started_at, updated_at) VALUES ('r', 1, now(), now())"); !insufficientPrivilege(
+			err,
+		) {
 			t.Errorf("INSERT runs as boopd_ingest = %v, want permission denied", err)
 		}
 		if _, err := conn.Exec(ctx, "INSERT INTO dashboard_items (repo_id, marker, branch, first_seen_at, last_seen_at) VALUES (1, 'approve', 'b', now(), now())"); err != nil {
@@ -198,7 +200,8 @@ func TestPartitionFunctions(t *testing.T) {
 	}
 
 	// Dropping a year ahead takes every monthly partition.
-	if err := worker.QueryRow(ctx, "SELECT drop_partitions(now() + interval '1 year')").Scan(&dropped); err != nil || dropped != 6 {
+	if err := worker.QueryRow(ctx, "SELECT drop_partitions(now() + interval '1 year')").Scan(&dropped); err != nil ||
+		dropped != 6 {
 		t.Errorf("drop_partitions(+1y) = %d, %v, want 6", dropped, err)
 	}
 }
