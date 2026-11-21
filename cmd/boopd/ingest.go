@@ -21,6 +21,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -28,6 +29,7 @@ import (
 	"github.com/donaldgifford/boop/internal/config"
 	"github.com/donaldgifford/boop/internal/ingest"
 	"github.com/donaldgifford/boop/internal/observability"
+	"github.com/donaldgifford/boop/internal/store"
 	"github.com/donaldgifford/boop/internal/temporal"
 )
 
@@ -85,6 +87,13 @@ func runIngestRole(ctx context.Context, path string, stdout, stderr io.Writer, l
 		return err
 	}
 
+	log = log.With("pod", os.Getenv("POD_NAME"))
+	sink, closeStore, err := openIngestStore(ctx, cfg, metrics, log)
+	if err != nil {
+		return err
+	}
+	defer closeStore()
+
 	tcfg, err := temporal.ConfigFromEnv()
 	if err != nil {
 		return err
@@ -95,7 +104,6 @@ func runIngestRole(ctx context.Context, path string, stdout, stderr io.Writer, l
 	}
 	defer c.Close()
 
-	log = log.With("pod", os.Getenv("POD_NAME"))
 	return ingest.Run(ctx, &ingest.RunOptions{
 		Handler: ingest.Options{
 			Config:    cfg,
@@ -103,6 +111,7 @@ func runIngestRole(ctx context.Context, path string, stdout, stderr io.Writer, l
 			TaskQueue: tcfg.TaskQueue,
 			Metrics:   metrics,
 			Logger:    log,
+			Sink:      sink,
 		},
 		TemporalReady:  func(ctx context.Context) error { return temporal.Ping(ctx, c) },
 		ListenAddr:     envOr("LISTEN_ADDR", defaultListenAddr),
@@ -110,4 +119,33 @@ func runIngestRole(ctx context.Context, path string, stdout, stderr io.Writer, l
 		MetricsHandler: metricsHandler,
 		Listening:      listening,
 	})
+}
+
+// ingestRole is the Postgres role ingest appends as.
+const ingestRole = "boopd_ingest"
+
+// openIngestStore connects ingest's pool when store.enabled, as
+// boopd_ingest, after checking the schema, and returns a StoreSink that
+// also writes the delivery log line. With the store disabled the sink is
+// nil (the handler's LogSink) and the close func a no-op.
+func openIngestStore(
+	ctx context.Context, cfg *config.Config, metrics *observability.Metrics, log *slog.Logger,
+) (ingest.Sink, func(), error) {
+	if !cfg.Store.Enabled {
+		return nil, func() {}, nil
+	}
+	dsn, err := cfg.ReadStoreDSN(cfg.Store.IngestDSNSecretRef, "store.ingest_dsn_secret_ref")
+	if err != nil {
+		return nil, nil, err
+	}
+	pool, err := store.Open(ctx, dsn.Reveal())
+	if err != nil {
+		return nil, nil, err
+	}
+	return &ingest.StoreSink{
+		Store:   store.New(pool, ingestRole, metrics),
+		Logger:  log,
+		Metrics: metrics,
+		Log:     ingest.LogSink{Logger: log},
+	}, pool.Close, nil
 }

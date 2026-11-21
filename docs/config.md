@@ -461,10 +461,22 @@ projections the API reads. Off unless `enabled = true`.
 store {
   enabled = true
 
-  owner_dsn_secret_ref  { name = "boopd-store" key = "owner-dsn" }  # migrate, rebuild
-  dsn_secret_ref        { name = "boopd-store" key = "worker-dsn" } # worker
-  ingest_dsn_secret_ref { name = "boopd-store" key = "ingest-dsn" } # ingest
-  ro_dsn_secret_ref     { name = "boopd-store" key = "ro-dsn" }     # api
+  owner_dsn_secret_ref {  # migrate, rebuild
+    name = "boopd-store"
+    key  = "owner-dsn"
+  }
+  dsn_secret_ref {  # worker
+    name = "boopd-store"
+    key  = "worker-dsn"
+  }
+  ingest_dsn_secret_ref {  # ingest
+    name = "boopd-store"
+    key  = "ingest-dsn"
+  }
+  ro_dsn_secret_ref {  # api
+    name = "boopd-store"
+    key  = "ro-dsn"
+  }
 
   retention {
     events            = "9600h" # 400 days

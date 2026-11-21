@@ -515,7 +515,7 @@ with one commit per numbered task. The PR split is in OQ1.
   - a human edit gives `dashboard.ticked` (from the `changes.body.from`
     diff);
   - `installation*` events give `installation.*`.
-- [ ] 6.3 `boopd ingest` builds a pool when `store.enabled` and checks
+- [x] 6.3 `boopd ingest` builds a pool when `store.enabled` and checks
   `RequireVersion`; without the store it keeps `LogSink`.
 - [ ] 6.4 Delivery audit: `ListHookDeliveries` appends
   `delivery.failed`, `delivery.redelivered` and `delivery.missed`. A GUID
