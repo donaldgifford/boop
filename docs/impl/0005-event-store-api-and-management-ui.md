@@ -302,7 +302,7 @@ with one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 3.1 `internal/store/event.go`: `Event{Key, OccurredAt, Kind,
+- [x] 3.1 `internal/store/event.go`: `Event{Key, OccurredAt, Kind,
   Source, InstallationID, RepoID, PRNumber, Actor, CauseKey, Summary,
   Data}`. `Data` is a typed struct per kind with `V int`, registered in
   a `kinds` table (OQ5).
