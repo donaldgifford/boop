@@ -42,3 +42,5 @@ func (nopRecorder) Append(_ context.Context, _ ...store.Event) error { return ni
 func (nopRecorder) ReceivedDeliveries(context.Context, []string) (map[string]bool, error) {
 	return map[string]bool{}, nil
 }
+
+func (nopRecorder) OpenPullRequests(context.Context, int64) ([]store.PRRef, error) { return nil, nil }

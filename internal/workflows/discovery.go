@@ -31,7 +31,9 @@ import (
 // DiscoverInstallation per active installation in parallel. Repository
 // lists never enter the workflow; each activity signals the
 // RepoWorkflows itself. A failed installation is counted, not fatal, so
-// one bad installation never blocks the others.
+// one bad installation never blocks the others. A recording pass then
+// reconciles each discovered installation's bot PRs into the store
+// (ReconcilePullRequests) and records itself as discovery.finished.
 func DiscoveryWorkflow(ctx workflow.Context, in *DiscoveryInput) (*DiscoveryResult, error) {
 	log := workflow.GetLogger(ctx)
 	var installs []InstallationInfo
@@ -52,8 +54,9 @@ func DiscoveryWorkflow(ctx workflow.Context, in *DiscoveryInput) (*DiscoveryResu
 	}
 
 	type pass struct {
-		id     int64
-		future workflow.Future
+		id      int64
+		account string
+		future  workflow.Future
 	}
 	passes := make([]pass, 0, len(installs))
 	for i := range installs {
@@ -62,8 +65,8 @@ func DiscoveryWorkflow(ctx workflow.Context, in *DiscoveryInput) (*DiscoveryResu
 			continue
 		}
 		id := installs[i].ID
-		passes = append(passes, pass{id, workflow.ExecuteActivity(discoverOptions(ctx, id), DiscoverInstallationActivity,
-			&DiscoverInput{App: in.App, InstallationID: id})})
+		passes = append(passes, pass{id, installs[i].Account, workflow.ExecuteActivity(discoverOptions(ctx, id),
+			DiscoverInstallationActivity, &DiscoverInput{App: in.App, InstallationID: id})})
 	}
 
 	// A budget that does not exist yet has nothing to suspend.
@@ -72,6 +75,7 @@ func DiscoveryWorkflow(ctx workflow.Context, in *DiscoveryInput) (*DiscoveryResu
 			log.Debug("suspend signal not delivered", "installation", installs[i].ID, "error", err)
 		}
 	}
+	discovered := make([]InstallationInfo, 0, len(passes))
 	for _, p := range passes {
 		var sum DiscoverSummary
 		if err := p.future.Get(ctx, &sum); err != nil {
@@ -82,11 +86,39 @@ func DiscoveryWorkflow(ctx workflow.Context, in *DiscoveryInput) (*DiscoveryResu
 		out.Seen += sum.Seen
 		out.Onboarded += sum.Onboarded
 		out.ProbeCost += sum.ProbeCost
+		discovered = append(discovered, InstallationInfo{ID: p.id, Account: p.account})
+	}
+	if in.Record && workflow.GetVersion(ctx, prReconcileChange, workflow.DefaultVersion, 1) >= 1 {
+		reconcilePRs(ctx, in.App, discovered, out)
 	}
 	if in.Record && workflow.GetVersion(ctx, storeRecordChange, workflow.DefaultVersion, 1) >= 1 {
 		recordPass(ctx, out)
 	}
 	return out, nil
+}
+
+// prReconcileChange gates ReconcilePullRequests in a recording pass
+// (IMPL-0005 7.2); passes recorded before it replay without it.
+const prReconcileChange = "pr-reconcile"
+
+// reconcilePRs runs ReconcilePullRequests for each installation whose
+// discovery succeeded, in parallel, and waits. A failed reconcile is
+// counted, not fatal: the next pass reconciles again.
+func reconcilePRs(ctx workflow.Context, app string, installs []InstallationInfo, out *DiscoveryResult) {
+	futures := make([]workflow.Future, 0, len(installs))
+	for i := range installs {
+		futures = append(futures, workflow.ExecuteActivity(reconcileOptions(ctx, installs[i].ID), ReconcilePullRequestsActivity,
+			&ReconcilePRsInput{App: app, InstallationID: installs[i].ID, Account: installs[i].Account}))
+	}
+	for i, f := range futures {
+		var res ReconcilePRsResult
+		if err := f.Get(ctx, &res); err != nil {
+			out.ReconcileFailed++
+			workflow.GetLogger(ctx).Warn("pull request reconcile failed", "installation", installs[i].ID, "error", err)
+			continue
+		}
+		out.PRsSynced += res.Synced
+	}
 }
 
 // recordPass records the pass as discovery.finished (IMPL-0005 5.8). It

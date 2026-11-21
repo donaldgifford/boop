@@ -137,3 +137,25 @@ func storeOptions(ctx workflow.Context, installationID int64) workflow.Context {
 		Priority: TaskPriority(PriorityLow, installationID),
 	})
 }
+
+// ReconcilePullRequests options: a search plus one read per PR that left
+// the open set, each spaced by the installation's limiter. It heartbeats
+// every read.
+const (
+	ReconcileStartToClose = 30 * time.Minute
+	ReconcileHeartbeat    = 2 * time.Minute
+	reconcileMaxAttempts  = 3
+)
+
+func reconcileOptions(ctx workflow.Context, installationID int64) workflow.Context {
+	return workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: ReconcileStartToClose,
+		HeartbeatTimeout:    ReconcileHeartbeat,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    30 * time.Second,
+			BackoffCoefficient: 2,
+			MaximumAttempts:    reconcileMaxAttempts,
+		},
+		Priority: TaskPriority(PriorityLow, installationID),
+	})
+}

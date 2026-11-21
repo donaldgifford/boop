@@ -575,7 +575,7 @@ with one commit per numbered task. The PR split is in OQ1.
   as one GraphQL search per installation (`is:pr is:open
   author:app/<slug>`, 100 per page), plus `GetPullRequest(repoID,
   number)` for PRs that left the open set.
-- [ ] 7.2 `ReconcilePullRequests` activity, run per installation after
+- [x] 7.2 `ReconcilePullRequests` activity, run per installation after
   each discovery pass. It appends `pr.synced` for every open PR and for
   each one that closed or merged since. Its cost goes through the budget
   `ReadRateLimit` already watches.

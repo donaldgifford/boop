@@ -378,6 +378,10 @@ type DiscoveryResult struct {
 	Seen          int
 	Onboarded     int
 	ProbeCost     int
+	// PRsSynced is the pr.synced events the reconciles appended, and
+	// ReconcileFailed the installations whose reconcile failed.
+	PRsSynced       int
+	ReconcileFailed int
 }
 
 // OffboardResults are the repository results that end a RepoWorkflow
@@ -423,4 +427,23 @@ type DeliveryAuditInput struct {
 	Every time.Duration
 	// Cursor is the newest delivery id read so far.
 	Cursor int64
+}
+
+// ReconcilePRsInput is the ReconcilePullRequests activity input: one
+// installation of App, on Account.
+type ReconcilePRsInput struct {
+	App            string
+	InstallationID int64
+	Account        string
+}
+
+// ReconcilePRsResult is what one reconcile read and recorded.
+type ReconcilePRsResult struct {
+	// Open is the bot's open PRs GitHub listed; Left is the PRs the store
+	// held open that were not listed, each read once.
+	Open, Left int
+	// Synced is the pr.synced events appended, duplicates included.
+	Synced int
+	// Cost is the search's GraphQL cost.
+	Cost int
 }

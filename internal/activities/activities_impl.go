@@ -35,12 +35,14 @@ import (
 	"github.com/donaldgifford/boop/internal/workflows"
 )
 
-// Recorder appends events to the store and answers the delivery audit's
-// question of which deliveries ingest recorded. *store.Store implements
-// it.
+// Recorder appends events to the store and answers the two reads the
+// worker needs: which deliveries ingest recorded (the delivery audit) and
+// which PRs the store holds open (the PR reconcile). *store.Store
+// implements it.
 type Recorder interface {
 	Append(ctx context.Context, events ...store.Event) error
 	ReceivedDeliveries(ctx context.Context, guids []string) (map[string]bool, error)
+	OpenPullRequests(ctx context.Context, installationID int64) ([]store.PRRef, error)
 }
 
 // Deps are what the activities need. Config must have had ReadSecrets
@@ -217,15 +219,16 @@ func (a *Activities) minterFor(app *config.App) (platform.Minter, error) {
 // name. The budget activity registers separately (Budget.Register).
 func (a *Activities) Register(r Registry) {
 	for name, fn := range map[string]any{
-		workflows.ListInstallationsActivity:    a.ListInstallations,
-		workflows.DiscoverInstallationActivity: a.DiscoverInstallation,
-		workflows.CheckRepoActivity:            a.CheckRepo,
-		workflows.ReadRateLimitActivity:        a.ReadRateLimit,
-		workflows.RunRenovateActivity:          a.RunRenovate,
-		workflows.PlanRunActivity:              a.PlanRun,
-		workflows.ListHookDeliveriesActivity:   a.ListHookDeliveries,
-		workflows.RecordRunActivity:            a.RecordRun,
-		workflows.RecordEventsActivity:         a.RecordEvents,
+		workflows.ListInstallationsActivity:     a.ListInstallations,
+		workflows.DiscoverInstallationActivity:  a.DiscoverInstallation,
+		workflows.CheckRepoActivity:             a.CheckRepo,
+		workflows.ReadRateLimitActivity:         a.ReadRateLimit,
+		workflows.RunRenovateActivity:           a.RunRenovate,
+		workflows.PlanRunActivity:               a.PlanRun,
+		workflows.ListHookDeliveriesActivity:    a.ListHookDeliveries,
+		workflows.RecordRunActivity:             a.RecordRun,
+		workflows.RecordEventsActivity:          a.RecordEvents,
+		workflows.ReconcilePullRequestsActivity: a.ReconcilePullRequests,
 	} {
 		r.RegisterActivityWithOptions(fn, activity.RegisterOptions{Name: name})
 	}

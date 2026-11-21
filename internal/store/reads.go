@@ -55,3 +55,24 @@ var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]
 // IsUUID reports whether s is a UUID, as GitHub's delivery GUIDs are and
 // webhook_deliveries.delivery_id must be.
 func IsUUID(s string) bool { return uuidPattern.MatchString(s) }
+
+// PRRef names one pull request.
+type PRRef struct {
+	RepoID int64
+	Number int
+}
+
+// OpenPullRequests is the PRs the store holds open in the
+// installation's repositories, ordered by repository and number. The PR
+// reconcile reads them to find the PRs that left GitHub's open set.
+func (s *Store) OpenPullRequests(ctx context.Context, installationID int64) ([]PRRef, error) {
+	rows, err := db.New(s.pool).OpenPullRequests(ctx, installationID)
+	if err != nil {
+		return nil, fmt.Errorf("open pull requests of %d: %w", installationID, err)
+	}
+	out := make([]PRRef, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, PRRef{RepoID: r.RepoID, Number: int(r.Number)})
+	}
+	return out, nil
+}

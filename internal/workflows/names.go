@@ -64,6 +64,9 @@ const (
 	PlanRunActivity              = "PlanRun"
 	RunRenovateActivity          = "RunRenovate"
 	ListHookDeliveriesActivity   = "ListHookDeliveries"
+	// ReconcilePullRequestsActivity syncs the store's bot PRs with
+	// GitHub after each discovery pass (DESIGN-0004 OQ5).
+	ReconcilePullRequestsActivity = "ReconcilePullRequests"
 	// RecordRunActivity and RecordEventsActivity write to the event
 	// store (DESIGN-0004 § Workflow and activity changes).
 	RecordRunActivity    = "RecordRun"

@@ -51,6 +51,9 @@ func TestRecordReplayHistories(t *testing.T) {
 	})
 	register(workflows.RecordRunActivity, func(context.Context, *workflows.RecordRunInput) error { return nil })
 	register(workflows.RecordEventsActivity, func(context.Context, *workflows.RecordEventsInput) error { return nil })
+	register(workflows.ReconcilePullRequestsActivity, func(context.Context, *workflows.ReconcilePRsInput) (*workflows.ReconcilePRsResult, error) {
+		return &workflows.ReconcilePRsResult{Open: 1, Synced: 1}, nil
+	})
 	register(workflows.AcquireBudgetActivity, func(_ context.Context, in *workflows.AcquireInput) (*workflows.AcquireResult, error) {
 		return &workflows.AcquireResult{Granted: true, LeaseID: in.UpdateID}, nil
 	})
@@ -150,7 +153,8 @@ func TestRecordReplayHistories(t *testing.T) {
 	}
 	write(ctx, t, srv.Client, run, "repo-store-record-run-recheck.json")
 
-	// A discovery pass that records itself.
+	// A discovery pass that reconciles PRs and records itself (IMPL-0005
+	// 7.2).
 	run = start(workflows.DiscoveryScheduleID("recorded"), workflows.DiscoveryWorkflowName, &workflows.DiscoveryInput{App: "recorded", Record: true})
 	if err := run.Get(ctx, nil); err != nil {
 		t.Fatalf("recording DiscoveryWorkflow: %v", err)
