@@ -254,6 +254,34 @@ open:
   truncated tables until it commits, then apply on top, so no event is
   lost or applied twice.
 
+## Findings (Phase 4)
+
+- **purl details the design's table left open:**
+  - Docker images outside Docker Hub carry their registry as
+    `repository_url`.
+  - A digest version makes an `oci` purl whose `repository_url` is the
+    full image path.
+  - A GitHub Action at a path (`actions/cache/save`) keeps the path as
+    the subpath.
+  - PyPI names are normalised (lower case, `_` to `-`).
+  - The `run.finished` apply computes `purl_from`, `purl_to` and
+    `dependencies.purl` at write time. A dependency's purl uses
+    `currentVersion`, so a range with no resolved version has none.
+- **The real Renovate 44 live fixture already has deps** (140, from a
+  run against a scratch repository). The golden pins them, so there was
+  nothing to re-record. `PackageName` falls back to `depName`, which
+  Renovate omits when the two match.
+- **The dashboard's last box follows a rule.** Renovate writes
+  `<!-- manual job -->` after a `---` that follows Detected Dependencies.
+  The parser ends a section at a rule, so that box has no section.
+- **Global boxes** (`rebase-all-open-prs`, `create-all-rate-limited-prs`,
+  `create-all-awaiting-schedule-prs`, `approve-all-pending-prs`, `manual
+  job`, `create-config-migration-pr`) are items with no branch, so a
+  tick on one is found by `Diff` like any other.
+- **The proxmox-go-sdk#34 fixtures come from the issue's edit history**
+  (GraphQL `userContentEdits`). `internal/renovate/dashboard/testdata/README.md`
+  records the query and which revision is which.
+
 ## Implementation Phases
 
 Each phase ends with `just lint`, `just test` and its own checks green,

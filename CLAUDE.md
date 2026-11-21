@@ -141,7 +141,9 @@ internal/jobspec/         # Job + env builder for one Renovate run (ported from 
 internal/config/          # HCL config file via hclkit: decode, defaults, validation, secrets, BuildInput
 internal/profiles/        # pure profile resolver: extends + managers -> strictest profile
 internal/kube/            # Job lifecycle Runner: suspended create, Secret, unsuspend, log follow, exit, delete
-internal/renovate/        # log scanner + report parser: progress, Repository finished, update tuples
+internal/renovate/        # log scanner + report parser: progress, Repository finished, update tuples, dependencies
+internal/renovate/dashboard/ # Dependency Dashboard parser keyed on markers; Diff finds human ticks
+internal/purl/            # package URLs from Renovate datasources (DESIGN-0004 § Package identity)
 internal/store/           # Postgres event store (DESIGN-0004): goose migrations, Append + per-kind applies, Rebuild; sqlc queries in queries/, generated db/
 internal/store/storetest/ # throwaway Postgres container with the four roles, for integration tests
 test/stub-renovate/       # stub Renovate image for e2e (bake target stub-renovate; never pushed)
