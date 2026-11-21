@@ -98,6 +98,12 @@ type repo struct {
 	// needsSandbox is set when the last run had no sandbox; the
 	// repository waits in PhaseNeedsSandbox.
 	needsSandbox bool
+
+	// recordV is storeRecordChange's version; record is the last plan's
+	// Record. records are store activities still in flight.
+	recordV workflow.Version
+	record  bool
+	records []workflow.Future
 }
 
 // RepoWorkflow owns one repository: it waits for its due time, a
@@ -125,6 +131,7 @@ func RepoWorkflow(ctx workflow.Context, in *RepoState) error {
 		return err
 	}
 	r.sandboxV = workflow.GetVersion(ctx, sandboxChange, workflow.DefaultVersion, 1)
+	r.recordV = workflow.GetVersion(ctx, storeRecordChange, workflow.DefaultVersion, 1)
 	if err := r.plan(ctx, PriorityNormal); err != nil {
 		return err
 	}
@@ -137,11 +144,16 @@ func RepoWorkflow(ctx workflow.Context, in *RepoState) error {
 		}
 		prio, end := r.wait(ctx)
 		if end {
+			r.flushRecords(ctx)
 			return nil
 		}
 		end, err := r.runOnce(ctx, prio)
-		if err != nil || end {
+		if err != nil {
 			return err
+		}
+		if end {
+			r.flushRecords(ctx)
+			return nil
 		}
 		r.upsert(ctx, r.idlePhase())
 	}
@@ -162,17 +174,24 @@ func (r *repo) idlePhase() string {
 // over the cadence. A first execution logs its onboarding.
 func (r *repo) firstDue(ctx workflow.Context) {
 	fresh := workflow.GetInfo(ctx).ContinuedExecutionRunID == "" && r.s.LastRun == nil
+	scheduled := false
 	switch {
 	case r.changed.Len() > 0:
 		r.onboarding = fresh
 		if r.s.NextDue.IsZero() {
 			r.s.NextDue = workflow.Now(ctx).Add(r.cadence)
+			scheduled = true
 		}
 	case r.s.NextDue.IsZero():
 		r.s.NextDue = workflow.Now(ctx).Add(firstDueJitter(r.s.RepoID, r.cadence))
+		scheduled = true
 	}
 	if fresh && !r.onboarding {
-		workflow.GetLogger(ctx).Info("onboarded", "repo_id", r.s.RepoID, "via", "discovery")
+		workflow.GetLogger(ctx).Info("onboarded", "repo_id", r.s.RepoID, "via", ViaDiscovery)
+		r.noteOnboarded(ctx, ViaDiscovery, "")
+	}
+	if scheduled {
+		r.noteScheduled(ctx, r.s.NextDue, PriorityNormal, "")
 	}
 }
 
@@ -203,6 +222,7 @@ func (r *repo) plan(ctx workflow.Context, p Priority) error {
 	r.settle, r.minInterval = plan.Settle, plan.MinInterval
 	r.sandboxed = plan.Sandboxed
 	r.floorManagers, r.wouldSandbox = plan.FloorManagers, plan.FloorRaised && !plan.Sandboxed
+	r.record = plan.Record
 	return nil
 }
 
@@ -223,7 +243,7 @@ func (r *repo) wait(ctx workflow.Context) (prio Priority, end bool) {
 		}
 		r.drainEvents(ctx)
 		now := workflow.Now(ctx)
-		if r.drainRecheck() {
+		if r.drainRecheck(ctx) {
 			return PriorityHigh, false
 		}
 		at, atPrio, reason := r.due()
@@ -239,7 +259,9 @@ func (r *repo) wait(ctx workflow.Context) (prio Priority, end bool) {
 			sel.AddFuture(workflow.NewTimer(tctx, max(at.Sub(now), 0)), func(workflow.Future) { fired = "absent" })
 		}
 		sel.AddReceive(r.recheck, func(c workflow.ReceiveChannel, _ bool) {
-			c.Receive(ctx, nil)
+			var rc Recheck
+			c.Receive(ctx, &rc)
+			r.noteRecheck(ctx, &rc)
 			fired = "recheck"
 		})
 		sel.AddReceive(r.discovered, func(c workflow.ReceiveChannel, _ bool) {
@@ -268,13 +290,18 @@ func (r *repo) wait(ctx workflow.Context) (prio Priority, end bool) {
 	}
 }
 
-// drainRecheck consumes buffered rechecks; true when there was one.
-func (r *repo) drainRecheck() bool {
+// drainRecheck consumes buffered rechecks, recording each; true when
+// there was one. A recheck with no payload decodes to the zero Recheck.
+func (r *repo) drainRecheck(ctx workflow.Context) bool {
 	got := false
-	for r.recheck.ReceiveAsync(nil) {
+	for {
+		var rc Recheck
+		if !r.recheck.ReceiveAsync(&rc) {
+			return got
+		}
 		got = true
+		r.noteRecheck(ctx, &rc)
 	}
-	return got
 }
 
 func (r *repo) applyDiscovered(d *Discovered, now time.Time) {
@@ -324,6 +351,7 @@ func (r *repo) checkRepo(ctx workflow.Context) (gone bool) {
 	switch res.State {
 	case RepoGone, RepoNoConfig:
 		workflow.GetLogger(ctx).Info("offboarded", "repo_id", r.s.RepoID, "reason", res.State, "state", res.State)
+		r.noteOffboarded(ctx, res.State, "")
 		return true
 	default:
 		workflow.GetMetricsHandler(ctx).Counter(MetricDiscoveryMissed).Inc(1)
@@ -364,6 +392,7 @@ func (r *repo) runOnce(ctx workflow.Context, prio Priority) (end bool, err error
 	}
 	backoffs := 0
 	for {
+		queued := workflow.Now(ctx)
 		l, err := r.acquire(ctx, prio)
 		if err != nil {
 			return false, err
@@ -387,14 +416,18 @@ func (r *repo) runOnce(ctx workflow.Context, prio Priority) (end bool, err error
 		switch {
 		case a.outcome != "":
 			rerun, offboard := r.decide(ctx, &a, start)
+			r.recordRun(ctx, &a, queued, start)
 			if offboard {
+				r.noteOffboarded(ctx, a.result.RepositoryResult, "")
 				return true, nil
 			}
 			if !rerun {
+				r.noteScheduled(ctx, r.s.NextDue, PriorityNormal, "")
 				return false, nil
 			}
 		case a.needsSandbox && r.sandboxV >= 1:
 			r.waitForSandbox(ctx, a.reason, start)
+			r.noteScheduled(ctx, r.s.NextDue, PriorityNormal, "")
 			return false, nil
 		case a.rateLimited:
 			r.upsert(ctx, PhaseBackoff)
@@ -540,7 +573,11 @@ func (r *repo) acquire(ctx workflow.Context, prio Priority) (leases, error) {
 		}
 		r.report(ctx, leases{installation: inst}, &attempt{})
 		r.upsert(ctx, PhaseWaitingCapacity)
-		if err := workflow.Sleep(ctx, capacityBackoff(denials, r.s.RepoID)); err != nil {
+		wait := capacityBackoff(denials, r.s.RepoID)
+		if denials == 0 {
+			r.noteState(ctx, KindRunCapacityDenied, "waiting for cluster capacity", workflow.Now(ctx).Add(wait))
+		}
+		if err := workflow.Sleep(ctx, wait); err != nil {
 			return leases{}, err
 		}
 		denials++
@@ -552,6 +589,7 @@ func (r *repo) acquire(ctx workflow.Context, prio Priority) (leases, error) {
 // to each retryAt it returns.
 func (r *repo) acquireFrom(ctx workflow.Context, prio Priority, activity string) (string, error) {
 	r.upsert(ctx, PhaseAcquiring)
+	waited := false
 	for {
 		res, err := r.tryAcquire(ctx, prio, activity)
 		var wait time.Duration
@@ -563,6 +601,10 @@ func (r *repo) acquireFrom(ctx workflow.Context, prio Priority, activity string)
 			return res.LeaseID, nil
 		default:
 			wait = max(res.RetryAt.Sub(workflow.Now(ctx)), time.Second)
+			if !waited && activity == AcquireBudgetActivity {
+				r.noteState(ctx, KindRunBudgetWait, "waiting for the installation's rate-limit budget", res.RetryAt)
+			}
+			waited = true
 		}
 		if err := workflow.Sleep(ctx, wait); err != nil {
 			return "", err
@@ -660,6 +702,7 @@ func (r *repo) decide(ctx workflow.Context, a *attempt, start time.Time) (rerun,
 		default:
 			metrics.Counter(MetricReposStalled).Inc(1)
 			workflow.GetLogger(ctx).Warn("stalled: no progress", "repo_id", r.s.RepoID, "stall_count", r.s.StallCount)
+			r.noteState(ctx, KindRunStalled, "stalled: no progress", time.Time{})
 			cadence()
 		}
 	case OutcomeSkipped:
@@ -728,9 +771,10 @@ func (r *repo) continueAsNew(ctx workflow.Context) error {
 	for r.discovered.ReceiveAsync(&d) {
 		r.applyDiscovered(&d, workflow.Now(ctx))
 	}
-	if r.drainRecheck() {
+	if r.drainRecheck(ctx) {
 		r.s.NextDue = workflow.Now(ctx)
 	}
+	r.flushRecords(ctx)
 	next := r.s
 	next.Iterations = 0
 	return workflow.NewContinueAsNewError(ctx, RepoWorkflowName, &next)

@@ -250,6 +250,12 @@ type RepoState struct {
 	EventPriority Priority
 	// EventReason is the reason of the event EventDue came from.
 	EventReason string
+	// RecordSeq numbers this repository's recorded decisions; with the
+	// run id it makes each event's key (IMPL-0005 5.4).
+	RecordSeq int
+	// CauseKey is the key of the last run-scheduled or recheck event, the
+	// cause of the next run.
+	CauseKey string
 }
 
 // ListInstallationsInput is the ListInstallations activity input.
@@ -345,12 +351,17 @@ type RunPlan struct {
 	FloorRaised bool
 	// FloorManagers are the floor managers the tree listing found.
 	FloorManagers []string
+	// Record is store.enabled: record runs and decisions (IMPL-0005
+	// OQ15). False schedules no store activity.
+	Record bool
 }
 
 // DiscoveryInput is DiscoveryWorkflow's input; the discovery/<app>
 // Schedule passes it.
 type DiscoveryInput struct {
 	App string
+	// Record is store.enabled: record the pass as discovery.finished.
+	Record bool
 	// Installations, when set, limits the pass to these installation IDs
 	// (targeted discovery, DESIGN-0003). The App's allowlist still holds:
 	// an ID outside it, or not in the App's listing, is skipped with a

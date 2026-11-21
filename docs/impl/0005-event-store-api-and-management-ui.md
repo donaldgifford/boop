@@ -438,12 +438,12 @@ with one commit per numbered task. The PR split is in OQ1.
   counter carried through ContinueAsNew.
 - [x] 5.5 `storeOptions` (unlimited retry, 10 s start-to-close, low
   priority) in `internal/workflows/options.go`.
-- [ ] 5.6 `RepoWorkflow`: call `RecordRun` after the outcome decision,
+- [x] 5.6 `RepoWorkflow`: call `RecordRun` after the outcome decision,
   and `RecordEvents` at IMPL-0004's decision points (onboarded,
   offboarded, refreshed, run-scheduled, stalled, capacity-denied,
   budget-wait). Both are gated by `store.enabled`, which `PlanRun`
   returns as `RunPlan.Record`, so a disabled store adds no activities.
-- [ ] 5.7 The `recheck` payload: `Recheck{Actor, RequestID}`, optional.
+- [x] 5.7 The `recheck` payload: `Recheck{Actor, RequestID}`, optional.
   The workflow decodes it when present (`ReceiveAsync` into a value,
   tolerating an empty payload) and records `action.recheck`. Tests with
   and without a payload (OQ9).

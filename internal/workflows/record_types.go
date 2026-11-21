@@ -39,6 +39,17 @@ const (
 	ViaWebhook   = "webhook"
 )
 
+// Recheck is the recheck signal's optional payload (IMPL-0005 OQ9): who
+// asked and the API request it came from. The CLI sends none, which
+// stays valid.
+type Recheck struct {
+	Actor     string
+	RequestID string
+}
+
+// ActorOIDC is the type of an actor the API authenticated.
+const ActorOIDC = "oidc"
+
 // RecordEventsInput is the RecordEvents activity input: workflow
 // decisions to append, each with its own key.
 type RecordEventsInput struct {

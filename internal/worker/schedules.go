@@ -41,7 +41,7 @@ func DiscoverySchedules(cfg *config.Config, taskQueue string) []*temporal.Schedu
 			ID:        workflows.DiscoveryScheduleID(app.Name),
 			Every:     app.Discovery.Every,
 			Workflow:  workflows.DiscoveryWorkflowName,
-			Args:      []any{&workflows.DiscoveryInput{App: app.Name}},
+			Args:      []any{&workflows.DiscoveryInput{App: app.Name, Record: cfg.Store.Enabled}},
 			TaskQueue: taskQueue,
 			Priority:  workflows.TaskPriority(workflows.PriorityNormal, 0),
 		})

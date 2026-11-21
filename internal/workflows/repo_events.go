@@ -50,6 +50,7 @@ func (r *repo) applyEvent(ctx workflow.Context, e *Event) {
 	}
 	workflow.GetLogger(ctx).Info("run-scheduled", "repo_id", r.s.RepoID, "reason", e.Reason,
 		"priority", int(prio), "at", r.s.EventDue, "cause", e.DeliveryID)
+	r.noteScheduled(ctx, r.s.EventDue, r.s.EventPriority, e.Reason)
 }
 
 // drainEvents applies every buffered event, such as those received
@@ -112,6 +113,7 @@ func (r *repo) handleChanged(ctx workflow.Context, c *Changed) (end bool) {
 			reason = c.Reason
 		}
 		log.Info("offboarded", "repo_id", r.s.RepoID, "reason", reason, "cause", c.DeliveryID)
+		r.noteOffboarded(ctx, reason, "")
 		return true
 	}
 	if res.Slug != "" {
@@ -124,7 +126,10 @@ func (r *repo) handleChanged(ctx workflow.Context, c *Changed) (end bool) {
 		"extends", r.s.Extends, "reason", c.Reason, "cause", c.DeliveryID)
 	if r.onboarding {
 		r.onboarding = false
-		log.Info("onboarded", "repo_id", r.s.RepoID, "via", "webhook", "cause", c.DeliveryID)
+		log.Info("onboarded", "repo_id", r.s.RepoID, "via", ViaWebhook, "cause", c.DeliveryID)
+		r.noteOnboarded(ctx, ViaWebhook, "")
+	} else {
+		r.note(ctx, RecordedEvent{Kind: KindRepoRefreshed, Summary: r.s.Slug + " refreshed: " + c.Reason, Repository: r.repository("", c.Reason)})
 	}
 	if err := r.plan(ctx, PriorityNormal); err != nil {
 		log.Warn("re-plan after changed failed; the run plans again", "repo_id", r.s.RepoID, "error", err)
