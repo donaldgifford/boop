@@ -680,7 +680,7 @@ with one commit per numbered task. The PR split is in OQ1.
   (`owners`/`operators`/`clients`), visibility resolved per request, and
   SQL filtering helpers. A missing owner returns 404; a non-operator
   action returns 403.
-- [ ] 9.6 `boopd api --config <file>`: the read-only pool, Temporal
+- [x] 9.6 `boopd api --config <file>`: the read-only pool, Temporal
   client, OIDC verifier, health and readiness (store version, issuer
   discovered), metrics, and graceful stop.
 - [ ] 9.7 Contract tests: every handler's response is validated against

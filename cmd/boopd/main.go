@@ -39,6 +39,7 @@ const usage = `usage:
   boopd config validate <file>
   boopd worker --config <file>
   boopd ingest --config <file>
+  boopd api --config <file>
   boopd migrate --config <file>
   boopd store rebuild --config <file> [--batch n]
 `
@@ -48,23 +49,26 @@ func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 
+// roles are the subcommands that take their own flags.
+var roles = map[string]func(args []string, stdout, stderr io.Writer) int{
+	"worker":  runWorker,
+	"ingest":  runIngest,
+	"api":     runAPI,
+	"migrate": runMigrate,
+	"store":   runStore,
+}
+
 func run(args []string, stdout, stderr io.Writer) int {
 	switch {
 	case len(args) == 0, len(args) == 1 && args[0] == "version":
 		return write(stdout, exitOK, "boopd %s (%s, %s)\n", version, commit, date)
 	case len(args) == 3 && args[0] == "config" && args[1] == "validate":
 		return validateConfig(args[2], stdout, stderr)
-	case len(args) >= 1 && args[0] == "worker":
-		return runWorker(args[1:], stdout, stderr)
-	case len(args) >= 1 && args[0] == "ingest":
-		return runIngest(args[1:], stdout, stderr)
-	case len(args) >= 1 && args[0] == "migrate":
-		return runMigrate(args[1:], stdout, stderr)
-	case len(args) >= 1 && args[0] == "store":
-		return runStore(args[1:], stdout, stderr)
-	default:
-		return write(stderr, exitUsage, "%s", usage)
 	}
+	if role, ok := roles[args[0]]; ok {
+		return role(args[1:], stdout, stderr)
+	}
+	return write(stderr, exitUsage, "%s", usage)
 }
 
 // write prints to w and returns code, or exitInvalid if the write fails.

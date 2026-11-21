@@ -28,6 +28,8 @@ import (
 	"net/http"
 	"time"
 
+	"go.temporal.io/sdk/client"
+
 	"github.com/donaldgifford/boop/internal/api/gen"
 	"github.com/donaldgifford/boop/internal/store"
 )
@@ -53,6 +55,10 @@ type Options struct {
 	// is an anonymous principal who sees every owner and is no operator.
 	Authn *Authenticator
 	Authz *AuthzConfig
+
+	// Temporal sends recheck's signal; the client is lazy, so the API
+	// starts and serves reads while Temporal is away.
+	Temporal client.Client
 
 	// StatusRequiresAuth is api.status_public = false: /status then needs
 	// a valid token like every other route, though no visible owner.

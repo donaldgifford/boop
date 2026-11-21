@@ -36,6 +36,12 @@ func (s *Store) Ping(ctx context.Context) error {
 	return nil
 }
 
+// SchemaReady fails when the store's schema is older than
+// SchemaVersion, for the API role's readiness.
+func (s *Store) SchemaReady(ctx context.Context) error {
+	return RequireVersion(ctx, s.pool, SchemaVersion)
+}
+
 // Owners is the installation accounts in scope the store knows,
 // lowercased and sorted: /me's owner list.
 func (s *Store) Owners(ctx context.Context, scope Scope) ([]string, error) {

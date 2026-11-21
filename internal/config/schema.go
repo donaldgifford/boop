@@ -37,6 +37,7 @@ type fileSchema struct {
 	Sandbox         *sandboxBlock      `hcl:"sandbox,block"`
 	Ingest          *ingestBlock       `hcl:"ingest,block"`
 	Store           *storeBlock        `hcl:"store,block"`
+	API             *apiBlock          `hcl:"api,block"`
 	Apps            []appBlock         `hcl:"app,block"`
 }
 
@@ -50,6 +51,25 @@ type storeBlock struct {
 	RODSNSecretRef     *secretRefBlock `hcl:"ro_dsn_secret_ref,block"`
 	Retention          *retentionBlock `hcl:"retention,block"`
 	DefRange           hcl.Range       `hcl:",def_range"`
+}
+
+// apiBlock configures the API role (DESIGN-0004 § boopd.hcl).
+type apiBlock struct {
+	Auth           *apiAuthBlock `hcl:"auth,block"`
+	AuthzFile      *string       `hcl:"authz_file,optional"`
+	AuthzFileRange hcl.Range     `hcl:"authz_file,attr_value_range"`
+	StatusPublic   *bool         `hcl:"status_public,optional"`
+	DefRange       hcl.Range     `hcl:",def_range"`
+}
+
+// apiAuthBlock is api.auth: OIDC access-token verification.
+type apiAuthBlock struct {
+	Issuer        string    `hcl:"issuer"`
+	IssuerRange   hcl.Range `hcl:"issuer,attr_value_range"`
+	Audience      string    `hcl:"audience"`
+	AudienceRange hcl.Range `hcl:"audience,attr_value_range"`
+	NameClaim     *string   `hcl:"name_claim,optional"`
+	GroupsClaim   *string   `hcl:"groups_claim,optional"`
 }
 
 // retentionBlock is store.retention (DESIGN-0004 § Retention, OQ6).

@@ -57,6 +57,9 @@ func (s *server) GetMe(ctx context.Context, _ gen.GetMeRequestObject) (gen.GetMe
 	if groups == nil {
 		groups = []string{}
 	}
+	if owners == nil {
+		owners = []string{}
+	}
 	return gen.GetMe200JSONResponse{
 		Subject: p.Subject, Name: p.Name, Groups: groups,
 		AllOwners: p.Visible.All(), Owners: owners, Operator: p.Operator,
