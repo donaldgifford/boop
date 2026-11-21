@@ -617,7 +617,7 @@ with one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 8.1 `StoreMaintenanceWorkflow` and its activities. They create
+- [x] 8.1 `StoreMaintenanceWorkflow` and its activities. They create
   partitions two months ahead, drop partitions past `retention.events`,
   null `webhook_deliveries.payload` past `retention.delivery_payloads`,
   delete offboarded projections past `retention.offboarded`, and delete

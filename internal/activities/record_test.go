@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/donaldgifford/boop/internal/activities"
 	"github.com/donaldgifford/boop/internal/config"
@@ -44,3 +45,20 @@ func (nopRecorder) ReceivedDeliveries(context.Context, []string) (map[string]boo
 }
 
 func (nopRecorder) OpenPullRequests(context.Context, int64) ([]store.PRRef, error) { return nil, nil }
+
+func (nopRecorder) Maintain(context.Context, store.MaintenanceRule, time.Time, store.Retention) (int64, error) {
+	return 0, nil
+}
+
+// TestMaintenanceRules_AreStoreRules keeps the workflows' rule names in
+// step with the store's.
+func TestMaintenanceRules_AreStoreRules(t *testing.T) {
+	t.Parallel()
+	want := make([]string, 0, len(store.MaintenanceRules()))
+	for _, r := range store.MaintenanceRules() {
+		want = append(want, string(r))
+	}
+	if !slices.Equal(workflows.MaintenanceRules, want) {
+		t.Errorf("workflows.MaintenanceRules = %v, want the store's %v", workflows.MaintenanceRules, want)
+	}
+}

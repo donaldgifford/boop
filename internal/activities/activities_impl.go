@@ -35,14 +35,15 @@ import (
 	"github.com/donaldgifford/boop/internal/workflows"
 )
 
-// Recorder appends events to the store and answers the two reads the
-// worker needs: which deliveries ingest recorded (the delivery audit) and
-// which PRs the store holds open (the PR reconcile). *store.Store
-// implements it.
+// Recorder is the worker's store: it appends events, answers the two
+// reads the worker needs (which deliveries ingest recorded, for the
+// delivery audit; which PRs the store holds open, for the PR reconcile)
+// and runs retention. *store.Store implements it.
 type Recorder interface {
 	Append(ctx context.Context, events ...store.Event) error
 	ReceivedDeliveries(ctx context.Context, guids []string) (map[string]bool, error)
 	OpenPullRequests(ctx context.Context, installationID int64) ([]store.PRRef, error)
+	Maintain(ctx context.Context, rule store.MaintenanceRule, now time.Time, r store.Retention) (int64, error)
 }
 
 // Deps are what the activities need. Config must have had ReadSecrets
@@ -229,6 +230,7 @@ func (a *Activities) Register(r Registry) {
 		workflows.RecordRunActivity:             a.RecordRun,
 		workflows.RecordEventsActivity:          a.RecordEvents,
 		workflows.ReconcilePullRequestsActivity: a.ReconcilePullRequests,
+		workflows.MaintainStoreActivity:         a.MaintainStore,
 	} {
 		r.RegisterActivityWithOptions(fn, activity.RegisterOptions{Name: name})
 	}

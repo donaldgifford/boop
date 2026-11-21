@@ -49,6 +49,9 @@ const (
 	// DeliveryAuditWorkflowName audits the App's webhook deliveries
 	// (DESIGN-0003 § Delivery audit).
 	DeliveryAuditWorkflowName = "DeliveryAuditWorkflow"
+	// StoreMaintenanceWorkflowName applies the store's retention daily
+	// (DESIGN-0004 § Retention).
+	StoreMaintenanceWorkflowName = "StoreMaintenanceWorkflow"
 )
 
 // Activity names (DESIGN-0001 § Topology and packages). The activities
@@ -67,6 +70,8 @@ const (
 	// ReconcilePullRequestsActivity syncs the store's bot PRs with
 	// GitHub after each discovery pass (DESIGN-0004 OQ5).
 	ReconcilePullRequestsActivity = "ReconcilePullRequests"
+	// MaintainStoreActivity runs one retention rule.
+	MaintainStoreActivity = "MaintainStore"
 	// RecordRunActivity and RecordEventsActivity write to the event
 	// store (DESIGN-0004 § Workflow and activity changes).
 	RecordRunActivity    = "RecordRun"
@@ -140,6 +145,15 @@ func TargetedDiscoveryID(app string, installationID int64) string {
 func DeliveryAuditScheduleID(app string) string {
 	return "delivery-audit/" + app
 }
+
+// StoreMaintenanceScheduleID is the daily retention Schedule's ID; there
+// is one per Temporal namespace.
+const StoreMaintenanceScheduleID = "store-maintenance"
+
+// MaintenanceRules are the store's retention rules, in the order
+// StoreMaintenanceWorkflow runs them. The store's catalogue is the same
+// (a test keeps them in step).
+var MaintenanceRules = []string{"partitions", "delivery-payloads", "offboarded", "runs"}
 
 // DiscoveryWorkflowID is the workflow ID the Schedule's action starts.
 // The server appends the fire time, giving ADR-0002's

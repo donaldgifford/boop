@@ -34,7 +34,7 @@ import (
 
 // SchemaVersion is the schema this build of boopd needs: the number of
 // the newest migration in migrations/.
-const SchemaVersion = 3
+const SchemaVersion = 4
 
 // VersionTable is goose's version table, named for boopd so it cannot
 // collide with another tool's in the same database.

@@ -447,3 +447,24 @@ type ReconcilePRsResult struct {
 	// Cost is the search's GraphQL cost.
 	Cost int
 }
+
+// MaintainStoreInput is the MaintainStore activity input: one rule, as of
+// Now (the workflow's clock, so a test can move it).
+type MaintainStoreInput struct {
+	Rule string
+	Now  time.Time
+}
+
+// MaintainStoreResult is what one rule removed: partitions for
+// "partitions", rows otherwise.
+type MaintainStoreResult struct {
+	Rule    string
+	Removed int64
+}
+
+// StoreMaintenanceResult is one maintenance pass: each rule that ran, and
+// how many failed.
+type StoreMaintenanceResult struct {
+	Rules  []MaintainStoreResult
+	Failed int
+}

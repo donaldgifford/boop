@@ -159,3 +159,20 @@ func reconcileOptions(ctx workflow.Context, installationID int64) workflow.Conte
 		Priority: TaskPriority(PriorityLow, installationID),
 	})
 }
+
+// MaintainStartToClose bounds one retention rule. maintainOptions runs
+// MaintainStore with it, a few retries at low priority; the next day's
+// pass catches up on a failure.
+const MaintainStartToClose = 30 * time.Minute
+
+func maintainOptions(ctx workflow.Context) workflow.Context {
+	return workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: MaintainStartToClose,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Minute,
+			BackoffCoefficient: 2,
+			MaximumAttempts:    3,
+		},
+		Priority: TaskPriority(PriorityLow, 0),
+	})
+}

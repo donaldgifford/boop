@@ -34,6 +34,7 @@ var all = []registration{
 	{DiscoveryWorkflow, DiscoveryWorkflowName},
 	{CapacityWorkflow, CapacityWorkflowName},
 	{DeliveryAuditWorkflow, DeliveryAuditWorkflowName},
+	{StoreMaintenanceWorkflow, StoreMaintenanceWorkflowName},
 }
 
 // Register registers the worker's workflows.
