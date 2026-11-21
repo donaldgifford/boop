@@ -163,6 +163,15 @@ type Dependency struct {
 	CurrentVersion string `json:"current_version,omitempty"`
 }
 
+// Run outcomes, as workflows.Outcome names them. Failed and TimedOut
+// leave the repository errored.
+const (
+	RunSucceeded = "Succeeded"
+	RunSkipped   = "Skipped"
+	RunFailed    = "Failed"
+	RunTimedOut  = "TimedOut"
+)
+
 // RunFinished is run.finished.
 type RunFinished struct {
 	V                int              `json:"v"`
@@ -187,8 +196,10 @@ const (
 	RepoStateIdle    = "idle"
 	RepoStateRunning = "running"
 	RepoStateWaiting = "waiting"
-	RepoStateStalled = "stalled"
-	RepoStateErrored = "errored"
+	// RepoStateRateLimited is waiting for the installation's budget.
+	RepoStateRateLimited = "rate-limited"
+	RepoStateStalled     = "stalled"
+	RepoStateErrored     = "errored"
 )
 
 // RepoState is run.stalled, run.capacity-denied and run.budget-wait.

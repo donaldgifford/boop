@@ -25,6 +25,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/donaldgifford/boop/internal/store/db"
 )
 
 // Append outcomes, the outcome label of boopd_store_append_total.
@@ -56,13 +58,60 @@ func New(pool *pgxpool.Pool, role string, metrics Metrics) *Store {
 	return &Store{pool: pool, role: role, metrics: metrics}
 }
 
-// applyFunc applies one inserted event to the projections, inside the
-// Append transaction.
-type applyFunc func(ctx context.Context, tx pgx.Tx, e *Event) error
+// applyFunc applies one event to the projections, inside the Append or
+// rebuild transaction.
+type applyFunc func(ctx context.Context, q *db.Queries, e *Event) error
 
-// applies holds each kind's projection apply. A kind with no entry is
+// applies holds each kind's projection apply (DESIGN-0004 § Event
+// catalogue). A kind with no entry, pr.checkbox and action.recheck, is
 // timeline-only: its event is recorded and nothing else changes.
-var applies = map[Kind]applyFunc{}
+var applies = map[Kind]applyFunc{
+	KindDeliveryReceived:    applyDeliveryReceived,
+	KindDeliveryFailed:      applyDeliveryAudited,
+	KindDeliveryMissed:      applyDeliveryAudited,
+	KindDeliveryRedelivered: applyDeliveryAudited,
+
+	KindPROpened:       applyPullRequest,
+	KindPREdited:       applyPullRequest,
+	KindPRClosed:       applyPullRequest,
+	KindPRMerged:       applyPullRequest,
+	KindPRReopened:     applyPullRequest,
+	KindPRSynchronized: applyPullRequest,
+	KindPRSynced:       applyPullRequest,
+
+	KindDashboardUpdated: applyDashboardUpdated,
+	KindDashboardTicked:  applyDashboardTicked,
+
+	KindRepoOnboarded:    applyRepository,
+	KindRepoOffboarded:   applyRepository,
+	KindRepoRefreshed:    applyRepository,
+	KindRepoRunScheduled: applyRunScheduled,
+
+	KindRunStarted:        applyRunStarted,
+	KindRunFinished:       applyRunFinished,
+	KindRunStalled:        applyRepoState,
+	KindRunCapacityDenied: applyRepoState,
+	KindRunBudgetWait:     applyRepoState,
+
+	KindInstallationAdded:  applyInstallation,
+	KindInstallationSusp:   applyInstallation,
+	KindInstallationUnsusp: applyInstallation,
+	KindInstallationRemove: applyInstallation,
+
+	KindDiscoveryFinished: applyDiscoveryFinished,
+}
+
+// apply runs e's apply, if its kind has one.
+func apply(ctx context.Context, q *db.Queries, e *Event) error {
+	fn, ok := applies[e.Kind]
+	if !ok {
+		return nil
+	}
+	if err := fn(ctx, q, e); err != nil {
+		return fmt.Errorf("apply %s %s: %w", e.Kind, e.Key, err)
+	}
+	return nil
+}
 
 // Append records events and applies each to the projections in one
 // transaction. An event whose Key is already recorded is skipped, apply
@@ -140,10 +189,8 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
 		return false, fmt.Errorf("insert event %s: %w", e.Key, err)
 	}
 
-	if apply, ok := applies[e.Kind]; ok {
-		if err := apply(ctx, tx, e); err != nil {
-			return false, fmt.Errorf("apply %s %s: %w", e.Kind, e.Key, err)
-		}
+	if err := apply(ctx, db.New(tx), e); err != nil {
+		return false, err
 	}
 	return true, nil
 }
@@ -198,8 +245,36 @@ func nullInt32(v int) *int32 {
 	if v == 0 {
 		return nil
 	}
-	n := int32(v) //nolint:gosec // G115: PR numbers fit in int32
+	n := i32(v)
 	return &n
+}
+
+// i32 narrows a count or number that fits in a Postgres integer.
+func i32(v int) int32 {
+	return int32(v) //nolint:gosec // G115: PR numbers, attempts and counts fit in int32
+}
+
+// payload returns e's Data as T. Append's validate has checked the type,
+// so a mismatch here is a programming error, still reported, not a panic.
+func payload[T Data](e *Event) (T, error) {
+	d, ok := e.Data.(T)
+	if !ok {
+		return d, fmt.Errorf("event %s (%s) has data %T", e.Key, e.Kind, e.Data)
+	}
+	return d, nil
+}
+
+// jsonValue encodes v for a NOT NULL jsonb column, as empty when v is
+// nil.
+func jsonValue(v any, empty string) (json.RawMessage, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	if string(b) == "null" {
+		return json.RawMessage(empty), nil
+	}
+	return b, nil
 }
 
 func nullText(v string) *string {

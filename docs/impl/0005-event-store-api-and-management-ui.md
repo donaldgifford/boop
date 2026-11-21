@@ -314,7 +314,7 @@ with one commit per numbered task. The PR split is in OQ1.
     `boopd_store_append_seconds`.
 - [x] 3.3 sqlc queries in `internal/store/queries/*.sql` and the
   generated package `internal/store/db`. jsonb maps to `json.RawMessage`.
-- [ ] 3.4 Applies (`internal/store/apply_*.go`), one per kind in the
+- [x] 3.4 Applies (`internal/store/apply_*.go`), one per kind in the
   DESIGN-0004 catalogue. Each applies the order guard: it compares the
   source timestamp, or `gh_updated_at` for PRs, and ignores older data.
 - [ ] 3.5 `boopd store rebuild --config <file>`: truncate the
