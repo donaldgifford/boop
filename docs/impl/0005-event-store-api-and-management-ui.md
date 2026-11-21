@@ -218,7 +218,7 @@ with one commit per numbered task. The PR split is in OQ1.
   `oapi-codegen` v2.8.0 and `sqlc` (OQ4).
 - [x] 1.3 `mise.toml`: pins for `bun` (1.3.14) and `vacuum`. Playwright
   runs from its pinned image, not mise.
-- [ ] 1.4 Test database (OQ2): `internal/store/storetest` starts a
+- [x] 1.4 Test database (OQ2): `internal/store/storetest` starts a
   pinned `postgres:17` container through Docker for tests under the
   `integration` tag, like `temporaltest` for the dev server. `just
   test-integration` covers it, and CI's integration job gets Docker.

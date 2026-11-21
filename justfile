@@ -104,7 +104,8 @@ test-all: test
 
 # Run the integration tests (build tag `integration`): they start the
 # Temporal CLI's dev server, downloaded once per machine at the version
-# pinned in internal/temporal/temporaltest.
+# pinned in internal/temporal/temporaltest, and a Postgres container
+# (internal/store/storetest), so they need Docker.
 [group('test')]
 test-integration:
     @go test -v -race -count=1 -tags integration ./...
