@@ -41,6 +41,11 @@ func TestRun_ConfigValidate(t *testing.T) {
 		{name: "usage", args: []string{"config"}, wantCode: 2, wantStderr: "usage:"},
 		{name: "worker bad flag", args: []string{"worker", "--nope"}, wantCode: 2, wantStderr: "flag provided but not defined"},
 		{name: "worker missing config", args: []string{"worker", "--config", "/nonexistent.hcl"}, wantCode: 1, wantStderr: "Cannot read config file"},
+		{name: "store usage", args: []string{"store", "nope"}, wantCode: 2, wantStderr: "boopd store rebuild"},
+		{
+			name: "store rebuild missing config", args: []string{"store", "rebuild", "--config", "/nonexistent.hcl"},
+			wantCode: 1, wantStderr: "Cannot read config file",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

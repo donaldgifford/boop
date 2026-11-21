@@ -6,6 +6,10 @@
 //	boopd version                  print the version
 //	boopd config validate <file>   load and validate a config file; exit 1 on errors
 //	boopd worker --config <file>   run the Temporal worker until SIGTERM
+//	boopd ingest --config <file>   run the webhook ingest role until SIGTERM
+//	boopd migrate --config <file>  apply the store schema as the owner, then exit
+//	boopd store rebuild --config <file>
+//	                               replay the event log into fresh projections
 package main
 
 import (
@@ -36,6 +40,7 @@ const usage = `usage:
   boopd worker --config <file>
   boopd ingest --config <file>
   boopd migrate --config <file>
+  boopd store rebuild --config <file> [--batch n]
 `
 
 func main() {
@@ -55,6 +60,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runIngest(args[1:], stdout, stderr)
 	case len(args) >= 1 && args[0] == "migrate":
 		return runMigrate(args[1:], stdout, stderr)
+	case len(args) >= 1 && args[0] == "store":
+		return runStore(args[1:], stdout, stderr)
 	default:
 		return write(stderr, exitUsage, "%s", usage)
 	}
