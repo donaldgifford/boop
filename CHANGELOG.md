@@ -13,6 +13,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Documentation
 
 - INV-0005, boop UI on the design system; amend DESIGN-0004 and IMPL-0005
+- *(impl-0005)* Record the mockup and what the UI can start on
 
 ## [0.7.0] - 2026-11-12
 
