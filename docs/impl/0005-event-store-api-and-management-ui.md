@@ -503,11 +503,11 @@ with one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 6.1 `internal/ingest`: `StoreSink` implements IMPL-0004's `Sink`.
+- [x] 6.1 `internal/ingest`: `StoreSink` implements IMPL-0004's `Sink`.
   It writes `delivery.received` with the payload subset (OQ7 of
   DESIGN-0004) using the ingest DSN. A failure is logged and counted,
   and never changes the HTTP answer.
-- [ ] 6.2 Derived events from the same delivery, appended in the same
+- [x] 6.2 Derived events from the same delivery, appended in the same
   call:
   - `pull_request.*` whose PR author is the bot gives `pr.*`;
   - a bot `issues.edited` on its dashboard gives `dashboard.updated`
