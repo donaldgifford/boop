@@ -201,6 +201,33 @@ Later the same day, after the mockup:
   in `optimizeDeps.include`, because the package ships source
   (`ui/web/vite.config.ts`).
 
+## Findings (Phase 2)
+
+Choices made while writing the schema, where the design left the detail
+open:
+
+- **The idempotency key is its own table.** Postgres requires a unique
+  constraint on a partitioned table to include the partition key, so
+  `events.key` cannot be unique across months. `event_keys(key,
+  occurred_at)` is unpartitioned; `Append` inserts the key first in the
+  same transaction and skips the event when it exists. `drop_partitions`
+  prunes old keys with their partitions.
+- **`events` has a default partition** for anything outside the monthly
+  ones, such as a replayed log older than the first partition.
+  `drop_partitions` deletes its old rows too.
+- **Projections have no foreign keys.** They are rebuilt from events, and
+  an apply must not fail because a repository's events arrived before its
+  installation's.
+- **Ingest may DELETE `dashboard_items`.** `dashboard.updated` replaces a
+  repository's items, which the role table in DESIGN-0004 did not list.
+- **`boopd_ro`'s parameters** (`default_transaction_read_only`, a 5 s
+  `statement_timeout`) are set by `0003_grants.sql` when the owner may
+  alter roles, and warned about otherwise. The API's pool sets both on
+  every connection (9.6), so a managed owner without `CREATEROLE` is
+  covered.
+- **`store_meta.schema_version`** is what `RequireVersion` reads, since
+  every role can read it and only the owner can read goose's table.
+
 ## Implementation Phases
 
 Each phase ends with `just lint`, `just test` and its own checks green,
