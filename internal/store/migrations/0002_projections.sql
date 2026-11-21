@@ -1,6 +1,9 @@
 -- The projections (DESIGN-0004 § Tables). Each is kept by the applies in
 -- internal/store and can be rebuilt from events, so there are no foreign
 -- keys: an apply must not fail because its events arrived out of order.
+--
+-- Every row an apply updates carries the source time of the data it
+-- holds (the *_at guard columns), and an apply ignores older data.
 
 -- +goose Up
 CREATE TABLE installations (
@@ -26,7 +29,10 @@ CREATE TABLE repositories (
     last_run_id     text,
     last_run_at     timestamptz,
     last_outcome    text,
-    updated_at      timestamptz NOT NULL
+    -- Guards: lifecycle (onboard, offboard, refresh), state, schedule.
+    updated_at      timestamptz NOT NULL,
+    state_at        timestamptz,
+    scheduled_at    timestamptz
 );
 
 CREATE INDEX repositories_owner_idx ON repositories (owner, slug);
@@ -132,7 +138,9 @@ CREATE TABLE webhook_deliveries (
     missed          boolean     NOT NULL DEFAULT false,
     installation_id bigint,
     repo_id         bigint,
-    received_at     timestamptz NOT NULL,
+    received_at     timestamptz,
+    -- Guard for the delivery audit's results.
+    audited_at      timestamptz,
     payload         jsonb,
     PRIMARY KEY (delivery_id, attempt)
 );
@@ -150,6 +158,13 @@ CREATE TABLE discovery_passes (
     PRIMARY KEY (app, started_at)
 );
 
+-- dashboards guards dashboard_items: the time of the dashboard body the
+-- repository's items were last replaced from.
+CREATE TABLE dashboards (
+    repo_id    bigint PRIMARY KEY,
+    updated_at timestamptz NOT NULL
+);
+
 -- store_meta is one row: the schema version every role can read, so a
 -- role refuses to start below the version it needs (RequireVersion).
 CREATE TABLE store_meta (
@@ -161,6 +176,7 @@ INSERT INTO store_meta (schema_version) VALUES (2);
 
 -- +goose Down
 DROP TABLE store_meta;
+DROP TABLE dashboards;
 DROP TABLE discovery_passes;
 DROP TABLE webhook_deliveries;
 DROP TABLE dashboard_items;

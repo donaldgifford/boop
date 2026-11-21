@@ -25,7 +25,7 @@ GRANT EXECUTE ON FUNCTION ensure_partitions(integer), drop_partitions(timestampt
 -- Ingest writes deliveries, pull requests, installations and the
 -- dashboard. dashboard.updated replaces a repository's items, so ingest
 -- also deletes them.
-GRANT INSERT, UPDATE ON webhook_deliveries, pull_requests, dashboard_items, installations TO boopd_ingest;
+GRANT INSERT, UPDATE ON webhook_deliveries, pull_requests, dashboard_items, dashboards, installations TO boopd_ingest;
 GRANT DELETE ON dashboard_items TO boopd_ingest;
 
 -- The API is read-only at the role. Setting a role's parameters needs
