@@ -435,6 +435,50 @@ open:
 - Every operation not yet implemented answers a typed 501
   (`not_implemented`), which the spec's `default` response admits.
 
+## Findings (Phase 10)
+
+- **Migration 0005 bumps the schema to 5.** It adds the `run_cause()`
+  SQL function and an `events(key)` index; 0001 already indexes
+  `cause_key`. The worker and ingest refuse to start below the version
+  they expect, so a deploy runs `boopd migrate` first, as with every
+  migration.
+- **A run's cause is derived, not stored.** `run_cause(cause_key)` looks
+  up the event the key names:
+  - `action.recheck` gives recheck;
+  - `repo.run-scheduled` with a reason, a `delivery:` key or a webhook
+    source gives webhook;
+  - `repo.run-scheduled` without a reason gives schedule;
+  - anything else, including no key, gives unknown.
+- **The live view needs no new workflow commands.** The `state` Query
+  returns `RepoView`: `RepoState` plus phase, running-since and the
+  budget wait. It is replay-safe, and `waiting-budget` exists only in the
+  Query, never as a search attribute.
+- **Lists read limit+1 rows.** The extra row decides `next_cursor`, and
+  the cursor's filter hash covers every query parameter except `cursor`
+  and `limit`, plus the path id for per-repository lists. Replaying a
+  cursor under another filter answers 400. The integration test now
+  covers this over HTTP.
+- **sqlc constraints shaped the queries.** Two-argument `unnest`, a
+  VALUES column alias and `FILTER` with casts all fail sqlc's rewrite.
+  The batch lookups use one `unnest` per column, and the estate counts
+  use `sum(CASE …)`. Nullable `min`/`max` arrive as `interface{}` and are
+  unwrapped by `timeOrNil`.
+- **The estate reads in one snapshot.** Its queries share a
+  RepeatableRead read-only transaction, so the numbers agree with each
+  other. Timings feed the p95 that is logged per query, for the rollup
+  decision.
+- **`/deliveries` is for callers who see all owners.** A delivery may
+  carry no repository, so scoping it would leak or hide arbitrarily; a
+  narrower caller gets 403.
+- **Status is aggregate-only.** The 30 s page holds:
+  - component states;
+  - fleet counts;
+  - the latest per-installation budget spend;
+  - the version.
+
+  `TestStatus_PrivacyGuard` walks the JSON and refuses any string field
+  outside the allowlist.
+
 ## Implementation Phases
 
 Each phase ends with `just lint`, `just test` and its own checks green,

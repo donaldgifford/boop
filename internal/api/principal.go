@@ -36,6 +36,13 @@ limitations under the License.
 // sort key plus a hash of the request's filters, so a cursor replayed
 // under different filters is refused 400.
 //
+// GET /repositories/{id} adds the workflow's live state Query under a
+// 2 s deadline (live: false without it). POST
+// /repositories/{id}/recheck signals the RepoWorkflow, deduplicated per
+// replica to one a minute per repository. /estate and /estate/series are
+// computed on read and cached 60 s per (scope, range, metric). /status
+// is recomputed every 30 s by a StatusPage and is aggregate-only.
+//
 // problem.go, cursor.go, middleware.go, authn.go, server.go, apitest and
 // oidctest are copied from repo-guardian at a72faf9 (each file says what
 // changed); boop does not import repo-guardian.
