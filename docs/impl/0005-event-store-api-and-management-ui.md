@@ -433,7 +433,7 @@ with one commit per numbered task. The PR split is in OQ1.
   `run.finished` (runs, branch_updates with purls, dependencies with
   purls, the repository state). The key is `run:<run id>:<attempt>`, and
   the cause is the `run-scheduled` event key.
-- [ ] 5.4 `RecordEvents` activity for workflow decisions. The key is
+- [x] 5.4 `RecordEvents` activity for workflow decisions. The key is
   `wf:<workflow id>:<run id>:<seq>`, where `seq` is a workflow-local
   counter carried through ContinueAsNew.
 - [ ] 5.5 `storeOptions` (unlimited retry, 10 s start-to-close, low

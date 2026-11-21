@@ -34,6 +34,7 @@ func TestRegister(t *testing.T) {
 		workflows.PlanRunActivity,
 		workflows.ListHookDeliveriesActivity,
 		workflows.RecordRunActivity,
+		workflows.RecordEventsActivity,
 	}
 	slices.Sort(want)
 	if !slices.Equal(r.names, want) {

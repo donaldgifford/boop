@@ -3,6 +3,7 @@
 package activities_test
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"testing"
@@ -131,5 +132,50 @@ func TestRecordRun_StoreDisabled(t *testing.T) {
 	a := activities.New(&activities.Deps{Config: &config.Config{}})
 	if err := a.RecordRun(t.Context(), &workflows.RecordRunInput{RunID: "x"}); err != nil {
 		t.Errorf("RecordRun with no store = %v, want nil", err)
+	}
+}
+
+func TestRecordEvents_EveryWorkflowKind(t *testing.T) {
+	a, owner := storeFixture(t)
+	at := time.Date(2026, 11, 21, 9, 0, 0, 0, time.UTC)
+	ev := func(seq int, kind string, d time.Duration) workflows.RecordedEvent {
+		return workflows.RecordedEvent{
+			Key: fmt.Sprintf("wf:repo/github/50:exec:%d", seq), Kind: kind, OccurredAt: at.Add(d), InstallationID: 7, RepoID: 50,
+		}
+	}
+	onboarded := ev(0, workflows.KindRepoOnboarded, 0)
+	onboarded.Repository = &workflows.RecordRepository{Slug: "acme/api", Profile: "default", Via: workflows.ViaDiscovery}
+	scheduled := ev(1, workflows.KindRepoRunScheduled, time.Minute)
+	scheduled.Scheduled = &workflows.RecordScheduled{NextDue: at.Add(time.Hour), Priority: workflows.PriorityNormal}
+	recheck := ev(2, workflows.KindActionRecheck, 2*time.Minute)
+	recheck.Actor = &workflows.RecordActor{Login: "dg@example.com", Type: "oidc"}
+	recheck.Recheck = &workflows.RecordRecheck{RequestID: "req-1"}
+	wait := ev(3, workflows.KindRunBudgetWait, 3*time.Minute)
+	wait.State = &workflows.RecordState{Until: at.Add(10 * time.Minute)}
+	refreshed := ev(4, workflows.KindRepoRefreshed, 4*time.Minute)
+	refreshed.Repository = &workflows.RecordRepository{Slug: "acme/api-v2", Profile: "python"}
+	pass := workflows.RecordedEvent{
+		Key: "wf:discovery/main:exec:0", Kind: workflows.KindDiscoveryFinished, OccurredAt: at,
+		Discovery: &workflows.RecordDiscovery{App: "main", StartedAt: at.Add(-time.Minute), FinishedAt: at, Seen: 3, Onboarded: 1},
+	}
+	in := &workflows.RecordEventsInput{Events: []workflows.RecordedEvent{onboarded, scheduled, recheck, wait, refreshed, pass}}
+	for range 2 {
+		if err := a.RecordEvents(t.Context(), in); err != nil {
+			t.Fatalf("RecordEvents: %v", err)
+		}
+	}
+	if n := count(t, owner, `SELECT count(*) FROM repositories WHERE id = 50 AND slug = 'acme/api-v2' AND profile = 'python'
+		AND onboarded_at IS NOT NULL AND next_due = '2026-11-21T10:00:00Z' AND state = 'rate-limited'`); n != 1 {
+		t.Errorf("repositories rows = %d, want 1", n)
+	}
+	if n := count(t, owner, `SELECT count(*) FROM events WHERE kind = 'action.recheck' AND actor_login = 'dg@example.com'
+		AND data->>'request_id' = 'req-1'`); n != 1 {
+		t.Errorf("recheck events = %d, want 1", n)
+	}
+	if n := count(t, owner, `SELECT count(*) FROM discovery_passes WHERE app = 'main' AND seen = 3`); n != 1 {
+		t.Errorf("discovery_passes = %d, want 1", n)
+	}
+	if n := count(t, owner, `SELECT count(*) FROM events`); n != len(in.Events) {
+		t.Errorf("events = %d, want %d", n, len(in.Events))
 	}
 }

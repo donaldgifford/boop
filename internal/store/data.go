@@ -113,6 +113,10 @@ type Repository struct {
 	Owner   string `json:"owner"`
 	Slug    string `json:"slug"`
 	Profile string `json:"profile,omitempty"`
+	// Via is how an onboarding was found: discovery or webhook.
+	Via string `json:"via,omitempty"`
+	// Reason is why an offboarding happened.
+	Reason string `json:"reason,omitempty"`
 }
 
 // RunScheduled is repo.run-scheduled.
@@ -120,6 +124,8 @@ type RunScheduled struct {
 	V        int       `json:"v"`
 	NextDue  time.Time `json:"next_due"`
 	Priority string    `json:"priority,omitempty"`
+	// Reason is the event that asked for the run; empty for the cadence.
+	Reason string `json:"reason,omitempty"`
 }
 
 // RunStarted is run.started.

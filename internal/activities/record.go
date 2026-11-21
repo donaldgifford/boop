@@ -110,3 +110,76 @@ func firstNonEmpty(a, b string) string {
 	}
 	return b
 }
+
+// RecordEvents appends workflow decisions (DESIGN-0004 § Event
+// catalogue). Each carries the workflow's key, so a retry or a replay
+// is a no-op. With the store disabled it does nothing.
+func (a *Activities) RecordEvents(ctx context.Context, in *workflows.RecordEventsInput) error {
+	if a.store == nil || len(in.Events) == 0 {
+		return nil
+	}
+	events := make([]store.Event, 0, len(in.Events))
+	for i := range in.Events {
+		e, err := recordedEvent(&in.Events[i])
+		if err != nil {
+			return err
+		}
+		events = append(events, e)
+	}
+	if err := a.store.Append(ctx, events...); err != nil {
+		return fmt.Errorf("record %d events: %w", len(events), err)
+	}
+	return nil
+}
+
+// recordedEvent maps one workflow decision to a store event.
+func recordedEvent(r *workflows.RecordedEvent) (store.Event, error) {
+	e := store.Event{
+		Key: r.Key, OccurredAt: r.OccurredAt, Kind: store.Kind(r.Kind), Source: store.SourceWorker,
+		InstallationID: r.InstallationID, RepoID: r.RepoID, CauseKey: r.CauseKey, Summary: r.Summary,
+	}
+	if r.Actor != nil {
+		e.Actor = store.Actor{Login: r.Actor.Login, Type: r.Actor.Type}
+	}
+	switch {
+	case r.Repository != nil:
+		owner, _, _ := strings.Cut(r.Repository.Slug, "/")
+		e.Data = &store.Repository{
+			V: 1, Owner: owner, Slug: r.Repository.Slug, Profile: r.Repository.Profile, Via: r.Repository.Via, Reason: r.Repository.Reason,
+		}
+	case r.Scheduled != nil:
+		e.Data = &store.RunScheduled{V: 1, NextDue: r.Scheduled.NextDue, Priority: priorityName(r.Scheduled.Priority), Reason: r.Scheduled.Reason}
+	case r.State != nil:
+		d := &store.RepoState{V: 1, Reason: r.State.Reason}
+		if !r.State.Until.IsZero() {
+			until := r.State.Until
+			d.Until = &until
+		}
+		e.Data = d
+	case r.Recheck != nil:
+		e.Data = &store.Recheck{V: 1, RequestID: r.Recheck.RequestID}
+	case r.Discovery != nil:
+		d := r.Discovery
+		e.Data = &store.DiscoveryFinished{
+			V: 1, App: d.App, StartedAt: d.StartedAt, FinishedAt: d.FinishedAt,
+			Seen: d.Seen, Onboarded: d.Onboarded, Failed: d.Failed, ProbeCost: d.ProbeCost,
+		}
+	default:
+		return store.Event{}, fmt.Errorf("event %s (%s) has no payload", r.Key, r.Kind)
+	}
+	return e, nil
+}
+
+// priorityName is a priority as the timeline shows it.
+func priorityName(p workflows.Priority) string {
+	switch p {
+	case workflows.PriorityHigh:
+		return "high"
+	case workflows.PriorityNormal:
+		return "normal"
+	case workflows.PriorityLow:
+		return "low"
+	default:
+		return ""
+	}
+}
