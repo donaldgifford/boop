@@ -676,7 +676,7 @@ with one commit per numbered task. The PR split is in OQ1.
   - the contract-test helper `apitest`.
 
   Adapt names to boop, and keep no import of repo-guardian.
-- [ ] 9.5 `internal/api/authz.go`: the authz file
+- [x] 9.5 `internal/api/authz.go`: the authz file
   (`owners`/`operators`/`clients`), visibility resolved per request, and
   SQL filtering helpers. A missing owner returns 404; a non-operator
   action returns 403.

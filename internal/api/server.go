@@ -98,7 +98,7 @@ func New(opts *Options) (http.Handler, error) {
 		return nil, err
 	}
 
-	strict := gen.NewStrictHandlerWithOptions(&server{opts: o}, []gen.StrictMiddlewareFunc{requireVisibleOwners},
+	strict := gen.NewStrictHandlerWithOptions(&server{opts: o}, []gen.StrictMiddlewareFunc{requireOperator, requireVisibleOwners},
 		gen.StrictHTTPServerOptions{
 			RequestErrorHandlerFunc:  badRequest,
 			ResponseErrorHandlerFunc: responseError(o.Logger),
@@ -177,6 +177,18 @@ func requireVisibleOwners(f gen.StrictHandlerFunc, operationID string) gen.Stric
 	return func(ctx context.Context, w http.ResponseWriter, r *http.Request, req any) (any, error) {
 		if p, ok := principalFrom(ctx); ok && p.Visible.Empty() && !ownerFree[operationID] {
 			return nil, statusError(http.StatusForbidden, "no visible owners")
+		}
+		return f(ctx, w, r, req)
+	}
+}
+
+// requireOperator refuses an action (any operation but a GET) to a
+// principal without an operator group, 403. It runs after
+// requireVisibleOwners, so a caller who sees nothing hears that first.
+func requireOperator(f gen.StrictHandlerFunc, _ string) gen.StrictHandlerFunc {
+	return func(ctx context.Context, w http.ResponseWriter, r *http.Request, req any) (any, error) {
+		if p, ok := principalFrom(ctx); ok && r.Method != http.MethodGet && !p.Operator {
+			return nil, statusError(http.StatusForbidden, "actions need an operator group")
 		}
 		return f(ctx, w, r, req)
 	}
