@@ -139,12 +139,16 @@ func waitReady(ctx context.Context, dsn string) error {
 	}
 }
 
-func ping(ctx context.Context, dsn string) error {
+func ping(ctx context.Context, dsn string) (err error) {
 	conn, err := pgx.Connect(ctx, dsn)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}
-	defer func() { _ = conn.Close(context.WithoutCancel(ctx)) }()
+	defer func() {
+		if cerr := conn.Close(context.WithoutCancel(ctx)); cerr != nil && err == nil {
+			err = fmt.Errorf("close: %w", cerr)
+		}
+	}()
 
 	var one int
 	if err := conn.QueryRow(ctx, "SELECT 1").Scan(&one); err != nil {
