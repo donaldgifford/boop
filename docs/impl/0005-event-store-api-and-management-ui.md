@@ -363,7 +363,7 @@ with one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 4.1 `internal/purl`: `FromRenovate(datasource, packageName,
+- [x] 4.1 `internal/purl`: `FromRenovate(datasource, packageName,
   version string) (string, bool)` with DESIGN-0004's table. It
   percent-encodes the namespace (`@types/node`), handles docker library
   images and digests, and returns `false` when there is no type. Unit

@@ -289,7 +289,7 @@ func kindCases() []kindCase {
 		newer: ev(store.KindRunFinished, "rf/new", newerAt, 161, finished("run-new", store.RunSucceeded, "v1.2.0", newerAt)),
 		older: ev(store.KindRunFinished, "rf/old", olderAt, 161, finished("run-old", store.RunFailed, "v1.1.0", olderAt)),
 		views: []view{repoView(161), {"branch_updates", "repo_id = 161"}, {"dependencies", "repo_id = 161"}, {"runs", "id = 'run-new'"}},
-		want:  "v1.2.0",
+		want:  `"purl_to": "pkg:golang/example.com/x@v1.2.0"`,
 	})
 	states := map[store.Kind]string{
 		store.KindRunStalled:        store.RepoStateStalled,

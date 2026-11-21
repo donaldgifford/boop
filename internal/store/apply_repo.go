@@ -23,6 +23,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/donaldgifford/boop/internal/purl"
 	"github.com/donaldgifford/boop/internal/store/db"
 )
 
@@ -188,6 +189,8 @@ func replaceInventory(ctx context.Context, q *db.Queries, repoID int64, d *RunFi
 				UpdateType:  u.UpdateType,
 				FromVersion: u.FromVersion,
 				ToVersion:   u.ToVersion,
+				PurlFrom:    purlOf(u.Datasource, u.PackageName, u.FromVersion),
+				PurlTo:      purlOf(u.Datasource, u.PackageName, u.ToVersion),
 			})
 		}
 		if err := batchErr(q.InsertBranchUpdate(ctx, args)); err != nil {
@@ -213,6 +216,7 @@ func replaceInventory(ctx context.Context, q *db.Queries, repoID int64, d *RunFi
 			Datasource:     dep.Datasource,
 			CurrentValue:   dep.CurrentValue,
 			CurrentVersion: dep.CurrentVersion,
+			Purl:           purlOf(dep.Datasource, dep.PackageName, dep.CurrentVersion),
 		})
 	}
 	return batchErr(q.InsertDependency(ctx, args))
@@ -232,6 +236,16 @@ func batchErr(b batchResults) error {
 		}
 	})
 	return first
+}
+
+// purlOf is the row's purl, computed at write time (OQ13), or nil for a
+// datasource with no purl type.
+func purlOf(datasource, packageName, version string) *string {
+	p, ok := purl.FromRenovate(datasource, packageName, version)
+	if !ok {
+		return nil
+	}
+	return &p
 }
 
 func orTime(t, fallback time.Time) time.Time {
