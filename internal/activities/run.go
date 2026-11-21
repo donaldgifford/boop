@@ -522,6 +522,18 @@ func (r *run) fillResult(end *runEnd) {
 	for i := range s.Problems {
 		res.Problems[i] = workflows.Problem(s.Problems[i])
 	}
+	res.Dependencies, res.DependenciesTruncated = capDependencies(s.Dependencies)
+}
+
+// capDependencies converts the report's dependencies, keeping at most
+// workflows.MaxDependencies.
+func capDependencies(deps []renovate.Dependency) ([]workflows.Dependency, bool) {
+	n := min(len(deps), workflows.MaxDependencies)
+	out := make([]workflows.Dependency, n)
+	for i := range n {
+		out[i] = workflows.Dependency(deps[i])
+	}
+	return out, len(deps) > n
 }
 
 // finish reads RateAfter, revokes the token and deletes the Job, in that

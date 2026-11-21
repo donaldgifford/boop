@@ -368,7 +368,7 @@ with one commit per numbered task. The PR split is in OQ1.
   percent-encodes the namespace (`@types/node`), handles docker library
   images and digests, and returns `false` when there is no type. Unit
   table tests.
-- [ ] 4.2 `internal/renovate/report.go`: decode `packageFiles[].deps[]`
+- [x] 4.2 `internal/renovate/report.go`: decode `packageFiles[].deps[]`
   (`depName`, `packageName`, `datasource`, `currentValue`,
   `currentVersion`, `depType`, `skipReason`). `RunResult.Dependencies`
   carries them, capped (OQ5). Refresh the testdata from a real report

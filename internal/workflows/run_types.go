@@ -95,10 +95,15 @@ type RunResult struct {
 	Managers         []string      // keys of the report's packageFiles
 	Tuples           []UpdateTuple // from the report
 	Problems         []Problem     // repository-level problems from the report
-	Progress         Progress      // this attempt only
-	ReportMissing    bool          // tuples rebuilt from branch and PR events
-	RateBefore       *Readings
-	RateAfter        *Readings
+	// Dependencies is the report's packageFiles[].deps[], at most
+	// MaxDependencies; DependenciesTruncated says more were dropped
+	// (IMPL-0005 OQ5).
+	Dependencies          []Dependency
+	DependenciesTruncated bool
+	Progress              Progress // this attempt only
+	ReportMissing         bool     // tuples rebuilt from branch and PR events
+	RateBefore            *Readings
+	RateAfter             *Readings
 	// Sandbox is the RuntimeClass a sandboxed run ran under; "" for an
 	// ordinary run.
 	Sandbox string
@@ -121,6 +126,23 @@ type UpdateTuple struct {
 	UpdateType     string
 	CurrentVersion string
 	NewVersion     string
+}
+
+// MaxDependencies caps RunResult.Dependencies, which lives in workflow
+// history (IMPL-0005 OQ5).
+const MaxDependencies = 2000
+
+// Dependency is one dependency the report found.
+type Dependency struct {
+	Manager        string
+	PackageFile    string
+	DepName        string
+	PackageName    string
+	Datasource     string
+	CurrentValue   string
+	CurrentVersion string
+	DepType        string
+	SkipReason     string
 }
 
 // Problem is a repository-level problem from the report.

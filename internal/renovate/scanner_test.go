@@ -255,6 +255,29 @@ func TestScanner_Renovate44Live(t *testing.T) {
 	if want := []string{"dockerfile", "github-actions", "gomod", "helm-values", "mise", "renovate-config"}; !slices.Equal(got.Managers, want) {
 		t.Errorf("Managers = %v, want %v", got.Managers, want)
 	}
+	checkDependencies(t, got.Dependencies)
+}
+
+// checkDependencies pins the live report's packageFiles[].deps[]: 140 of
+// them, each with a manager, file and package, the first the
+// Dockerfile's syntax image.
+func checkDependencies(t *testing.T, deps []renovate.Dependency) {
+	t.Helper()
+	if len(deps) != 140 {
+		t.Fatalf("Dependencies = %d, want 140", len(deps))
+	}
+	for i := range deps {
+		if d := &deps[i]; d.Manager == "" || d.PackageFile == "" || d.PackageName == "" {
+			t.Errorf("dependency %+v lacks a manager, file or package", d)
+		}
+	}
+	want := renovate.Dependency{
+		Manager: "dockerfile", PackageFile: "Dockerfile", DepName: "docker/dockerfile", PackageName: "docker/dockerfile",
+		Datasource: "docker", CurrentValue: "1.7", CurrentVersion: "1.7", DepType: "syntax",
+	}
+	if deps[0] != want {
+		t.Errorf("Dependencies[0] = %+v, want %+v", deps[0], want)
+	}
 }
 
 func TestScanner_Renovate44DryRun(t *testing.T) {
