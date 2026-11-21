@@ -424,7 +424,7 @@ with one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 5.1 `internal/config`: the `store` block (`enabled`, the four DSN
+- [x] 5.1 `internal/config`: the `store` block (`enabled`, the four DSN
   secret refs: owner, worker, ingest, ro; `retention`), validation, and
   `docs/config.md` rows.
 - [ ] 5.2 The worker builds a pgx pool from the worker DSN when

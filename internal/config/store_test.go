@@ -64,6 +64,10 @@ store {
     name = "boopd-store"
     key  = "owner-dsn"
   }
+  dsn_secret_ref {
+    name = "boopd-store"
+    key  = "dsn"
+  }
   ro_dsn_secret_ref {
     name = "boopd-store"
     key  = "ro-dsn"
@@ -86,8 +90,8 @@ store {
 	if s.OwnerDSNSecretRef == nil || *s.OwnerDSNSecretRef != (config.SecretRef{Name: "boopd-store", Key: "owner-dsn"}) {
 		t.Errorf("owner ref = %+v", s.OwnerDSNSecretRef)
 	}
-	if s.DSNSecretRef != nil || s.IngestDSNSecretRef != nil {
-		t.Errorf("unset refs = %+v, %+v, want nil", s.DSNSecretRef, s.IngestDSNSecretRef)
+	if s.DSNSecretRef == nil || s.DSNSecretRef.Key != "dsn" || s.IngestDSNSecretRef != nil {
+		t.Errorf("worker ref = %+v, unset ingest ref = %+v", s.DSNSecretRef, s.IngestDSNSecretRef)
 	}
 	if s.Retention.Events != 720*time.Hour || s.Retention.Offboarded != config.DefaultRetainOffboarded {
 		t.Errorf("retention = %+v", s.Retention)
@@ -114,6 +118,16 @@ store {
 		if !strings.Contains(b.String(), want) {
 			t.Errorf("diagnostics do not mention %q:\n%s", want, b.String())
 		}
+	}
+}
+
+func TestStore_EnabledNeedsTheWorkerDSN(t *testing.T) {
+	t.Parallel()
+	_, diags := config.Parse("store.hcl", []byte(minimalApp+"store {\n  enabled = true\n}\n"+storeApp))
+	var b strings.Builder
+	_, _ = diags.WriteTo(&b)
+	if !diags.HasErrors() || !strings.Contains(b.String(), "store.dsn_secret_ref") {
+		t.Errorf("diagnostics = %s, want a missing store.dsn_secret_ref", b.String())
 	}
 }
 

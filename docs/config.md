@@ -478,7 +478,7 @@ store {
 | - | - | - | - |
 | `enabled` | bool | `false` | Records runs, decisions, deliveries and pull requests in the store from the worker and ingest. |
 | `owner_dsn_secret_ref` | block | none | The DSN of `boopd_owner`, which owns the schema. Read by `boopd migrate` and `boopd store rebuild` only. |
-| `dsn_secret_ref` | block | none | The worker's DSN, as `boopd_worker`. |
+| `dsn_secret_ref` | block | none | The worker's DSN, as `boopd_worker`. Required when `enabled`. |
 | `ingest_dsn_secret_ref` | block | none | Ingest's DSN, as `boopd_ingest`. |
 | `ro_dsn_secret_ref` | block | none | The API's read-only DSN, as `boopd_ro`. |
 | `retention` | block | see below | How long the store keeps what. |

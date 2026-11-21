@@ -49,6 +49,7 @@ type storeBlock struct {
 	IngestDSNSecretRef *secretRefBlock `hcl:"ingest_dsn_secret_ref,block"`
 	RODSNSecretRef     *secretRefBlock `hcl:"ro_dsn_secret_ref,block"`
 	Retention          *retentionBlock `hcl:"retention,block"`
+	DefRange           hcl.Range       `hcl:",def_range"`
 }
 
 // retentionBlock is store.retention (DESIGN-0004 § Retention, OQ6).
