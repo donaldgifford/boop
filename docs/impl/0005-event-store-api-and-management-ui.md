@@ -222,7 +222,7 @@ with one commit per numbered task. The PR split is in OQ1.
   pinned `postgres:17` container through Docker for tests under the
   `integration` tag, like `temporaltest` for the dev server. `just
   test-integration` covers it, and CI's integration job gets Docker.
-- [ ] 1.5 `justfile` recipes: `generate-sql`, `generate-api`, `lint-api`
+- [x] 1.5 `justfile` recipes: `generate-sql`, `generate-api`, `lint-api`
   (vacuum plus drift), `lint-sql` (sqlc vet plus drift), and `ui-*`
   (install, lint, test, build, e2e, visual).
 
