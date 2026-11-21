@@ -668,7 +668,7 @@ with one commit per numbered task. The PR split is in OQ1.
 - [x] 9.2 `api/vacuum.yaml` (camel-case rule off) and `just lint-api`.
 - [x] 9.3 `api/oapi-codegen.yaml` (std-http, strict server, models,
   embedded spec) → `internal/api/gen`, committed and drift-gated.
-- [ ] 9.4 Copy into `internal/api`, with provenance headers (OQ6):
+- [x] 9.4 Copy into `internal/api`, with provenance headers (OQ6):
   - `problem.go`, `cursor.go`, `middleware.go` (request ID, access log,
     recover);
   - `authn.go` (go-oidc, ID tokens refused, background discovery,
