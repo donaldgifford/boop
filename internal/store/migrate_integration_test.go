@@ -211,3 +211,18 @@ func TestPartitionFunctions(t *testing.T) {
 		t.Errorf("drop_partitions(+1y) = %d, %v, want 6", dropped, err)
 	}
 }
+
+func TestOpen_ChecksTheSchema(t *testing.T) {
+	srv := storetest.Start(t)
+	if _, err := store.Open(t.Context(), srv.RoleDSN(storetest.RoleWorker)); err == nil {
+		t.Error("Open before migrate succeeded, want an error")
+	}
+	if _, err := store.Migrate(t.Context(), srv.OwnerDSN(), quiet); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	p, err := store.Open(t.Context(), srv.RoleDSN(storetest.RoleWorker))
+	if err != nil {
+		t.Fatalf("Open after migrate: %v", err)
+	}
+	p.Close()
+}

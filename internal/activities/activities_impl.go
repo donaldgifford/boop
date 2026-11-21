@@ -31,8 +31,14 @@ import (
 	"github.com/donaldgifford/boop/internal/kube"
 	"github.com/donaldgifford/boop/internal/platform"
 	"github.com/donaldgifford/boop/internal/profiles"
+	"github.com/donaldgifford/boop/internal/store"
 	"github.com/donaldgifford/boop/internal/workflows"
 )
+
+// Recorder appends events to the store. *store.Store implements it.
+type Recorder interface {
+	Append(ctx context.Context, events ...store.Event) error
+}
 
 // Deps are what the activities need. Config must have had ReadSecrets
 // called.
@@ -53,6 +59,8 @@ type Deps struct {
 	Timings RunTimings
 	// Now is the clock; time.Now when nil.
 	Now func() time.Time
+	// Store records runs and decisions; nil when store.enabled is false.
+	Store Recorder
 }
 
 // Activities holds every boopd activity (DESIGN-0001 § Topology and
@@ -69,6 +77,7 @@ type Activities struct {
 	runLog    *slog.Logger
 	timings   RunTimings
 	now       func() time.Time
+	store     Recorder
 
 	mu       sync.Mutex
 	appOf    map[int64]string // installation id -> app name, learned from listings
@@ -90,6 +99,7 @@ func New(deps *Deps) *Activities {
 		runLog:    deps.RunLog,
 		timings:   deps.Timings.withDefaults(),
 		now:       deps.Now,
+		store:     deps.Store,
 		appOf:     make(map[int64]string),
 		presetID:  make(map[string]int64),
 	}

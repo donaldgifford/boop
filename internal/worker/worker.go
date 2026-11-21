@@ -58,6 +58,9 @@ type Options struct {
 	GitHub activities.GitHub
 	// Timings overrides the run clocks (tests).
 	Timings activities.RunTimings
+	// Store records runs and decisions; nil when store.enabled is false.
+	// The caller owns its pool.
+	Store activities.Recorder
 
 	// ListenAddr serves /healthz and /readyz; MetricsAddr serves
 	// MetricsHandler at /metrics. Empty skips the server.
@@ -90,7 +93,7 @@ func Run(ctx context.Context, o *Options) error {
 	runner := kube.NewRunner(o.Clientset, o.Config.Runs.Namespace)
 	acts := activities.New(&activities.Deps{
 		Config: o.Config, GitHub: o.GitHub, Temporal: o.Temporal, TaskQueue: tq, Runner: runner,
-		Metrics: metrics, Logger: log, RunLog: o.RunLog, Timings: o.Timings,
+		Metrics: metrics, Logger: log, RunLog: o.RunLog, Timings: o.Timings, Store: o.Store,
 	})
 	budget := activities.NewBudget(o.Temporal, tq, budgetConfig(o.Config))
 	capacity := activities.NewCapacity(o.Temporal, tq, activities.CapacityConfig{

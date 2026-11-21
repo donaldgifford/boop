@@ -27,9 +27,11 @@ import (
 
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/donaldgifford/boop/internal/activities"
 	"github.com/donaldgifford/boop/internal/config"
 	"github.com/donaldgifford/boop/internal/kube"
 	"github.com/donaldgifford/boop/internal/observability"
+	"github.com/donaldgifford/boop/internal/store"
 	"github.com/donaldgifford/boop/internal/temporal"
 	"github.com/donaldgifford/boop/internal/worker"
 	"github.com/donaldgifford/boop/internal/workflows"
@@ -41,6 +43,9 @@ const (
 	defaultListenAddr  = ":8080"
 	defaultMetricsAddr = ":9090"
 	defaultConfigPath  = "/etc/boopd/config.hcl"
+	// workerRole is the database role the worker's DSN logs in as, the
+	// store metrics' role label.
+	workerRole = "boopd_worker"
 )
 
 // runWorker is `boopd worker --config <file>`: the worker role until
@@ -117,6 +122,12 @@ func runWorkerRole(ctx context.Context, path string, stdout, stderr io.Writer) e
 		return fmt.Errorf("kubernetes client: %w", err)
 	}
 
+	rec, closeStore, err := openWorkerStore(ctx, cfg, metrics)
+	if err != nil {
+		return err
+	}
+	defer closeStore()
+
 	return worker.Run(ctx, &worker.Options{
 		Config:         cfg,
 		Temporal:       c,
@@ -128,7 +139,26 @@ func runWorkerRole(ctx context.Context, path string, stdout, stderr io.Writer) e
 		ListenAddr:     envOr("LISTEN_ADDR", defaultListenAddr),
 		MetricsAddr:    envOr("METRICS_ADDR", defaultMetricsAddr),
 		MetricsHandler: metricsHandler,
+		Store:          rec,
 	})
+}
+
+// openWorkerStore connects the worker's pool when store.enabled, as
+// boopd_worker, after checking the schema. The returned func closes it;
+// with the store disabled both are no-ops.
+func openWorkerStore(ctx context.Context, cfg *config.Config, metrics *observability.Metrics) (activities.Recorder, func(), error) {
+	if !cfg.Store.Enabled {
+		return nil, func() {}, nil
+	}
+	dsn, err := cfg.ReadStoreDSN(cfg.Store.DSNSecretRef, "store.dsn_secret_ref")
+	if err != nil {
+		return nil, nil, err
+	}
+	pool, err := store.Open(ctx, dsn.Reveal())
+	if err != nil {
+		return nil, nil, err
+	}
+	return store.New(pool, workerRole, metrics), pool.Close, nil
 }
 
 func envOr(key, def string) string {
