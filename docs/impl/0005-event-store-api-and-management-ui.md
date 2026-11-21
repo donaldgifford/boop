@@ -183,6 +183,24 @@ From INV-0005, which replaces the UI part of the finding above:
   loading and empty text. They are built in the design system first
   (INV-0005 OQ7), which needs its RFC-0001 entry rule amended.
 
+Later the same day, after the mockup:
+
+- **`ui/` is no longer empty.** A mockup runs over fixture data
+  (`just ui-dev`): the shell with the app switcher, Estate, Pull
+  requests, one repository page and the public status page. It has no
+  server, no API client, no sign-in and no tests.
+- **design-system 0.4.0 carries every known gap:** the segmented
+  control, option rows, filter bar, inline loading and empty text,
+  stacked bars over time, the app switcher (its RFC-0002) and the status
+  page parts. RFC-0001's entry rule is amended. `ui/` pins 0.4.0 and
+  holds no local copy.
+- **Two prop gaps are filed there,** not patched here: `Meter` reads a
+  high percentage as good (design-system issue 29), and `Timeline` takes
+  its time as a string (issue 30). The mockup works around both.
+- **Vite's dev server needs the package's CommonJS dependencies named**
+  in `optimizeDeps.include`, because the package ships source
+  (`ui/web/vite.config.ts`).
+
 ## Implementation Phases
 
 Each phase ends with `just lint`, `just test` and its own checks green,
@@ -516,12 +534,30 @@ with one commit per numbered task. The PR split is in OQ1.
 
 ### Phase 11: The UI scaffold on the design system
 
-`ui/` starts empty. repo-guardian's `ui/` is read as the example; no
-file is copied from it.
+`ui/` starts from the mockup (Findings, 2026-11-21): the SPA shell and
+four pages over fixtures. repo-guardian's `ui/` is read as the example;
+no file is copied from it. Each task below says what the mockup already
+covers.
+
+What can start, and what waits:
+
+| Work | Waits on |
+| ---- | -------- |
+| 11.1, 11.2, 11.4, 11.5, 11.7, 11.9 (shell) | nothing |
+| 11.3 the BFF, against the mock issuer | nothing; its public-path check needs `api/openapi.yaml` (9.1) |
+| 11.6 generated types and the API client, 11.8 `check-api` | `api/openapi.yaml` (9.1) |
+| Phase 12 pages on real data | the API (Phases 9 and 10), or 9.1 alone if the pages are first built against typed fixtures |
+| Playwright flows (12.8, 14) | the stack in k3d (Phases 13 and 14) |
+
+`api/openapi.yaml` is written by hand from DESIGN-0004 and needs no
+store code, so 9.1 is the one task that unblocks the rest of the UI.
 
 #### Tasks
 
-- [ ] 11.1 Scaffold `ui/` to INV-0005 finding 7:
+- [ ] 11.1 Scaffold `ui/` to INV-0005 finding 7. The mockup has
+  `package.json`, `tsconfig.json` with the strict flags and
+  `web/vite.config.ts` with Tailwind. Still to add: `server/`,
+  `scripts/` and `e2e/`, `bunfig.toml`, ESLint and the dev proxy.
   - one `package.json` over `server/`, `web/`, `scripts/` and `e2e/`,
     with repo-guardian's versions;
   - `tsconfig.json` with its strict flags;
@@ -530,7 +566,9 @@ file is copied from it.
   - the ESLint config, with the ban on HTML sinks;
   - `web/vite.config.ts` with `@tailwindcss/vite` and the dev proxy for
     `/api`, `/auth` and `/ui`.
-- [ ] 11.2 The design system:
+- [ ] 11.2 The design system. Done in the mockup: the exact pin (0.4.0),
+  `.npmrc`, `just ui-install`, `globals.css` and `.dark`. Still to add:
+  the Renovate rule.
   - `@donaldgifford/design-system` pinned exactly, as a devDependency;
   - `ui/.npmrc` mapping the `@donaldgifford` scope to GitHub Packages
     and referencing `NPM_TOKEN`, with the value never stored;
@@ -554,7 +592,12 @@ file is copied from it.
 
   repo-guardian's server tests (app, auth, config, health, proxy,
   session, static) are ported as the behaviour to meet.
-- [ ] 11.4 The shell, composed from the package's parts:
+- [ ] 11.4 The shell, composed from the package's parts. The mockup has
+  the sidebar with the package's `AppSwitcher` as its header, the `NAV`
+  groups, the account menu, and the top bar with the trigger, search
+  button and `TimeZoneToggle`. Still to add: breadcrumbs, the external
+  links group, sign out as a POST form, the `/me` gate, the route error
+  view and the command palette.
   - `ShellSidebar` with the boop identity ("boop", "renovate · fleet"),
     the `NAV` groups FLEET / ACTIVITY / SYSTEM, the external links group
     when configured, and the account menu with sign out as a POST form;
@@ -562,8 +605,9 @@ file is copied from it.
     `TimeZoneToggle`;
   - the `/me` gate, the route error view and the command palette on
     `CommandDialog`.
-- [ ] 11.5 The badge state table on the package's `Badge` variants
-  (DESIGN-0004 § Visual design); the open-enum fallback to `muted`.
+- [x] 11.5 The badge state table on the package's `Badge` variants
+  (DESIGN-0004 § Visual design); the open-enum fallback to `muted`
+  (`ui/web/src/components/badges.tsx`; its tests are 11.9).
 - [ ] 11.6 Generated types from `api/openapi.yaml` (`generate-ui-api`),
   the drift check, and the API client with the package's problem
   helpers.
@@ -586,6 +630,11 @@ file is copied from it.
 - `grep -r repo-guardian ui/` matches nothing.
 
 ### Phase 12: UI pages
+
+The mockup draws 12.1, 12.2, 12.4 (without Recheck and the Config tab)
+and Status from 12.5, over `ui/web/src/fixtures.ts`. A page is done when
+it reads the API, polls, and has its tests; the fixtures go when the last
+page stops using them.
 
 #### Tasks
 
@@ -806,12 +855,13 @@ file is copied from it.
 - **New Go modules:** pgx/v5, goose/v3, go-oidc/v3, kin-openapi. **New
   tools:** oapi-codegen v2.8.0 and sqlc (as `go tool`), bun 1.3.14 and
   vacuum (mise), and the Playwright image.
-- **`@donaldgifford/design-system`** from GitHub Packages (0.3.2 or
+- **`@donaldgifford/design-system`** from GitHub Packages (0.4.0 or
   later, pinned exactly), and a token with `read:packages` on every
   install path.
-- **Design-system changes** (in its repository): RFC-0001's entry rule
-  amended so a component an app is building against counts, and the
-  releases that carry Phase 12.7's components.
+- **Design-system changes** (in its repository), done in 0.4.0:
+  RFC-0001's entry rule amended so a component an app is building
+  against counts, and the release that carries Phase 12.7's components.
+  Open there: issues 29 (`Meter` direction) and 30 (`Timeline` time).
 - **Copy source for Go code:** repo-guardian v2 @ `a72faf9`, read-only
   (Phase 9.4). Nothing depends on it after the copy.
 - **Example for the UI:** repo-guardian `ui/` at `cc97e3f` or later, read
