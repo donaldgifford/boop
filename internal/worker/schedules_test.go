@@ -60,3 +60,20 @@ func TestDeliveryAuditSchedules(t *testing.T) {
 		t.Errorf("schedules without a webhook app = %v", none)
 	}
 }
+
+func TestStoreMaintenanceSchedules(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{}
+	if got := worker.StoreMaintenanceSchedules(cfg, "boopd"); len(got) != 0 {
+		t.Errorf("schedules without the store = %v, want none", got)
+	}
+	cfg.Store.Enabled = true
+	got := worker.StoreMaintenanceSchedules(cfg, "boopd")
+	if len(got) != 1 {
+		t.Fatalf("schedules = %d, want one", len(got))
+	}
+	if s := got[0]; s.ID != "store-maintenance" || s.Every != 24*time.Hour ||
+		s.Workflow != workflows.StoreMaintenanceWorkflowName || s.TaskQueue != "boopd" || len(s.Args) != 0 {
+		t.Errorf("schedule = %+v", s)
+	}
+}

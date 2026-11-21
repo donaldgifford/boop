@@ -622,7 +622,7 @@ with one commit per numbered task. The PR split is in OQ1.
   null `webhook_deliveries.payload` past `retention.delivery_payloads`,
   delete offboarded projections past `retention.offboarded`, and delete
   `runs` past `retention.events`.
-- [ ] 8.2 A daily Schedule (`store-maintenance`, overlap `SKIP`) when
+- [x] 8.2 A daily Schedule (`store-maintenance`, overlap `SKIP`) when
   `store.enabled`.
 - [ ] 8.3 Tests (integration): each rule, with a clock override.
 

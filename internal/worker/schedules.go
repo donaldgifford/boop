@@ -23,6 +23,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.temporal.io/sdk/client"
 
@@ -70,8 +71,29 @@ func DeliveryAuditSchedules(cfg *config.Config, taskQueue string) []*temporal.Sc
 	return out
 }
 
-// EnsureSchedules creates or updates every discovery and delivery-audit
-// schedule. Every worker calls it at start; it is idempotent.
+// StoreMaintenanceInterval is how often the store-maintenance Schedule
+// runs: daily (DESIGN-0004 § Retention).
+const StoreMaintenanceInterval = 24 * time.Hour
+
+// StoreMaintenanceSchedules is the store-maintenance Schedule when
+// store.enabled, daily, starting StoreMaintenanceWorkflow with overlap
+// skip; none otherwise.
+func StoreMaintenanceSchedules(cfg *config.Config, taskQueue string) []*temporal.Schedule {
+	if !cfg.Store.Enabled {
+		return nil
+	}
+	return []*temporal.Schedule{{
+		ID:        workflows.StoreMaintenanceScheduleID,
+		Every:     StoreMaintenanceInterval,
+		Workflow:  workflows.StoreMaintenanceWorkflowName,
+		TaskQueue: taskQueue,
+		Priority:  workflows.TaskPriority(workflows.PriorityLow, 0),
+	}}
+}
+
+// EnsureSchedules creates or updates every discovery, delivery-audit and
+// store-maintenance schedule. Every worker calls it at start; it is
+// idempotent.
 func EnsureSchedules(ctx context.Context, c client.Client, cfg *config.Config, taskQueue string) error {
 	for _, s := range DiscoverySchedules(cfg, taskQueue) {
 		if err := temporal.EnsureSchedule(ctx, c, s); err != nil {
@@ -81,6 +103,11 @@ func EnsureSchedules(ctx context.Context, c client.Client, cfg *config.Config, t
 	for _, s := range DeliveryAuditSchedules(cfg, taskQueue) {
 		if err := temporal.EnsureSchedule(ctx, c, s); err != nil {
 			return fmt.Errorf("delivery audit schedule: %w", err)
+		}
+	}
+	for _, s := range StoreMaintenanceSchedules(cfg, taskQueue) {
+		if err := temporal.EnsureSchedule(ctx, c, s); err != nil {
+			return fmt.Errorf("store maintenance schedule: %w", err)
 		}
 	}
 	return nil
