@@ -844,7 +844,7 @@ store code, so 9.1 is the one task that unblocks the rest of the UI.
   - the ESLint config, with the ban on HTML sinks;
   - `web/vite.config.ts` with `@tailwindcss/vite` and the dev proxy for
     `/api`, `/auth` and `/ui`.
-- [ ] 11.2 The design system. Done in the mockup: the exact pin (0.4.0),
+- [x] 11.2 The design system. Done in the mockup: the exact pin (0.4.0),
   `.npmrc`, `just ui-install`, `globals.css` and `.dark`. Still to add:
   the Renovate rule.
   - `@donaldgifford/design-system` pinned exactly, as a devDependency;

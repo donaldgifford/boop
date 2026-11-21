@@ -8,5 +8,27 @@
     "github>donaldgifford/renovate-config:ci",
     "github>donaldgifford/renovate-config:helm",
     "github>donaldgifford/renovate-config:kubernetes",
+    "github>donaldgifford/renovate-config:node",
+  ],
+  // @donaldgifford/* installs from GitHub Packages, which wants a token
+  // even for a public package (ui/.npmrc). The value is the runner's
+  // NPM_TOKEN secret, a read:packages token; it is never written here.
+  npmrc: "@donaldgifford:registry=https://npm.pkg.github.com",
+  hostRules: [
+    {
+      matchHost: "npm.pkg.github.com",
+      hostType: "npm",
+      token: "{{ secrets.NPM_TOKEN }}",
+    },
+  ],
+  packageRules: [
+    {
+      // The design system moves every page at once: its own pull request,
+      // never grouped with other npm updates and never automerged
+      // (IMPL-0005 11.2, INV-0005).
+      matchPackageNames: ["@donaldgifford/design-system"],
+      groupName: null,
+      automerge: false,
+    },
   ],
 }
