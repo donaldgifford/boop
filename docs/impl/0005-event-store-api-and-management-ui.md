@@ -399,6 +399,42 @@ open:
 - A retention of `0` keeps everything for that rule. Partitions are
   still created.
 
+## Findings (Phase 9)
+
+- **The scope is a store type.** `store.Scope{All, Owners}` is what every
+  API read takes. `api.Scope` resolves it from the authz file and hands
+  it over with `Store()`, which always sends an owners array (never
+  NULL) for `@owners::text[]`.
+- **The operator gate is by method.** A strict middleware refuses any
+  non-GET operation to a caller without an operator group, with 403. It
+  runs after the visibility gate, so a caller who sees nothing hears
+  that first. The authz-disabled anonymous principal is no operator.
+- **Public routes carry no principal.** `/openapi.yaml` and a public
+  `/status` skip authn and authz entirely, so a handler there cannot
+  read a scope by mistake.
+- **The issuer may be http on loopback only**, for local and test
+  issuers. Anywhere else it must be https.
+- **Temporal is dialled lazily.** The API starts and serves reads while
+  Temporal is away, and Temporal is not a readiness check. Recheck
+  answers 503 when the call fails (Phase 10). Readiness is the store's
+  schema version plus OIDC discovery.
+- **The read-only pool enforces itself.** Each connection starts with
+  `default_transaction_read_only = on` and `statement_timeout = 5s`, so
+  even a DSN for a role with more grants cannot write through it
+  (TestOpenReadOnly).
+- **`/me` found a nil-slice bug.** With no installations the store
+  returns nil, which marshals to `null` against a required array. The
+  handler sends `[]`; Phase 10's lists need the same care.
+- **Refused requests are labelled `unmatched`.** Authentication runs
+  before the inner mux matches, so a 401 or 503 carries
+  `route="unmatched"` on `boopd_api_requests_total`. This keeps the
+  label set bounded under scans, and the auth-failure counter carries
+  the reason.
+- **Cursor binding is unit-tested for now** (`cursor_test.go`). The
+  HTTP-level replay test lands with the first list handler in Phase 10.
+- Every operation not yet implemented answers a typed 501
+  (`not_implemented`), which the spec's `default` response admits.
+
 ## Implementation Phases
 
 Each phase ends with `just lint`, `just test` and its own checks green,

@@ -27,6 +27,11 @@ limitations under the License.
 // recovery, authentication, then authorisation; the operations the spec
 // declares with `security: []` skip the last two.
 //
+// Run serves the handler under BaseURL beside /healthz and /readyz
+// (ready once the store's schema checks and OIDC discovery succeeds) and
+// /metrics, and drains on stop. Temporal is reached lazily, so reads
+// never wait on it.
+//
 // Lists page by keyset: the cursor is base64url JSON of the last row's
 // sort key plus a hash of the request's filters, so a cursor replayed
 // under different filters is refused 400.

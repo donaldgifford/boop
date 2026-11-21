@@ -128,7 +128,7 @@ artifacts on every release.
 ## Layout
 
 ```text
-cmd/boopd/                # main package: `boopd worker`, `boopd ingest`, `boopd migrate`, `boopd store rebuild`, `boopd config validate`
+cmd/boopd/                # main package: `boopd worker`, `boopd ingest`, `boopd api`, `boopd migrate`, `boopd store rebuild`, `boopd config validate`
 internal/                 # library code; not importable outside this module
 internal/platform/        # GitHub discovery, config probe, token minting
 internal/temporal/        # Temporal client config, worker, versioning, schedules
@@ -136,6 +136,8 @@ internal/workflows/       # deterministic workflow code; InstallationWorkflow bu
 internal/activities/      # side effects, registered by name: discovery, CheckRepo, ReadRateLimit, AcquireBudget, AcquireCapacity, RunRenovate
 internal/observability/   # slog logger, OTel meter provider + Prometheus exporter, boopd metric set, /healthz and /readyz
 internal/worker/          # worker role: search attributes, register, start, promote, schedules, readiness, graceful stop
+api/                      # the v1 contract: openapi.yaml (embedded as api.Spec), vacuum ruleset, oapi-codegen config
+internal/api/             # API role (DESIGN-0004): strict server for api/openapi.yaml, OIDC authn, authz file, problem, cursor, Run; gen/ is generated, apitest/ and oidctest/ are the contract harness
 internal/ingest/          # ingest role (DESIGN-0003): signature check, typed payloads, routing table, delivery records, StoreSink, handler, Run
 internal/jobspec/         # Job + env builder for one Renovate run (ported from renovate-operator)
 internal/config/          # HCL config file via hclkit: decode, defaults, validation, secrets, BuildInput
