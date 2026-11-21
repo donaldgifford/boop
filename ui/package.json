@@ -1,0 +1,28 @@
+{
+  "name": "boopd-ui",
+  "private": true,
+  "type": "module",
+  "description": "boop management UI on @donaldgifford/design-system. Today: a mockup over fixture data (INV-0005).",
+  "scripts": {
+    "dev": "vite --config web/vite.config.ts",
+    "build": "vite build --config web/vite.config.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@tabler/icons-react": "^3.49.0",
+    "@tanstack/react-router": "^1.170.39",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@donaldgifford/design-system": "0.3.2",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/bun": "^1.4.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9",
+    "vite": "^8.3.1"
+  }
+}

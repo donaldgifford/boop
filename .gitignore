@@ -66,3 +66,7 @@ Thumbs.db
 
 # Local k3d-install values and keys (helm.just)
 dev/
+
+# UI (Bun, Vite)
+ui/node_modules/
+ui/dist/
