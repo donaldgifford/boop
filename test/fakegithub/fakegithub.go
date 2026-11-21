@@ -24,6 +24,7 @@ limitations under the License.
 package fakegithub
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -31,6 +32,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -196,6 +198,9 @@ type Server struct {
 	granted       map[string]string
 	treeReads     int
 	treeStatus    int
+	pulls         []PR
+	searchQueries []string
+	pullReads     int
 }
 
 // NewFake returns a fake GitHub with one installation (id 1) and
@@ -414,6 +419,16 @@ func (s *Server) RateReads() int {
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Date", time.Now().UTC().Format(http.TimeFormat))
 	if r.Method == http.MethodPost && r.URL.Path == "/api/graphql" {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, message(err.Error()))
+			return
+		}
+		if isSearch(body) {
+			s.search(w, body)
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
 		if !s.probeArrived(w) {
 			s.probe(w, r)
 		}
@@ -441,14 +456,25 @@ func (s *Server) serveInstallation(w http.ResponseWriter, r *http.Request, path 
 		s.listRepos(w, r)
 	case r.Method == http.MethodGet && path == "/rate_limit":
 		s.rateLimit(w)
-	case r.Method == http.MethodGet && strings.HasPrefix(path, "/repositories/") && strings.Contains(path, "/git/trees/"):
-		s.tree(w, r, strings.TrimPrefix(path, "/repositories/"))
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/repositories/"):
-		s.repoByID(w, strings.TrimPrefix(path, "/repositories/"))
+		s.serveRepositoryByID(w, r, strings.TrimPrefix(path, "/repositories/"))
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/repos/"):
 		s.repoPath(w, strings.TrimPrefix(path, "/repos/"))
 	default:
 		notFound(w)
+	}
+}
+
+// serveRepositoryByID serves GET /repositories/{id}[/...]: the
+// repository, its tree, or one pull request.
+func (s *Server) serveRepositoryByID(w http.ResponseWriter, r *http.Request, rest string) {
+	switch {
+	case strings.Contains(rest, "/pulls/"):
+		s.pull(w, rest)
+	case strings.Contains(rest, "/git/trees/"):
+		s.tree(w, r, rest)
+	default:
+		s.repoByID(w, rest)
 	}
 }
 

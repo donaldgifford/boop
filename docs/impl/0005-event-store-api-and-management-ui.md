@@ -571,7 +571,7 @@ with one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 7.1 `internal/platform/github`: `SearchOpenBotPRs(ctx, appSlug)`
+- [x] 7.1 `internal/platform/github`: `SearchOpenBotPRs(ctx, appSlug)`
   as one GraphQL search per installation (`is:pr is:open
   author:app/<slug>`, 100 per page), plus `GetPullRequest(repoID,
   number)` for PRs that left the open set.
@@ -579,7 +579,7 @@ with one commit per numbered task. The PR split is in OQ1.
   each discovery pass. It appends `pr.synced` for every open PR and for
   each one that closed or merged since. Its cost goes through the budget
   `ReadRateLimit` already watches.
-- [ ] 7.3 `fakegithub`: the search query and the PR GET.
+- [x] 7.3 `fakegithub`: the search query and the PR GET.
 - [ ] 7.4 Tests: reconcile against fakegithub (opened, merged and closed
   while ingest was off); the order guard keeps a newer webhook state.
 
