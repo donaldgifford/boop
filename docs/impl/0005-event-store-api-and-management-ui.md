@@ -429,7 +429,7 @@ with one commit per numbered task. The PR split is in OQ1.
   `docs/config.md` rows.
 - [x] 5.2 The worker builds a pgx pool from the worker DSN when
   `store.enabled`, checks `RequireVersion`, and closes the pool on stop.
-- [ ] 5.3 `RecordRun` activity. It maps `RunResult` to `run.started` and
+- [x] 5.3 `RecordRun` activity. It maps `RunResult` to `run.started` and
   `run.finished` (runs, branch_updates with purls, dependencies with
   purls, the repository state). The key is `run:<run id>:<attempt>`, and
   the cause is the `run-scheduled` event key.

@@ -60,7 +60,7 @@ func TestMetrics_Names(t *testing.T) {
 	m.SetSandboxReady("kata", true)
 	m.NeedsSandbox("boop-bot")
 	m.FloorRaised("boop-bot", "poetry", "enforce")
-	m.StoreAppend("boopd_worker", "run.finished", "appended")
+	m.StoreAppend("boopd_worker", "run.finished", "applied")
 	m.StoreAppendSeconds("boopd_worker", 3*time.Millisecond)
 	m.DashboardParse("parsed")
 

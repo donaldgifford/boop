@@ -125,6 +125,8 @@ linters:
               desc: the Temporal client is used only by activities and the worker
             - pkg: k8s.io/client-go
               desc: Kubernetes is reached only through activities
+            - pkg: github.com/donaldgifford/boop/internal/store
+              desc: the store is reached only through the RecordRun and RecordEvents activities
         ingest:
           files:
             - "**/internal/ingest/*.go"

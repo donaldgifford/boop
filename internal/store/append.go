@@ -31,7 +31,7 @@ import (
 
 // Append outcomes, the outcome label of boopd_store_append_total.
 const (
-	OutcomeAppended  = "appended"
+	OutcomeApplied   = "applied"
 	OutcomeDuplicate = "duplicate"
 	OutcomeError     = "error"
 )
@@ -150,7 +150,7 @@ func (s *Store) Append(ctx context.Context, events ...Event) (err error) {
 		}
 		outcomes[i] = OutcomeDuplicate
 		if appended {
-			outcomes[i] = OutcomeAppended
+			outcomes[i] = OutcomeApplied
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {

@@ -148,7 +148,7 @@ func NewMetrics(mp metric.MeterProvider) (*Metrics, error) {
 		metric.WithExplicitBucketBoundaries(temporalBuckets...))
 	add(err)
 	out.temporal = temporal
-	out.appends = counter(StoreAppendTotal, "Events appended to the store, by role, kind and outcome (appended, duplicate, error).")
+	out.appends = counter(StoreAppendTotal, "Events appended to the store, by role, kind and outcome (applied, duplicate, error).")
 	appendTime, err := m.Float64Histogram(StoreAppendSeconds, metric.WithDescription("Append transactions, event inserts and applies, by role."),
 		metric.WithExplicitBucketBoundaries(temporalBuckets...))
 	add(err)

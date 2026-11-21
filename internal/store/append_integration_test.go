@@ -93,8 +93,8 @@ func TestAppend_DuplicateKeysAreSkipped(t *testing.T) {
 	if err := owner.QueryRow(t.Context(), "SELECT data->>'request_id' FROM events WHERE key = $1", e.Key).Scan(&data); err != nil || data != "r1" {
 		t.Errorf("data.request_id = %q, %v; want r1", data, err)
 	}
-	if got := rec.outcomes["action.recheck/appended"]; got != 1 {
-		t.Errorf("appended = %d, want 1", got)
+	if got := rec.outcomes["action.recheck/applied"]; got != 1 {
+		t.Errorf("applied = %d, want 1", got)
 	}
 	if got := rec.outcomes["action.recheck/duplicate"]; got != 2 {
 		t.Errorf("duplicate = %d, want 2", got)

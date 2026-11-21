@@ -221,6 +221,7 @@ func (a *Activities) Register(r Registry) {
 		workflows.RunRenovateActivity:          a.RunRenovate,
 		workflows.PlanRunActivity:              a.PlanRun,
 		workflows.ListHookDeliveriesActivity:   a.ListHookDeliveries,
+		workflows.RecordRunActivity:            a.RecordRun,
 	} {
 		r.RegisterActivityWithOptions(fn, activity.RegisterOptions{Name: name})
 	}

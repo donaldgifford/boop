@@ -60,6 +60,10 @@ const (
 	PlanRunActivity              = "PlanRun"
 	RunRenovateActivity          = "RunRenovate"
 	ListHookDeliveriesActivity   = "ListHookDeliveries"
+	// RecordRunActivity and RecordEventsActivity write to the event
+	// store (DESIGN-0004 § Workflow and activity changes).
+	RecordRunActivity    = "RecordRun"
+	RecordEventsActivity = "RecordEvents"
 )
 
 // Signal names accepted by RepoWorkflow (DESIGN-0001 § RepoWorkflow,
