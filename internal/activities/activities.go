@@ -26,7 +26,9 @@ limitations under the License.
 // GitHub, AppAPI and InstallationAPI interfaces, with cached real
 // clients by default (NewGitHub). RunRenovate drives one Kubernetes Job
 // per run through internal/kube and classifies the run with the
-// design's table (classify.go).
+// design's table (classify.go). RecordRun and RecordEvents write runs
+// and workflow decisions to the event store through the Recorder
+// (DESIGN-0004); both are no-ops when store.enabled is false.
 package activities
 
 import "go.temporal.io/sdk/activity"

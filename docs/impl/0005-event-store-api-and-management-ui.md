@@ -282,6 +282,40 @@ open:
   (GraphQL `userContentEdits`). `internal/renovate/dashboard/testdata/README.md`
   records the query and which revision is which.
 
+## Findings (Phase 5)
+
+- **Recording is off the critical path.** `RepoWorkflow` starts
+  `RecordRun` and `RecordEvents` without waiting for them. It waits for
+  any still in flight only before it ends or continues as new. Both
+  retry without limit at low priority (`storeOptions`), so a store outage
+  delays the next ContinueAsNew, not a run.
+- **Identifiers:**
+  - The `runs` id is `<workflow run id>:<attempt>`. The run's events are
+    `run:<run id>:started` and `run:<run id>:finished`.
+  - Decision keys are `wf:<workflow id>:<run id>:<seq>`, with
+    `RepoState.RecordSeq` carried through ContinueAsNew.
+  - `RepoState.CauseKey` is the last `run-scheduled` or `action.recheck`
+    key, and it becomes the next run's `cause_key`.
+- **What is recorded where:**
+  - `repo.run-scheduled` is recorded for the first due time, each cadence
+    decision and each webhook event.
+  - `run.budget-wait` and `run.capacity-denied` are recorded once per
+    acquire, not on every retry.
+  - `run.stalled` is recorded when the stall limit is reached.
+- **Gating.** `GetVersion("store-record")` plus `RunPlan.Record` for
+  `RepoWorkflow`, and plus `DiscoveryInput.Record` for
+  `DiscoveryWorkflow`. The discovery Schedule's input carries `Record`
+  from `store.enabled`, and the worker updates the Schedule at start.
+- **Workflows do not import `internal/store`** (a depguard rule). They
+  carry the kind strings and plain record types, and a test keeps the
+  kinds in the store's catalogue. The `delivery` cause of a webhook
+  decision waits for Phase 6's delivery keys.
+- **Replay.** The histories recorded before the gate are kept as
+  `*-pre-store.json`. The re-recorded set carries the gate's marker, and
+  two new histories record to the store.
+- **The append outcome label is `applied`**, as in DESIGN-0004's metrics
+  table, not `appended`.
+
 ## Implementation Phases
 
 Each phase ends with `just lint`, `just test` and its own checks green,
@@ -453,7 +487,7 @@ with one commit per numbered task. The PR split is in OQ1.
 - [x] 5.9 Workflow versioning: gate the new activity calls with
   `workflow.GetVersion("store-record", …)`. Extend IMPL-0004's replay
   histories, then replay.
-- [ ] 5.10 Tests:
+- [x] 5.10 Tests:
   - activity tests against the test database;
   - workflow testsuite tests for the activity calls and the gating;
   - replay.

@@ -29,6 +29,10 @@ limitations under the License.
 // CapacityWorkflow (capacity.go) is a second lease entity on the same
 // lease book (leases.go): the cluster-wide runs.max_concurrent cap a
 // RepoWorkflow takes after its installation lease (IMPL-0002).
+// RepoWorkflow and DiscoveryWorkflow record runs and decisions to the
+// event store through the RecordRun and RecordEvents activities, behind
+// the store-record version gate and store.enabled (repo_record.go,
+// IMPL-0005 Phase 5). The store is never imported here.
 // The package moves to donaldgifford/x in Phase 0 (ADR-0007).
 package workflows
 
