@@ -60,6 +60,8 @@ func TestMetrics_Names(t *testing.T) {
 	m.SetSandboxReady("kata", true)
 	m.NeedsSandbox("boop-bot")
 	m.FloorRaised("boop-bot", "poetry", "enforce")
+	m.StoreAppend("boopd_worker", "run.finished", "appended")
+	m.StoreAppendSeconds("boopd_worker", 3*time.Millisecond)
 
 	got := collect(t, reader)
 	names := make([]string, 0, len(got))
@@ -85,6 +87,8 @@ func TestMetrics_Names(t *testing.T) {
 		"boopd_runs_needs_sandbox_total",
 		"boopd_runs_total",
 		"boopd_sandbox_ready",
+		"boopd_store_append_seconds",
+		"boopd_store_append_total",
 		"boopd_token_mints_total",
 		"boopd_token_revocations_total",
 	}

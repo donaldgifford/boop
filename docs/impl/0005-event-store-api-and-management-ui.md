@@ -306,7 +306,7 @@ with one commit per numbered task. The PR split is in OQ1.
   Source, InstallationID, RepoID, PRNumber, Actor, CauseKey, Summary,
   Data}`. `Data` is a typed struct per kind with `V int`, registered in
   a `kinds` table (OQ5).
-- [ ] 3.2 `internal/store/append.go`: `Append(ctx, events ...Event)`.
+- [x] 3.2 `internal/store/append.go`: `Append(ctx, events ...Event)`.
   - In one transaction it runs `INSERT … ON CONFLICT (key) DO NOTHING
     RETURNING id`, then the kind's apply for each inserted row.
   - A duplicate skips its apply.

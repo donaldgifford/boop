@@ -56,6 +56,9 @@ const (
 	// The ingest role's (DESIGN-0003 § Metrics).
 	IngestDeliveriesTotal = "boopd_ingest_deliveries_total"
 	IngestTemporalSeconds = "boopd_ingest_temporal_seconds"
+	// The event store's (DESIGN-0004 § Observability).
+	StoreAppendTotal   = "boopd_store_append_total"
+	StoreAppendSeconds = "boopd_store_append_seconds"
 )
 
 // runBuckets span a pod start of seconds to a run of the full hour.
@@ -65,7 +68,8 @@ var runBuckets = []float64{1, 5, 10, 30, 60, 120, 300, 600, 1200, 1800, 2700, 36
 var temporalBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5}
 
 // Metrics records the boopd metric set. It implements
-// activities.Metrics, kube.RequestRecorder and ingest.Metrics. The budget gauges and
+// activities.Metrics, kube.RequestRecorder, ingest.Metrics and
+// store.Metrics. The budget gauges and
 // the repository counters come from workflow code through the
 // Temporal SDK's metrics handler (internal/workflows).
 type Metrics struct {
@@ -88,6 +92,8 @@ type Metrics struct {
 	sandbox     metric.Int64Gauge
 	needsSB     metric.Int64Counter
 	floorRaised metric.Int64Counter
+	appends     metric.Int64Counter
+	appendTime  metric.Float64Histogram
 }
 
 // NewMetrics creates the instruments on mp's boopd meter. Call it once
@@ -139,6 +145,11 @@ func NewMetrics(mp metric.MeterProvider) (*Metrics, error) {
 		metric.WithExplicitBucketBoundaries(temporalBuckets...))
 	add(err)
 	out.temporal = temporal
+	out.appends = counter(StoreAppendTotal, "Events appended to the store, by role, kind and outcome (appended, duplicate, error).")
+	appendTime, err := m.Float64Histogram(StoreAppendSeconds, metric.WithDescription("Append transactions, event inserts and applies, by role."),
+		metric.WithExplicitBucketBoundaries(temporalBuckets...))
+	add(err)
+	out.appendTime = appendTime
 	if err := errors.Join(errs...); err != nil {
 		return nil, err
 	}
@@ -247,4 +258,15 @@ func (m *Metrics) Delivery(app, event, outcome string) {
 // TemporalCall implements ingest.Metrics.
 func (m *Metrics) TemporalCall(action string, d time.Duration) {
 	m.temporal.Record(context.Background(), d.Seconds(), metric.WithAttributes(attribute.String("action", action)))
+}
+
+// StoreAppend implements store.Metrics.
+func (m *Metrics) StoreAppend(role, kind, outcome string) {
+	m.appends.Add(context.Background(), 1, metric.WithAttributes(
+		attribute.String("role", role), attribute.String("kind", kind), attribute.String("outcome", outcome)))
+}
+
+// StoreAppendSeconds implements store.Metrics.
+func (m *Metrics) StoreAppendSeconds(role string, d time.Duration) {
+	m.appendTime.Record(context.Background(), d.Seconds(), metric.WithAttributes(attribute.String("role", role)))
 }
