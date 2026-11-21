@@ -517,7 +517,7 @@ with one commit per numbered task. The PR split is in OQ1.
   - `installation*` events give `installation.*`.
 - [x] 6.3 `boopd ingest` builds a pool when `store.enabled` and checks
   `RequireVersion`; without the store it keeps `LogSink`.
-- [ ] 6.4 Delivery audit: `ListHookDeliveries` appends
+- [x] 6.4 Delivery audit: `ListHookDeliveries` appends
   `delivery.failed`, `delivery.redelivered` and `delivery.missed`. A GUID
   with a 2xx at GitHub and no `delivery.received` is missed, and
   `boopd_ingest_deliveries_missed_total` starts counting (IMPL-0004

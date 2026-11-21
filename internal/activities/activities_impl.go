@@ -35,9 +35,12 @@ import (
 	"github.com/donaldgifford/boop/internal/workflows"
 )
 
-// Recorder appends events to the store. *store.Store implements it.
+// Recorder appends events to the store and answers the delivery audit's
+// question of which deliveries ingest recorded. *store.Store implements
+// it.
 type Recorder interface {
 	Append(ctx context.Context, events ...store.Event) error
+	ReceivedDeliveries(ctx context.Context, guids []string) (map[string]bool, error)
 }
 
 // Deps are what the activities need. Config must have had ReadSecrets

@@ -112,6 +112,8 @@ linters:
             - "**/internal/workflows/*.go"
             # The replay recorder drives a dev server with the client.
             - "!**/internal/workflows/replay_record_test.go"
+            # The audit metric test needs the client's metric handler types.
+            - "!**/internal/workflows/deliveries_metrics_test.go"
           deny:
             - pkg: github.com/donaldgifford/boop/internal/activities
               desc: workflows call activities by name, not by import

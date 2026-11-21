@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"regexp"
 	"time"
 
 	"github.com/google/go-github/v62/github"
@@ -58,14 +57,12 @@ type StoreSink struct {
 	Log Sink
 }
 
-var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
-
 // Record implements Sink.
 func (s *StoreSink) Record(ctx context.Context, r *Record) {
 	if s.Log != nil {
 		s.Log.Record(ctx, r)
 	}
-	if !uuidPattern.MatchString(r.DeliveryID) {
+	if !store.IsUUID(r.DeliveryID) {
 		// Not GitHub's: nothing to key it on.
 		return
 	}

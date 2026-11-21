@@ -393,11 +393,13 @@ type ListHookDeliveriesInput struct {
 }
 
 // DeliveryCounts is one event's deliveries in one audit pass, by
-// outcome: Failed (the last attempt was not 2xx), Redelivered (a later
-// attempt was 2xx) or OK.
+// outcome: Failed (the last attempt was not 2xx), Missed (2xx at GitHub
+// and no record in the store), Redelivered (a later attempt was 2xx) or
+// OK.
 type DeliveryCounts struct {
 	Event       string
 	Failed      int
+	Missed      int
 	Redelivered int
 	OK          int
 }

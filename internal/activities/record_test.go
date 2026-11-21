@@ -38,3 +38,7 @@ func TestRecordEvents_NoPayload(t *testing.T) {
 type nopRecorder struct{}
 
 func (nopRecorder) Append(_ context.Context, _ ...store.Event) error { return nil }
+
+func (nopRecorder) ReceivedDeliveries(context.Context, []string) (map[string]bool, error) {
+	return map[string]bool{}, nil
+}

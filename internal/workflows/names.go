@@ -165,8 +165,8 @@ const (
 	// MetricDeliveriesFailed counts webhook deliveries GitHub reports
 	// failed, by app and event (the delivery audit).
 	MetricDeliveriesFailed = "boopd_ingest_deliveries_failed_total"
-	// MetricDeliveriesMissed counts deliveries GitHub sent that ingest
-	// never recorded. It needs the store (IMPL-0005); until then the
-	// audit registers it at zero.
+	// MetricDeliveriesMissed counts deliveries GitHub sent with a 2xx
+	// that ingest never recorded, by app and event. It needs the store;
+	// without it the audit counts none.
 	MetricDeliveriesMissed = "boopd_ingest_deliveries_missed_total"
 )
