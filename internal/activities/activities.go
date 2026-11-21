@@ -28,7 +28,10 @@ limitations under the License.
 // per run through internal/kube and classifies the run with the
 // design's table (classify.go). RecordRun and RecordEvents write runs
 // and workflow decisions to the event store through the Recorder
-// (DESIGN-0004); both are no-ops when store.enabled is false.
+// (DESIGN-0004); both are no-ops when store.enabled is false. With the
+// store, ListHookDeliveries also records failed, missed and redelivered
+// deliveries, and ReconcilePullRequests syncs each installation's bot
+// PRs after a discovery pass.
 package activities
 
 import "go.temporal.io/sdk/activity"

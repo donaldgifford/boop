@@ -351,6 +351,32 @@ open:
   so the API can join a decision to its delivery on `delivery_id`
   instead.
 
+## Findings (Phase 7)
+
+- **The search is scoped to the installation's account.** An
+  installation token's search also covers public repositories elsewhere.
+  The query is `is:pr is:open author:app/<slug> user:<account>`, and the
+  account comes from `ListInstallations`. The slug is the bot login
+  without `[bot]`: `webhook.bot` when set, else `<app name>[bot]`.
+- **What left the open set:** the PRs the store holds open in the
+  installation's repositories (`OpenPullRequests`, joined on
+  `repositories.installation_id`) that the search did not list. A PR or
+  repository that answers 404 is skipped. Offboarding removes the
+  repository's rows.
+- **`pr.synced` keys** are
+  `reconcile:<repo>:<number>:<updated_at>:<state>`. A second pass over
+  unchanged PRs appends only duplicates, and `apply_pr`'s guard on
+  `gh_updated_at` keeps a newer webhook state over a stale search
+  answer.
+- **Discovery runs it after the installations' passes** and only when
+  recording, behind `GetVersion("pr-reconcile")`. It runs at low
+  priority with a 30-minute StartToClose, a heartbeat on every read and
+  three attempts. A failure counts in `DiscoveryResult.ReconcileFailed`.
+  The recording discovery history from Phase 5 is kept as
+  `discovery-store-record-pre-reconcile.json`.
+- GitHub's search returns at most 1000 results, so a fleet with more open
+  bot PRs than that on one account syncs only the first 1000 per pass.
+
 ## Implementation Phases
 
 Each phase ends with `just lint`, `just test` and its own checks green,

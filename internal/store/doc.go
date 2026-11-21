@@ -30,6 +30,8 @@ limitations under the License.
 // arriving out of order converge on the same rows.
 //
 // Rebuild truncates the projections and replays the log through the same
-// applies; it equals the incremental result. The queries live in
-// queries/ and are generated into the db package by sqlc.
+// applies; it equals the incremental result. Two reads serve the worker:
+// ReceivedDeliveries for the delivery audit's missed classification, and
+// OpenPullRequests for the PR reconcile. The queries live in queries/ and
+// are generated into the db package by sqlc.
 package store
