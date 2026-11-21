@@ -8,6 +8,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Features
 
 - *(ui)* Mockup of the boop UI on the design system
+- *(ui)* Move the mockup to design-system 0.4.0 and add the status page
 
 ### Documentation
 
