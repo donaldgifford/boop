@@ -657,7 +657,7 @@ with one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 9.1 `api/openapi.yaml` (OpenAPI 3.1), written by hand:
+- [x] 9.1 `api/openapi.yaml` (OpenAPI 3.1), written by hand:
   - every DESIGN-0004 endpoint, with snake_case fields;
   - open-enum descriptions;
   - the `Problem` schema with `request_id`;
