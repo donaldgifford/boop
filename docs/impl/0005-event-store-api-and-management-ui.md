@@ -10,12 +10,20 @@ created: 2026-10-18
 
 # IMPL-0005: Event store, API and management UI
 
+> **Amended 2026-11-21 (INV-0005).** The UI is built on
+> `@donaldgifford/design-system`, with repo-guardian's `ui/` as the
+> example and nothing copied from it. Phases 11 and 12 are rewritten, and
+> the objective, scope, Phases 13 and 15, dependencies and OQ6 are
+> updated. Phases 1 to 10 are unchanged; Go code is still copied with a
+> provenance header (Phase 9.4).
+
 <!--toc:start-->
 - [Objective](#objective)
 - [Scope](#scope)
   - [In Scope](#in-scope)
   - [Out of Scope](#out-of-scope)
 - [Findings (2026-10-18)](#findings-2026-10-18)
+- [Findings (2026-11-21)](#findings-2026-11-21)
 - [Implementation Phases](#implementation-phases)
   - [Phase 1: Decisions, toolchain and the test database](#phase-1-decisions-toolchain-and-the-test-database)
   - [Phase 2: Schema, roles and migrate](#phase-2-schema-roles-and-migrate)
@@ -27,7 +35,7 @@ created: 2026-10-18
   - [Phase 8: Retention](#phase-8-retention)
   - [Phase 9: The API contract and server](#phase-9-the-api-contract-and-server)
   - [Phase 10: API endpoints, recheck, status and estate](#phase-10-api-endpoints-recheck-status-and-estate)
-  - [Phase 11: The UI scaffold, copied](#phase-11-the-ui-scaffold-copied)
+  - [Phase 11: The UI scaffold on the design system](#phase-11-the-ui-scaffold-on-the-design-system)
   - [Phase 12: UI pages](#phase-12-ui-pages)
   - [Phase 13: Chart](#phase-13-chart)
   - [Phase 14: End to end](#phase-14-end-to-end)
@@ -43,7 +51,7 @@ created: 2026-10-18
 
 ## Objective
 
-Build DESIGN-0004 (all OQs resolved; OQ2 "copy, never depend"):
+Build DESIGN-0004 (all OQs resolved; amended 2026-11-21 by INV-0005):
 
 - **A Postgres event log** (`events`, append-only), with projections
   applied in the same transaction and rebuildable by replay. The
@@ -54,10 +62,10 @@ Build DESIGN-0004 (all OQs resolved; OQ2 "copy, never depend"):
 - **`/api/v1`:** OpenAPI 3.1 with OIDC bearer authentication, owner
   visibility plus an `operators` list, keyset cursors, RFC 9457 errors,
   one action (recheck), a public aggregate status, and estate numbers.
-- **`boopd-ui`:** a Bun + Hono BFF and React 19 SPA with repo-guardian
-  v2's pattern, **copied** into `ui/`. It has the Estate, Pull requests,
-  Waiting, Packages, Repositories, Repository, Runs, Events, Deliveries
-  and Status pages.
+- **`boopd-ui`:** a Bun + Hono BFF and React 19 SPA in `ui/`, built on
+  `@donaldgifford/design-system` with repo-guardian v2's stack and
+  versions. It has the Estate, Pull requests, Waiting, Packages,
+  Repositories, Repository, Runs, Events, Deliveries and Status pages.
 - **Chart support** for the store and migrate Job, `api`, `ui` and their
   NetworkPolicies. All of it is off by default.
 
@@ -84,9 +92,10 @@ recording (log sink → store; "missed" deliveries).
   - `internal/ingest`: a store `Sink` and the PR and dashboard events.
 - Commands: `boopd migrate`, `boopd api`, `boopd store rebuild`.
 - `api/openapi.yaml`, `api/oapi-codegen.yaml`, `api/vacuum.yaml`.
-- `ui/`: the BFF, the SPA, tests, the Dockerfile, and the design mockup.
+- `ui/`: the BFF, the SPA, tests, the Dockerfile, and the registry
+  configuration (`.npmrc`).
 - `docker-bake.hcl`, `charts/boopd`, `.github/workflows`, `justfile`,
-  `mise.toml`.
+  `mise.toml`, `renovate.json5`.
 - Docs: `docs/config.md`, `docs/api.md`, `docs/ui.md`, and notes on
   ADR-0006 and DESIGN-0003.
 
@@ -96,7 +105,11 @@ recording (log sink → store; "missed" deliveries).
   `purl` columns and the `/updates`, `/dependencies` and `/packages`
   filters are the hand-off.
 - **Redeliver and approve actions,** and evals.
-- **A shared design system or combined UI** (DESIGN-0004 non-goals).
+- **The design system's own changes.** Generic components that boop
+  needs are built in `donaldgifford/design-system` (Phase 12.7 tracks
+  them); their design and release are that repository's.
+- **A combined UI and the app switcher** (DESIGN-0004 non-goals;
+  INV-0005 OQ8).
 - **Postgres provisioning** (CNPG is the operator's, DESIGN-0004 OQ15).
 
 ## Findings (2026-10-18)
@@ -119,7 +132,8 @@ From reading the code for this plan:
 - **There is no Postgres anywhere in the repository yet.** There are no
   pgx, goose or sqlc modules, no test database, and no e2e Postgres
   (OQ2, OQ3, OQ10).
-- **repo-guardian v2 @ `a72faf9`** is the copy source. It is not on
+- **repo-guardian v2 @ `a72faf9`** is the copy source (for the UI this is
+  superseded; see [Findings (2026-11-21)](#findings-2026-11-21)). It is not on
   repo-guardian's `main`, and by 2026-10-23 its `ui/` had five newer
   commits, including repository-page fixes and Tabler Icons behind an
   `Icon` component (INV-0024), where DESIGN-0004 says inline SVG icons.
@@ -137,6 +151,37 @@ From reading the code for this plan:
 - **Exposure:** the UI stays tailnet-only through the Tailscale ingress.
   The "public" status page is unauthenticated, not internet-facing,
   unless Funnel is added later (OQ14).
+
+## Findings (2026-11-21)
+
+From INV-0005, which replaces the UI part of the finding above:
+
+- **The design system exists.** `@donaldgifford/design-system` 0.3.2 is
+  on GitHub Packages, and repo-guardian's `ui/` runs on it (`main` @
+  `cc97e3f`). The primitives, `index.css` tokens and fonts that Phase 11
+  planned to copy were deleted there.
+- **`a72faf9` is on repo-guardian's `main` now.** It stays the copy
+  source for the Go code in Phase 9.4. Nothing in `ui/` is copied.
+- **The toolchain to match** is repo-guardian's `ui/` (INV-0005 finding
+  7): Bun 1.3.14 and no Node, TypeScript `^5.9` with its strict flags,
+  React `^19.3`, Vite `^8.3`, Tailwind `^4.3`, TanStack Router `^1.170`
+  and Query `^5`, Hono `^4.13`, `openid-client` `^6.8`, `jose` `^6.2`,
+  openapi-typescript `^7.13` and openapi-fetch `^0.17`, Tabler icons,
+  ESLint `^10`, happy-dom `^21`, Playwright `^1.63`. Take the versions
+  from its `ui/package.json` on the day `ui/` is scaffolded.
+- **The package ships source.** boop's Vite and `tsc` compile it, so the
+  compiler flags matter, and the test preload must register the DOM
+  before Base UI is imported.
+- **GitHub Packages needs a token to read,** even for a public package.
+  Four install paths need it: a laptop, CI, the image build and
+  Renovate. boop has no npm tooling in CI or Renovate today.
+- **The BFF has no example in the package.** It is written here, with
+  repo-guardian's server tests ported (INV-0005 OQ6).
+- **Known component gaps** (INV-0005 finding 8): stacked bars over time
+  for "runs by outcome", a segmented control for the range, popover
+  option rows for the owner scope, a filter-chip bar, and one-line
+  loading and empty text. They are built in the design system first
+  (INV-0005 OQ7), which needs its RFC-0001 entry rule amended.
 
 ## Implementation Phases
 
@@ -469,46 +514,76 @@ with one commit per numbered task. The PR split is in OQ1.
 - A recheck from the API is recorded as `action.recheck` with the actor
   (through Phase 5.7).
 
-### Phase 11: The UI scaffold, copied
+### Phase 11: The UI scaffold on the design system
+
+`ui/` starts empty. repo-guardian's `ui/` is read as the example; no
+file is copied from it.
 
 #### Tasks
 
-- [ ] 11.1 Copy repo-guardian v2 @ `a72faf9` `ui/` scaffolding into
-  `ui/`:
-  - `server/`: config, OIDC, sessions, proxy, static, health, and the
-    mock issuer;
-  - `web/` shell and primitives, `index.css` tokens, fonts, icons;
-  - `scripts/` (`check-api`, `check-dist`, `visual`);
-  - test setup, ESLint config, `tsconfig`, `vite.config.ts`.
+- [ ] 11.1 Scaffold `ui/` to INV-0005 finding 7:
+  - one `package.json` over `server/`, `web/`, `scripts/` and `e2e/`,
+    with repo-guardian's versions;
+  - `tsconfig.json` with its strict flags;
+  - `bunfig.toml` with a test preload that registers happy-dom before
+    anything imports Base UI;
+  - the ESLint config, with the ban on HTML sinks;
+  - `web/vite.config.ts` with `@tailwindcss/vite` and the dev proxy for
+    `/api`, `/auth` and `/ui`.
+- [ ] 11.2 The design system:
+  - `@donaldgifford/design-system` pinned exactly, as a devDependency;
+  - `ui/.npmrc` mapping the `@donaldgifford` scope to GitHub Packages
+    and referencing `NPM_TOKEN`, with the value never stored;
+  - `just ui-install` passes the token;
+  - a `renovate.json5` rule that gives the package its own pull request,
+    never grouped or automerged, and lets Renovate read the registry;
+  - `globals.css` imported once from the SPA's entry, and `.dark` set on
+    `<html>`.
+- [ ] 11.3 The BFF in `ui/server`, written here with repo-guardian's
+  libraries and file layout (INV-0005 OQ6):
+  - config from the environment, validated at start;
+  - OIDC code + PKCE as the confidential client `boopd-ui`;
+  - the sealed `__Host-boop_session` cookie, with key rotation and token
+    refresh;
+  - the `/api/*` proxy: GET and HEAD, plus `POST
+    /api/v1/repositories/*/recheck` with an Origin check; the public
+    paths checked against `api/openapi.yaml`;
+  - static files with the `'self'` CSP, health, and `/ui/config` (the
+    external links);
+  - a mock OIDC issuer for tests.
 
-  Every copied file starts with a provenance header, and `ui/COPIED.md`
-  lists source path, commit and local changes (OQ6). Nothing references
-  repo-guardian at build or run time.
-- [ ] 11.2 Rename and adapt:
-  - the cookie becomes `__Host-boop_session`, the client `boopd-ui`;
-  - brand: the boop mark, "boop", "renovate · fleet";
-  - the `NAV` groups FLEET / ACTIVITY / SYSTEM;
-  - no app switcher;
-  - the proxy allowlist: GET and HEAD plus `POST
-    /api/v1/repositories/*/recheck` with an Origin check.
-- [ ] 11.3 Badge tone table for boop's states (DESIGN-0004 § Visual
-  design); the open-enum fallback to mute.
-- [ ] 11.4 Generated types from `api/openapi.yaml` (`generate-ui-api`)
-  and the drift check.
-- [ ] 11.5 `ui/Dockerfile` (Bun build, deps, distroless) and the
-  `docker-bake.hcl` targets `ui-dev`, `ui-ci` and `ui-release`, with the
-  same tag as `boopd`.
-- [ ] 11.6 `ui/design/boop-mockup.html`, copied from repo-guardian's
-  mockup and restyled for boop's pages.
-- [ ] 11.7 Tests: `bun test` (server and primitives), the CSP and
-  `check:dist` gates, and the ESLint ban on HTML sinks.
+  repo-guardian's server tests (app, auth, config, health, proxy,
+  session, static) are ported as the behaviour to meet.
+- [ ] 11.4 The shell, composed from the package's parts:
+  - `ShellSidebar` with the boop identity ("boop", "renovate · fleet"),
+    the `NAV` groups FLEET / ACTIVITY / SYSTEM, the external links group
+    when configured, and the account menu with sign out as a POST form;
+  - `TopBarLayout` with the sidebar trigger, breadcrumbs, search and
+    `TimeZoneToggle`;
+  - the `/me` gate, the route error view and the command palette on
+    `CommandDialog`.
+- [ ] 11.5 The badge state table on the package's `Badge` variants
+  (DESIGN-0004 § Visual design); the open-enum fallback to `muted`.
+- [ ] 11.6 Generated types from `api/openapi.yaml` (`generate-ui-api`),
+  the drift check, and the API client with the package's problem
+  helpers.
+- [ ] 11.7 `ui/Dockerfile` (Bun build, deps, distroless) with
+  `NPM_TOKEN` as a build secret, and the `docker-bake.hcl` targets
+  `ui-dev`, `ui-ci` and `ui-release`, with the same tag as `boopd`.
+- [ ] 11.8 Gates in `ui/scripts`: `check-api` (type drift), `check-dist`
+  (no data: URL or Google Fonts URL in the build) and `check-tokens` (no
+  colour outside the package's tokens).
+- [ ] 11.9 Tests: `bun test` for the server and the shell, and the CSP
+  check.
 
 #### Success Criteria
 
 - `just ui-lint ui-test ui-build` passes.
-- The image builds, and the shell renders against the mock issuer.
-- `grep -r repo-guardian ui/` matches only provenance headers and
-  `COPIED.md`.
+- The image builds, no layer holds the registry token, and the shell
+  renders against the mock issuer.
+- `ui/web/src` holds no local copy of a component the package provides
+  and defines no colour token.
+- `grep -r repo-guardian ui/` matches nothing.
 
 ### Phase 12: UI pages
 
@@ -530,7 +605,20 @@ with one commit per numbered task. The PR split is in OQ1.
   refetch).
 - [ ] 12.6 Polling (DESIGN-0004 OQ10): 30 s for lists, and 5 s on a
   repository with a run in progress.
-- [ ] 12.7 Tests:
+- [ ] 12.7 Component gaps (INV-0005 OQ7, finding 8). For each page, list
+  what the package lacks. A generic component is built in
+  `donaldgifford/design-system` against a local link from this `ui/`,
+  released, and the pin bumped here; it is not added under
+  `ui/web/src`. Known candidates:
+  - stacked bars over time (12.1, runs by outcome);
+  - a segmented control (the range control);
+  - popover option rows (the owner scope);
+  - a filter-chip bar (12.2);
+  - one-line loading and empty text.
+
+  A missing prop or variant is an issue on the design system. boop's own
+  components (the update row, dashboard-item sections) stay in `ui/`.
+- [ ] 12.8 Tests:
   - component tests per page;
   - Playwright flows (login, each page, the recheck as operator and as
     viewer, an invisible owner gets 404);
@@ -552,7 +640,7 @@ with one commit per numbered task. The PR split is in OQ1.
   - `api` (Deployment, replicas, PDB, Service, authz, `ingress` and
     `httpRoute`);
   - `ui` (Deployment, PDB, Service, `existingSecret`, `publicURL`,
-    `ingress` and `httpRoute`);
+    `links` for the optional external links, `ingress` and `httpRoute`);
   - `boopd.store` and `boopd.api` rendered into `boopd.hcl`.
 - [ ] 13.2 `templates/migrate-job.yaml`, a hook Job with the owner DSN
   only, waiting before the roles start.
@@ -613,12 +701,15 @@ with one commit per numbered task. The PR split is in OQ1.
 #### Tasks
 
 - [ ] 15.1 `ci.yml`:
-  - a UI job (install, lint, test, build, check-api, check-dist);
+  - a UI job (install with `NPM_TOKEN` from `GITHUB_TOKEN` and
+    `packages: read`, lint, test, build, check-api, check-dist,
+    check-tokens);
   - an API lint job (vacuum, oapi-codegen drift, sqlc vet and drift);
   - Docker for the integration tests;
   - the UI e2e job.
-- [ ] 15.2 `release.yml`: build, sign (cosign) and attest (SLSA) the
-  `boopd-ui` image with the same tag, and add it to the release notes.
+- [ ] 15.2 `release.yml`: build (with the registry token as a build
+  secret), sign (cosign) and attest (SLSA) the `boopd-ui` image with the
+  same tag, and add it to the release notes.
 - [ ] 15.3 `docs/api.md`: auth setup (the Keycloak clients
   `boopd-api` and `boopd-ui`, the audience mapper), authz file, the
   endpoint overview, cursors, errors, and the correlator's entry points
@@ -684,7 +775,7 @@ with one commit per numbered task. The PR split is in OQ1.
 | `test/fakegithub/fakegithub.go` | 7 | search, PR GET |
 | `api/{openapi,oapi-codegen,vacuum}.yaml`, `internal/api/**` | 9, 10 | contract, server, handlers |
 | `cmd/boopd/{migrate,api,store}.go` | 2, 3, 9 | commands |
-| `ui/**`, `docker-bake.hcl` | 11, 12 | BFF, SPA, image |
+| `ui/**`, `docker-bake.hcl`, `renovate.json5` | 11, 12 | BFF, SPA, image, the design-system rule |
 | `charts/boopd/**` | 13 | store, api, ui |
 | `test/e2e/{store,api}_test.go` | 14 | scenarios |
 | `.github/workflows/{ci,release}.yml` | 15 | jobs, image |
@@ -713,8 +804,16 @@ with one commit per numbered task. The PR split is in OQ1.
 - **New Go modules:** pgx/v5, goose/v3, go-oidc/v3, kin-openapi. **New
   tools:** oapi-codegen v2.8.0 and sqlc (as `go tool`), bun 1.3.14 and
   vacuum (mise), and the Playwright image.
-- **Copy source:** repo-guardian v2 @ `a72faf9`, read-only. Nothing
-  depends on it after the copy.
+- **`@donaldgifford/design-system`** from GitHub Packages (0.3.2 or
+  later, pinned exactly), and a token with `read:packages` on every
+  install path.
+- **Design-system changes** (in its repository): RFC-0001's entry rule
+  amended so a component an app is building against counts, and the
+  releases that carry Phase 12.7's components.
+- **Copy source for Go code:** repo-guardian v2 @ `a72faf9`, read-only
+  (Phase 9.4). Nothing depends on it after the copy.
+- **Example for the UI:** repo-guardian `ui/` at `cc97e3f` or later, read
+  and never copied.
 - **Homelab:** CNPG, Keycloak and the Tailscale ingress (Phase 16).
 
 ## Open Questions
@@ -724,7 +823,8 @@ None open. The answered questions are listed under
 
 ## Resolved Questions
 
-Answered 2026-10-18: option a for every question.
+Answered 2026-10-18: option a for every question. OQ6 was amended on
+2026-11-21 by INV-0005.
 
 | OQ | Question | Decision |
 | - | - | - |
@@ -733,7 +833,7 @@ Answered 2026-10-18: option a for every question.
 | 3 | Partitions? | **a**: native partitioning with `ensure_partitions`/`drop_partitions` from `StoreMaintenanceWorkflow` |
 | 4 | oapi-codegen and sqlc pins? | **a**: `go tool` dependencies in `go.mod` |
 | 5 | Dependency list size? | **a**: at most 2,000 in `RunResult.Dependencies`; past that, `RunRenovate` writes them straight to the store, or truncates with a flag |
-| 6 | Copied-code marking? | **a**: a provenance header per file plus `ui/COPIED.md` |
+| 6 | Copied-code marking? | **a**: a provenance header per copied file. Amended 2026-11-21: this covers the Go code only (Phase 9.4); nothing in `ui/` is copied, so there is no `ui/COPIED.md` |
 | 7 | Idempotency key shape? | **a**: readable text keys built by the writer |
 | 8 | Who creates database roles? | **a**: the operator (CNPG managed roles; the e2e init script) |
 | 9 | How does `recheck` carry the actor? | **a**: an optional `Recheck{Actor, RequestID}` payload on the same signal |
@@ -748,8 +848,15 @@ Answered 2026-10-18: option a for every question.
 
 - DESIGN-0004 (resolved OQs), DESIGN-0003 / IMPL-0004
 - ADR-0006, ADR-0007, ADR-0008
-- repo-guardian v2 @ `a72faf9` (the copy source): DESIGN-0027, DESIGN-0036,
-  IMPL-0031, `ui/`, `internal/api`, `internal/store/postgres`
+- [INV-0005](../investigation/0005-boop-ui-its-own-app-on-the-design-system-or-a-backend-of-repo.md)
+  (boop UI on the design system; the 2026-11-21 amendment)
+- [design-system](https://github.com/donaldgifford/design-system): the
+  package, RFC-0001 and the
+  [Storybook](https://donaldgifford.github.io/design-system/)
+- repo-guardian v2 @ `a72faf9` (the copy source for Go code): DESIGN-0027,
+  DESIGN-0036, IMPL-0031, `internal/api`, `internal/store/postgres`
+- repo-guardian `ui/` @ `cc97e3f` (the example for the UI): DESIGN-0039,
+  IMPL-0037
 - [pgx](https://github.com/jackc/pgx), [goose](https://github.com/pressly/goose),
   [sqlc](https://sqlc.dev), [oapi-codegen](https://github.com/oapi-codegen/oapi-codegen),
   [go-oidc](https://github.com/coreos/go-oidc)
