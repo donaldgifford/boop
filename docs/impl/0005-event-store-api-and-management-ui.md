@@ -242,7 +242,7 @@ with one commit per numbered task. The PR split is in OQ1.
   - the indexes from DESIGN-0004;
   - `ensure_partitions(months_ahead int)` and `drop_partitions(before
     timestamptz)` as `SECURITY DEFINER` functions.
-- [ ] 2.2 `0002_projections.sql`:
+- [x] 2.2 `0002_projections.sql`:
   - `installations`, `repositories`, `runs`;
   - `branch_updates`, `dependencies`;
   - `pull_requests`, `dashboard_items`;
