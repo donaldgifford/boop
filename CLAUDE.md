@@ -156,6 +156,7 @@ examples/boopd.hcl        # the design's example config; `boopd config validate`
 docs/webhooks.md          # enabling webhook ingest: App settings, secret, exposure, verification, audit, rollback
 docs/config.md            # boopd.hcl reference: every setting, default, chart key; a test keeps it complete
 docs/investigation/       # INV-0001 is the founding document
+ui/                       # boopd-ui (DESIGN-0004): server/ the Bun + Hono BFF (OIDC, sealed session, /api proxy), web/ the React SPA on @donaldgifford/design-system, scripts/ the gates; ui.just recipes
 charts/boopd/             # Helm chart + unittest suites + values.schema.json; charts/redis is the cache subchart
 Dockerfile                # multi-stage distroless build (VERSION/COMMIT/DATE args)
 docker-bake.hcl           # bake targets: default (local), ci, release

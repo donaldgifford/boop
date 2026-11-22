@@ -57,3 +57,8 @@ ui-check-api:
 [group('ui')]
 ui-docker-build:
     @NPM_TOKEN="${NPM_TOKEN:-$(gh auth token)}" docker buildx bake ui-dev
+
+# Run the mock OIDC issuer (9400) and a stub API (9401) for a local BFF
+[group('ui')]
+ui-dev-stack:
+    cd ui && bun server/testing/stack.ts

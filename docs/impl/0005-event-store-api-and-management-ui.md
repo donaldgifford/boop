@@ -479,6 +479,51 @@ open:
   `TestStatus_PrivacyGuard` walks the JSON and refuses any string field
   outside the allowlist.
 
+## Findings (Phase 11)
+
+- **The BFF's tests passed as a port.** All 78 behaviours carried over
+  with boop's names: the cookie, the client, the recheck POST and
+  `UI_LINKS` in place of a docs link.
+  - `proxy.test.ts` also holds the forwarded POSTs to the spec's POST
+    operations, so a new action fails the test until the proxy allows
+    it.
+  - The public paths are checked against `security: []` in
+    `api/openapi.yaml`.
+- **Links are validated at start.** `UI_LINKS` is at most ten https
+  links, and `/ui/config` passes them to the sidebar and the command
+  palette. Nothing else in the UI links out.
+- **The `/me` gate needs no 403.** `/me` is exempt from the visibility
+  gate, so a caller with no owners gets 200 with `owners: []` and
+  `all_owners: false`. The shell renders the no-access view (with a sign
+  out) instead of pages that would all answer 403.
+- **Not-found renders inside the frame.** An unmatched path never
+  matches the pathless shell route, so it fell through to the root and
+  rendered without the sidebar. A `$` splat route under the shell keeps
+  it in the frame.
+- **`check-tokens` enforces "no colour outside the package"** rather than
+  a list of removed names:
+  - Tailwind palette colours;
+  - arbitrary colour values;
+  - colour functions;
+  - `--color-*` definitions;
+  - hex colours in CSS. Hex is not checked in TSX, where `#123` is a
+    pull request number.
+
+  `web/src` passed it unchanged.
+- **No token in the image.** The token is a required build secret for the
+  build stage only. A scan of every layer, the history and the metadata
+  for the token's value found nothing.
+- **The image signs in.** The read-only image ran against the mock
+  issuer and a stub API sharing its network namespace (so both are on
+  loopback, as the config requires). The sign-in redirect, the callback,
+  the session cookie, the app under the `'self'` CSP, the proxied `/me`
+  and the cached assets all worked (`server/testing/stack.ts`, `just
+  ui-dev-stack`). Rendering in a browser is Playwright's, in Phases 12
+  and 14.
+- **Renovate reads the registry through `{{ secrets.NPM_TOKEN }}`.** The
+  runner has to provide that secret; this is noted for the homelab
+  setup (16.4).
+
 ## Implementation Phases
 
 Each phase ends with `just lint`, `just test` and its own checks green,

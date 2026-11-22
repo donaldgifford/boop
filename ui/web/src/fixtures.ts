@@ -86,7 +86,7 @@ function pick<T>(items: readonly T[], r: number): T {
 const REPOS = [
   "donaldgifford/proxmox-go-sdk",
   "donaldgifford/boop",
-  "donaldgifford/repo-guardian",
+  "donaldgifford/x",
   "donaldgifford/docz",
   "donaldgifford/design-system",
   "donaldgifford/hclkit",
