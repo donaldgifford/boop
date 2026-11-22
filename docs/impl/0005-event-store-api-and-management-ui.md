@@ -1255,7 +1255,7 @@ page stops using them.
   (`/updates`, `/dependencies` by purl).
 - [x] 15.4 `docs/ui.md`: enabling, sessions and key rotation, pages,
   the status page, and security.
-- [ ] 15.5 `docs/config.md` rows; CLAUDE.md layout (`internal/store`,
+- [x] 15.5 `docs/config.md` rows; CLAUDE.md layout (`internal/store`,
   `internal/api`, `internal/purl`, `ui/`, `api/`) and roles.
 - [ ] 15.6 DESIGN-0004 → Implemented; DESIGN-0003's recording note
   → "stored (IMPL-0005)".

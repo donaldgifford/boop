@@ -610,6 +610,23 @@ What the chart adds:
   fails the render without an App `webhook` block, and only the ingest
   pods mount the webhook Secrets. [webhooks.md](webhooks.md) walks
   through it.
+- **The store's migrate hook:** `store.enabled` runs `boopd migrate` as
+  a Helm hook (`store.migrate.hook: argocd` for a sync-wave hook) before
+  the roles roll. The hook carries its own copy of the file.
+- **One DSN per role:** each pod mounts only its own key of
+  `store.existingSecret`:
+  - the worker: `worker-dsn`;
+  - ingest: `ingest-dsn`;
+  - the API: `ro-dsn`;
+  - the hook: `owner-dsn`.
+- **The API role:** the top-level `api.*` values run `boopd api`, and
+  `api.authz` becomes the authz file. It fails the render without
+  `store.enabled` and `boopd.api.auth`. [api.md](api.md) walks through
+  it.
+- **The UI:** the top-level `ui.*` values run `boopd-ui`, which reads
+  env, not this file. It fails the render without `api.enabled` and its
+  sign-in settings (`publicURL`, `existingSecret`, `oidc.issuer`).
+  [ui.md](ui.md) walks through it.
 
 ## Validation
 
