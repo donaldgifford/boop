@@ -524,6 +524,62 @@ open:
   runner has to provide that secret; this is noted for the homelab
   setup (16.4).
 
+## Findings (Phase 12)
+
+- **Every page reads the API through one data layer.** It lives in
+  `web/src/api/queries.ts`:
+  - one hook per operation;
+  - query keys exported, so tests seed exactly what a page reads;
+  - cursor lists through `useList` ("Load more");
+  - polling at 30 s for lists, 15 s for events, and 5 s for a
+    repository with a run in progress. `queries.test.tsx` checks all
+    three.
+
+  The mockup's `fixtures.ts` and the placeholder page are gone.
+- **Filters live in the URL.** Each page has a `validateSearch` parser,
+  so a filtered view is a link. The owner scope and range carry across
+  pages, and a page's own filters stay behind.
+  - The open pull request is `?open=<repo id>-<number>`.
+  - A repository's tab is `?tab=`.
+- **The API keeps no Dependency Dashboard issue number.** The Waiting
+  page's "Dashboard" link is GitHub's issue search for the title in the
+  repository. If the API ever records the number, the link becomes
+  direct.
+- **Recheck is drawn for operators only** (`me.operator`). A viewer sees
+  no button; the API's 403 stays the guard. The button reports a
+  deduplicated request ("already requested in the last minute").
+- **Deliveries are not owner-scoped.** The page asks `/me` first and,
+  unless `all_owners`, explains the restriction instead of fetching a
+  403.
+- **The status page has no changelog.** The mockup drew one, but
+  `/status` carries no release list, so it was dropped. The page shows
+  the banner, the components (latency, pollers, last activity,
+  failed/missed) and the fleet totals.
+- **Search inputs navigate on every keystroke** (repositories `q`,
+  events `kind` and `actor`). Each keystroke is a new query key. A
+  debounced input would cut the requests; see the gaps below.
+
+### Component gaps (12.7)
+
+What `@donaldgifford/design-system` 0.4.0 lacks, page by page. Each
+gap is to become an issue on the design system and, once released,
+a pin bump here. Filing the issues is **deferred - human required**,
+because it is outward-facing. Workarounds stay in `ui/` until then.
+
+| Page | Gap | Workaround in `ui/` |
+| --- | --- | --- |
+| Repository, Pull requests (timeline) | `Timeline` items take `when` as a preformatted string, not an ISO time rendered with `Time` and the zone provider. | `lib/when.ts` formats it. |
+| Pull requests | `FilterChip` has no removable variant (an `onRemove` with its own × button and label). | `RemovableChip` puts a × in `value` and makes the whole chip the remove button. |
+| Waiting | `ListRow`'s subtitle is a truncated `div` under a row-wide stretched button, so a link inside needs `relative z-10`. | The repository link carries `relative z-10`. |
+| Package (`$purl`), Repository tabs | `DataTable` has no title or caption slot for a headed table inside a card. | A separate header card above each `ListCard`. |
+| Estate (installations) | `Meter` has no `tone` for a budget running low. | `BudgetCell` shows remaining and used as numbers. |
+| Repositories, Events | No debounced search input. | `Input` with `onChange` straight into the URL. |
+| Repositories (state) | `SegmentedControl` overflows with seven options on a narrow screen; there is no select fallback. | It wraps. |
+
+boop's own components stay in `ui/`: `UpdateRow`/`UpdateSummary`,
+`WaitingSections`, `ListCard`, the run and pull request columns, and
+`eventItem`.
+
 ## Implementation Phases
 
 Each phase ends with `just lint`, `just test` and its own checks green,
@@ -977,7 +1033,7 @@ page stops using them.
   refetch).
 - [x] 12.6 Polling (DESIGN-0004 OQ10): 30 s for lists, and 5 s on a
   repository with a run in progress.
-- [ ] 12.7 Component gaps (INV-0005 OQ7, finding 8). For each page, list
+- [x] 12.7 Component gaps (INV-0005 OQ7, finding 8). For each page, list
   what the package lacks. A generic component is built in
   `donaldgifford/design-system` against a local link from this `ui/`,
   released, and the pin bumped here; it is not added under
