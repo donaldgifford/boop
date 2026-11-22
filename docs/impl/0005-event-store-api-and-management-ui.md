@@ -572,7 +572,7 @@ because it is outward-facing. Workarounds stay in `ui/` until then.
 | Pull requests | `FilterChip` has no removable variant (an `onRemove` with its own × button and label). | `RemovableChip` puts a × in `value` and makes the whole chip the remove button. |
 | Waiting | `ListRow`'s subtitle is a truncated `div` under a row-wide stretched button, so a link inside needs `relative z-10`. | The repository link carries `relative z-10`. |
 | Package (`$purl`), Repository tabs | `DataTable` has no title or caption slot for a headed table inside a card. | A separate header card above each `ListCard`. |
-| Estate (installations) | `Meter` has no `tone` for a budget running low. | `BudgetCell` shows remaining and used as numbers. |
+| Estate (installations) | `Meter` treats a high percentage as good; for budget spend, high is bad. | `BudgetCell` shows remaining and used as numbers. |
 | Repositories, Events | No debounced search input. | `Input` with `onChange` straight into the URL. |
 | Repositories (state) | `SegmentedControl` overflows with seven options on a narrow screen; there is no select fallback. | It wraps. |
 

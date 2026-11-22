@@ -7,9 +7,11 @@ The BFF, the shell composition, the pages and the test harness are
 written here; the look and the components come from the package
 (INV-0005).
 
-**Pages render fixture data** (`web/src/fixtures.ts`) until IMPL-0005
-Phase 12 moves each one onto the API. The shell already reads `/me` and
-`/ui/config` through the BFF.
+Every page reads the API through the BFF with TanStack Query
+(`web/src/api/queries.ts`). Lists poll every 30 s, the event stream
+every 15 s, and a repository with a run in progress every 5 s. Filters
+live in the URL. The status page (`/status`) is public and sits outside
+the shell.
 
 ```text
 ui/
@@ -19,10 +21,10 @@ ui/
     src/api/            generated types (schema.gen.ts), the openapi-fetch client, queries
     src/shell/          the frame from the package's parts, nav, breadcrumbs, palette, errors
     src/views/          pages
-    src/components/     boop's own: state badges, page controls
-    testing/            happy-dom preload and per-file DOM, the shell test harness
+    src/components/     boop's own: badges, page controls, ListCard, update rows, waiting sections, run columns, events
+    testing/            per-file DOM, the shell and app harnesses, sample payloads (data.ts)
   scripts/              gates: check-api, check-dist, check-tokens
-  e2e/                  Playwright flows against a deployed stack (Phase 12, 14)
+  e2e/                  Playwright flows, axe and screenshots against a deployed stack (BOOP_UI_URL, BOOP_ISSUER_URL)
 ```
 
 ## Commands
@@ -88,15 +90,12 @@ switcher) and the status page parts are in the package since 0.4.0. boop
 keeps no local copy. A generic component the package lacks is drafted
 here, seen working, and moved there (design-system RFC-0001).
 
-## Gaps found while building the mockup
+## Gaps in the design system
 
-Each is an issue for the design system, not a patch here:
+The per-page list is in IMPL-0005's Phase 12 findings (component gaps).
+Each is an issue for the design system, not a patch here. Two are about
+consuming the package at all:
 
-- **`Meter`** treats a high percentage as good. For budget spend, high is
-  bad, so the mockup passes `tone` itself (`views/estate.tsx`).
-- **`Timeline`** takes `when` as a string, so a timeline cannot use the
-  package's `Time` and does not follow the Local/UTC toggle
-  (`lib/when.ts`).
 - **Dev server and CommonJS.** The package ships source, so Vite's dev
   server does not pre-bundle what it imports, and the CommonJS packages
   underneath fail to load (a blank page). `web/vite.config.ts` names
