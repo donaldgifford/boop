@@ -16,6 +16,7 @@ env_value() {
 
 registry="$(env_value REGISTRY)"
 image_repo="$(env_value IMAGE_REPO)"
+ui_image_repo="$(env_value UI_IMAGE_REPO)"
 chart_namespace="$(env_value CHART_NAMESPACE)"
 chart_name="$(env_value CHART_NAME)"
 
@@ -30,6 +31,7 @@ check() {
 
 status=0
 check image-slsa "${registry}/${image_repo}" || status=1
+check image-ui-slsa "${registry}/${ui_image_repo}" || status=1
 check chart-slsa "${registry}/${chart_namespace}/${chart_name}" || status=1
 
 if [[ "$(yq -r .name "${chart}")" != "${chart_name}" ]]; then

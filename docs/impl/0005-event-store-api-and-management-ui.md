@@ -1246,7 +1246,7 @@ page stops using them.
   - an API lint job (vacuum, oapi-codegen drift, sqlc vet and drift);
   - Docker for the integration tests;
   - the UI e2e job.
-- [ ] 15.2 `release.yml`: build (with the registry token as a build
+- [x] 15.2 `release.yml`: build (with the registry token as a build
   secret), sign (cosign) and attest (SLSA) the `boopd-ui` image with the
   same tag, and add it to the release notes.
 - [ ] 15.3 `docs/api.md`: auth setup (the Keycloak clients
