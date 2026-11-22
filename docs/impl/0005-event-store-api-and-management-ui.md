@@ -1160,11 +1160,11 @@ page stops using them.
 
 #### Tasks
 
-- [ ] 14.1 e2e Postgres (OQ10): a pinned `postgres:17` Deployment in the
+- [x] 14.1 e2e Postgres (OQ10): a pinned `postgres:17` Deployment in the
   e2e namespace, with an init script creating the four roles. The chart
   installs with `store`, `api`, `ui` and `ingest` enabled, and the mock
   OIDC issuer runs as a pod.
-- [ ] 14.2 Scenarios (`test/e2e/store_test.go`, `api_test.go`):
+- [x] 14.2 Scenarios (`test/e2e/store_test.go`, `api_test.go`):
   - `TestStore_RunRecorded`: a run gives `run.finished`,
     `branch_updates` and `dependencies` with purls;
   - `TestStore_PROpenedByBot`: a signed bot `pull_request.opened` gives a

@@ -235,3 +235,28 @@ func Diff(before, after Snapshot) []Tick {
 	}
 	return out
 }
+
+// sectionKeys maps Renovate's dashboard headings to the API's section
+// enum (api/openapi.yaml DashboardItem.section).
+var sectionKeys = map[string]string{
+	"Awaiting Schedule":             "awaiting-schedule",
+	"Rate-Limited":                  "rate-limited",
+	"Pending Approval":              "pending-approval",
+	"PR Creation Approval Required": "pending-approval",
+	"Pending Status Checks":         "pending-status-checks",
+	"Errored":                       "errored",
+	"Open":                          "open",
+	"Ignored or Blocked":            "ignored",
+	"Edited/Blocked":                "ignored",
+}
+
+// SectionKey is the API's section for a dashboard heading: one of
+// awaiting-schedule, rate-limited, pending-approval,
+// pending-status-checks, errored, open, ignored, or other for a heading
+// it does not know.
+func SectionKey(heading string) string {
+	if k, ok := sectionKeys[heading]; ok {
+		return k
+	}
+	return "other"
+}

@@ -230,7 +230,10 @@ func dashboardItems(snap *dashboard.Snapshot) []store.DashboardItem {
 	out := make([]store.DashboardItem, 0, len(snap.Items))
 	for i := range snap.Items {
 		it := &snap.Items[i]
-		out = append(out, store.DashboardItem{Marker: it.Raw, Branch: it.Branch, Section: it.Section, Title: it.Title, Deps: it.Deps})
+		out = append(
+			out,
+			store.DashboardItem{Marker: it.Raw, Branch: it.Branch, Section: dashboard.SectionKey(it.Section), Title: it.Title, Deps: it.Deps},
+		)
 	}
 	return out
 }
