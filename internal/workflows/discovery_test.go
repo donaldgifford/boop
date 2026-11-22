@@ -1,6 +1,7 @@
 package workflows
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"log/slog"
@@ -176,5 +177,65 @@ func TestTargetedDiscoveryID(t *testing.T) {
 	t.Parallel()
 	if got := TargetedDiscoveryID("boop-bot", 42); got != "discovery/boop-bot/installation/42" {
 		t.Errorf("TargetedDiscoveryID = %q", got)
+	}
+}
+
+// With Record, the pass reconciles each discovered installation's PRs
+// and ends by recording discovery.finished with its totals; without it,
+// nothing is reconciled or recorded.
+func TestDiscoveryWorkflow_RecordsThePass(t *testing.T) {
+	t.Parallel()
+	for _, record := range []bool{true, false} {
+		var suite testsuite.WorkflowTestSuite
+		suite.SetLogger(log.NewStructuredLogger(slog.New(slog.DiscardHandler)))
+		env := suite.NewTestWorkflowEnvironment()
+		env.RegisterWorkflowWithOptions(DiscoveryWorkflow, workflow.RegisterOptions{Name: DiscoveryWorkflowName})
+		env.RegisterActivityWithOptions(func(context.Context, *ListInstallationsInput) ([]InstallationInfo, error) {
+			return []InstallationInfo{{ID: 1, Account: "acme"}, {ID: 2, Account: "beta"}, {ID: 3, Account: "gone"}}, nil
+		}, activity.RegisterOptions{Name: ListInstallationsActivity})
+		env.RegisterActivityWithOptions(func(_ context.Context, in *DiscoverInput) (*DiscoverSummary, error) {
+			if in.InstallationID == 3 {
+				return nil, temporal.NewNonRetryableApplicationError("gone", "test", nil)
+			}
+			return &DiscoverSummary{InstallationID: in.InstallationID, Seen: 5, Onboarded: 1, ProbeCost: 2}, nil
+		}, activity.RegisterOptions{Name: DiscoverInstallationActivity})
+		var reconciled []ReconcilePRsInput
+		env.RegisterActivityWithOptions(func(_ context.Context, in *ReconcilePRsInput) (*ReconcilePRsResult, error) {
+			reconciled = append(reconciled, *in)
+			return &ReconcilePRsResult{Open: 2, Synced: 2}, nil
+		}, activity.RegisterOptions{Name: ReconcilePullRequestsActivity})
+		var recorded []RecordedEvent
+		env.RegisterActivityWithOptions(func(_ context.Context, in *RecordEventsInput) error {
+			recorded = append(recorded, in.Events...)
+			return nil
+		}, activity.RegisterOptions{Name: RecordEventsActivity})
+		env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, "", SuspendSignal, mock.Anything).Return(nil)
+
+		env.ExecuteWorkflow(DiscoveryWorkflowName, &DiscoveryInput{App: "main", Record: record})
+		if err := env.GetWorkflowError(); err != nil {
+			t.Fatalf("workflow: %v", err)
+		}
+		var res DiscoveryResult
+		if err := env.GetWorkflowResult(&res); err != nil {
+			t.Fatal(err)
+		}
+		if !record {
+			if len(recorded) != 0 || len(reconciled) != 0 {
+				t.Errorf("recorded %+v and reconciled %+v without Record, want nothing", recorded, reconciled)
+			}
+			continue
+		}
+		slices.SortFunc(reconciled, func(x, y ReconcilePRsInput) int { return cmp.Compare(x.InstallationID, y.InstallationID) })
+		want := []ReconcilePRsInput{{App: "main", InstallationID: 1, Account: "acme"}, {App: "main", InstallationID: 2, Account: "beta"}}
+		if !slices.Equal(reconciled, want) || res.PRsSynced != 4 || res.ReconcileFailed != 0 {
+			t.Errorf("reconciled %+v (synced %d), want %+v: the failed installation skipped", reconciled, res.PRsSynced, want)
+		}
+		if len(recorded) != 1 || recorded[0].Kind != KindDiscoveryFinished || recorded[0].Discovery == nil {
+			t.Fatalf("recorded = %+v, want one discovery.finished", recorded)
+		}
+		d := recorded[0].Discovery
+		if d.App != "main" || d.Seen != 10 || d.Onboarded != 2 || d.ProbeCost != 4 || d.Failed != 1 || d.StartedAt.After(d.FinishedAt) {
+			t.Errorf("discovery.finished = %+v", d)
+		}
 	}
 }

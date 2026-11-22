@@ -23,8 +23,12 @@ func TestDiscoverySchedules(t *testing.T) {
 	if s.ID != "discovery/boop-bot" || s.Every != 6*time.Hour || s.Workflow != workflows.DiscoveryWorkflowName || s.TaskQueue != "boopd" {
 		t.Errorf("schedule = %+v", s)
 	}
-	if in, ok := s.Args[0].(*workflows.DiscoveryInput); !ok || in.App != "boop-bot" {
-		t.Errorf("args = %+v, want the app's DiscoveryInput", s.Args)
+	if in, ok := s.Args[0].(*workflows.DiscoveryInput); !ok || in.App != "boop-bot" || in.Record {
+		t.Errorf("args = %+v, want the app's DiscoveryInput, not recording", s.Args)
+	}
+	cfg.Store.Enabled = true
+	if in := worker.DiscoverySchedules(cfg, "boopd")[0].Args[0].(*workflows.DiscoveryInput); !in.Record {
+		t.Errorf("args with the store enabled = %+v, want Record", in)
 	}
 	if got[1].ID != "discovery/other" || got[1].Every != time.Hour {
 		t.Errorf("second schedule = %+v", got[1])
@@ -54,5 +58,22 @@ func TestDeliveryAuditSchedules(t *testing.T) {
 	}
 	if none := worker.DeliveryAuditSchedules(&config.Config{Apps: []*config.App{{Name: "quiet"}}}, "boopd"); len(none) != 0 {
 		t.Errorf("schedules without a webhook app = %v", none)
+	}
+}
+
+func TestStoreMaintenanceSchedules(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{}
+	if got := worker.StoreMaintenanceSchedules(cfg, "boopd"); len(got) != 0 {
+		t.Errorf("schedules without the store = %v, want none", got)
+	}
+	cfg.Store.Enabled = true
+	got := worker.StoreMaintenanceSchedules(cfg, "boopd")
+	if len(got) != 1 {
+		t.Fatalf("schedules = %d, want one", len(got))
+	}
+	if s := got[0]; s.ID != "store-maintenance" || s.Every != 24*time.Hour ||
+		s.Workflow != workflows.StoreMaintenanceWorkflowName || s.TaskQueue != "boopd" || len(s.Args) != 0 {
+		t.Errorf("schedule = %+v", s)
 	}
 }

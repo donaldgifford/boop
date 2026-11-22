@@ -80,7 +80,33 @@ func (b *builder) validate(cfg *Config, raw *fileSchema) {
 		}
 	}
 	b.validateSandbox(cfg, raw)
+	b.validateStore(raw.Store)
 	b.validateApps(raw.Apps)
+}
+
+// validateStore checks the store block's secret refs. An enabled store
+// needs the worker's DSN, since the worker records every run.
+func (b *builder) validateStore(s *storeBlock) {
+	if s == nil {
+		return
+	}
+	refs := []struct {
+		what string
+		ref  *secretRefBlock
+	}{
+		{"store.owner_dsn_secret_ref", s.OwnerDSNSecretRef},
+		{"store.dsn_secret_ref", s.DSNSecretRef},
+		{"store.ingest_dsn_secret_ref", s.IngestDSNSecretRef},
+		{"store.ro_dsn_secret_ref", s.RODSNSecretRef},
+	}
+	for _, r := range refs {
+		if r.ref != nil {
+			b.validateSecretRef(r.ref, r.what)
+		}
+	}
+	if derefOr(s.Enabled, false) && s.DSNSecretRef == nil {
+		b.errorf(s.DefRange, "Missing store.dsn_secret_ref", "An enabled store needs dsn_secret_ref, the worker's DSN.")
+	}
 }
 
 func (b *builder) validateRenovate(r *Renovate, raw *renovateBlock) {

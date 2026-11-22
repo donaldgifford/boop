@@ -104,7 +104,8 @@ test-all: test
 
 # Run the integration tests (build tag `integration`): they start the
 # Temporal CLI's dev server, downloaded once per machine at the version
-# pinned in internal/temporal/temporaltest.
+# pinned in internal/temporal/temporaltest, and a Postgres container
+# (internal/store/storetest), so they need Docker.
 [group('test')]
 test-integration:
     @go test -v -race -count=1 -tags integration ./...
@@ -157,6 +158,28 @@ lint:
 [group('lint')]
 lint-fix:
     @golangci-lint run --fix ./...
+
+# Lint api/openapi.yaml with vacuum and fail on internal/api/gen drift
+[group('lint')]
+lint-api: generate-api
+    vacuum lint --ruleset api/vacuum.yaml --details api/openapi.yaml
+    git diff --exit-code -- internal/api/gen
+
+# Vet the store's queries with sqlc and fail on internal/store/db drift
+[group('lint')]
+lint-sql: generate-sql
+    cd internal/store && go tool sqlc vet
+    git diff --exit-code -- internal/store/db
+
+# Generate the store's query package (internal/store/db) with sqlc
+[group('generate')]
+generate-sql:
+    cd internal/store && go tool sqlc generate
+
+# Generate internal/api/gen from api/openapi.yaml with oapi-codegen
+[group('generate')]
+generate-api:
+    go tool oapi-codegen -config api/oapi-codegen.yaml api/openapi.yaml
 
 # Verify the golangci-lint configuration
 [group('lint')]

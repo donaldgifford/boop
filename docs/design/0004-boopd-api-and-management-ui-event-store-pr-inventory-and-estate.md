@@ -1,7 +1,7 @@
 ---
 id: DESIGN-0004
 title: "boopd API and management UI: event store, PR inventory and estate view"
-status: Draft
+status: Approved
 author: Donald Gifford
 created: 2026-10-18
 ---

@@ -63,6 +63,12 @@ type Record struct {
 	Actions []ActionRecord
 	// Error is why a delivery was rejected.
 	Error string
+	// Payload is the verified, decoded delivery, for sinks that derive
+	// events from it; nil when the delivery was rejected or its event is
+	// unknown.
+	Payload *Payload
+	// Bot is the App's bot login.
+	Bot string
 }
 
 // ActionRecord is one Temporal action and how it went.

@@ -11,10 +11,15 @@
 ui-install:
     @cd ui && NPM_TOKEN="${NPM_TOKEN:-$(gh auth token)}" bun install --frozen-lockfile
 
-# Typecheck the UI
+# Typecheck the UI (ESLint joins in IMPL-0005 11.1)
 [group('ui')]
 ui-lint:
     cd ui && bun run typecheck
+
+# Run the UI's unit tests (the BFF and the SPA) with bun test
+[group('ui')]
+ui-test:
+    cd ui && bun test
 
 # Build the UI into ui/dist
 [group('ui')]
@@ -25,3 +30,13 @@ ui-build:
 [group('ui')]
 ui-dev:
     cd ui && bun run dev
+
+# Run the UI's Playwright flows (ui/e2e) against a running stack
+[group('ui')]
+ui-e2e:
+    cd ui && bun run e2e
+
+# Run the UI's visual comparisons; pass --update-snapshots to refresh
+[group('ui')]
+ui-visual *args:
+    cd ui && bun run visual {{args}}

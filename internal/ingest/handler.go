@@ -195,6 +195,7 @@ func fill(rec *Record, p *Payload, app *config.App) {
 	rec.SenderLogin, rec.SenderType = p.SenderLogin, p.SenderType
 	rec.Own = Own(p, app)
 	rec.Subject = p.subject()
+	rec.Payload, rec.Bot = p, app.Webhook.Bot
 	if p.Repo != nil {
 		rec.RepoID, rec.RepoSlug = p.Repo.ID, p.Repo.Slug
 	}

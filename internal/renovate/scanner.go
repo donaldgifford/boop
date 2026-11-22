@@ -87,6 +87,20 @@ type Problem struct {
 	Message string
 }
 
+// Dependency is one packageFiles[].deps[] entry. PackageName falls back
+// to DepName, as Renovate omits it when they are the same.
+type Dependency struct {
+	Manager        string
+	PackageFile    string
+	DepName        string
+	PackageName    string
+	Datasource     string
+	CurrentValue   string
+	CurrentVersion string
+	DepType        string
+	SkipReason     string
+}
+
 // Result is what the scanner learned from one run's log.
 type Result struct {
 	RenovateVersion string
@@ -96,6 +110,9 @@ type Result struct {
 	Tuples   []UpdateTuple
 	Managers []string
 	Problems []Problem
+	// Dependencies is the report's packageFiles[].deps[]: what the
+	// repository uses today (DESIGN-0004 OQ12).
+	Dependencies []Dependency
 	// ReportMissing is true when the report line was absent or did not
 	// parse; Tuples then come from branch and PR events.
 	ReportMissing bool
@@ -257,6 +274,7 @@ func (s *Scanner) Result() *Result {
 	}
 	if rep := s.report.repository(s.slug); rep != nil {
 		out.Tuples, out.Managers, out.Problems = rep.tuples(), rep.managers(), rep.problemList()
+		out.Dependencies = rep.dependencies()
 		return out
 	}
 	out.ReportMissing = true

@@ -95,10 +95,15 @@ type RunResult struct {
 	Managers         []string      // keys of the report's packageFiles
 	Tuples           []UpdateTuple // from the report
 	Problems         []Problem     // repository-level problems from the report
-	Progress         Progress      // this attempt only
-	ReportMissing    bool          // tuples rebuilt from branch and PR events
-	RateBefore       *Readings
-	RateAfter        *Readings
+	// Dependencies is the report's packageFiles[].deps[], at most
+	// MaxDependencies; DependenciesTruncated says more were dropped
+	// (IMPL-0005 OQ5).
+	Dependencies          []Dependency
+	DependenciesTruncated bool
+	Progress              Progress // this attempt only
+	ReportMissing         bool     // tuples rebuilt from branch and PR events
+	RateBefore            *Readings
+	RateAfter             *Readings
 	// Sandbox is the RuntimeClass a sandboxed run ran under; "" for an
 	// ordinary run.
 	Sandbox string
@@ -121,6 +126,23 @@ type UpdateTuple struct {
 	UpdateType     string
 	CurrentVersion string
 	NewVersion     string
+}
+
+// MaxDependencies caps RunResult.Dependencies, which lives in workflow
+// history (IMPL-0005 OQ5).
+const MaxDependencies = 2000
+
+// Dependency is one dependency the report found.
+type Dependency struct {
+	Manager        string
+	PackageFile    string
+	DepName        string
+	PackageName    string
+	Datasource     string
+	CurrentValue   string
+	CurrentVersion string
+	DepType        string
+	SkipReason     string
 }
 
 // Problem is a repository-level problem from the report.
@@ -228,6 +250,12 @@ type RepoState struct {
 	EventPriority Priority
 	// EventReason is the reason of the event EventDue came from.
 	EventReason string
+	// RecordSeq numbers this repository's recorded decisions; with the
+	// run id it makes each event's key (IMPL-0005 5.4).
+	RecordSeq int
+	// CauseKey is the key of the last run-scheduled or recheck event, the
+	// cause of the next run.
+	CauseKey string
 }
 
 // ListInstallationsInput is the ListInstallations activity input.
@@ -323,12 +351,17 @@ type RunPlan struct {
 	FloorRaised bool
 	// FloorManagers are the floor managers the tree listing found.
 	FloorManagers []string
+	// Record is store.enabled: record runs and decisions (IMPL-0005
+	// OQ15). False schedules no store activity.
+	Record bool
 }
 
 // DiscoveryInput is DiscoveryWorkflow's input; the discovery/<app>
 // Schedule passes it.
 type DiscoveryInput struct {
 	App string
+	// Record is store.enabled: record the pass as discovery.finished.
+	Record bool
 	// Installations, when set, limits the pass to these installation IDs
 	// (targeted discovery, DESIGN-0003). The App's allowlist still holds:
 	// an ID outside it, or not in the App's listing, is skipped with a
@@ -345,6 +378,10 @@ type DiscoveryResult struct {
 	Seen          int
 	Onboarded     int
 	ProbeCost     int
+	// PRsSynced is the pr.synced events the reconciles appended, and
+	// ReconcileFailed the installations whose reconcile failed.
+	PRsSynced       int
+	ReconcileFailed int
 }
 
 // OffboardResults are the repository results that end a RepoWorkflow
@@ -360,11 +397,13 @@ type ListHookDeliveriesInput struct {
 }
 
 // DeliveryCounts is one event's deliveries in one audit pass, by
-// outcome: Failed (the last attempt was not 2xx), Redelivered (a later
-// attempt was 2xx) or OK.
+// outcome: Failed (the last attempt was not 2xx), Missed (2xx at GitHub
+// and no record in the store), Redelivered (a later attempt was 2xx) or
+// OK.
 type DeliveryCounts struct {
 	Event       string
 	Failed      int
+	Missed      int
 	Redelivered int
 	OK          int
 }
@@ -388,4 +427,44 @@ type DeliveryAuditInput struct {
 	Every time.Duration
 	// Cursor is the newest delivery id read so far.
 	Cursor int64
+}
+
+// ReconcilePRsInput is the ReconcilePullRequests activity input: one
+// installation of App, on Account.
+type ReconcilePRsInput struct {
+	App            string
+	InstallationID int64
+	Account        string
+}
+
+// ReconcilePRsResult is what one reconcile read and recorded.
+type ReconcilePRsResult struct {
+	// Open is the bot's open PRs GitHub listed; Left is the PRs the store
+	// held open that were not listed, each read once.
+	Open, Left int
+	// Synced is the pr.synced events appended, duplicates included.
+	Synced int
+	// Cost is the search's GraphQL cost.
+	Cost int
+}
+
+// MaintainStoreInput is the MaintainStore activity input: one rule, as of
+// Now (the workflow's clock, so a test can move it).
+type MaintainStoreInput struct {
+	Rule string
+	Now  time.Time
+}
+
+// MaintainStoreResult is what one rule removed: partitions for
+// "partitions", rows otherwise.
+type MaintainStoreResult struct {
+	Rule    string
+	Removed int64
+}
+
+// StoreMaintenanceResult is one maintenance pass: each rule that ran, and
+// how many failed.
+type StoreMaintenanceResult struct {
+	Rules  []MaintainStoreResult
+	Failed int
 }

@@ -165,6 +165,14 @@ func (*fakeInstall) ListTree(context.Context, int64, string) (*github.Tree, erro
 	return &github.Tree{}, nil
 }
 
+func (*fakeInstall) SearchOpenBotPRs(context.Context, string, string) (*github.PRSearch, error) {
+	return &github.PRSearch{}, nil
+}
+
+func (*fakeInstall) GetPullRequest(context.Context, int64, int) (*github.PullRequest, error) {
+	return nil, platform.ErrNotFound
+}
+
 func (f *fakeInstall) SetDiscoveredLimit(limit int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

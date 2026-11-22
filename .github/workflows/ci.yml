@@ -123,7 +123,9 @@ jobs:
         continue-on-error: true
 
   # Build tag `integration`: tests that start the Temporal CLI's dev
-  # server (internal/temporal/temporaltest), downloaded once per run.
+  # server (internal/temporal/temporaltest), downloaded once per run, and
+  # a Postgres container (internal/store/storetest) through the runner's
+  # Docker.
   # The pinned Renovate image must agree with internal/renovate/unsafe's
   # generated floor facts (IMPL-0006 2.3/2.4); a Renovate bump that adds
   # an executing manager or gate fails here.
@@ -155,6 +157,9 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+
+      - name: Check Docker
+        run: docker version
 
       - name: Run integration tests
         run: go test -v -race -count=1 -tags integration ./...

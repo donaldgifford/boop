@@ -60,7 +60,18 @@ type reportUpgrade struct {
 }
 
 type reportPackageFile struct {
-	PackageFile string `json:"packageFile"`
+	PackageFile string      `json:"packageFile"`
+	Deps        []reportDep `json:"deps"`
+}
+
+type reportDep struct {
+	DepName        string `json:"depName"`
+	PackageName    string `json:"packageName"`
+	Datasource     string `json:"datasource"`
+	CurrentValue   string `json:"currentValue"`
+	CurrentVersion string `json:"currentVersion"`
+	DepType        string `json:"depType"`
+	SkipReason     string `json:"skipReason"`
 }
 
 // repository returns the slug's entry, or the only entry when the report
@@ -108,6 +119,31 @@ func (rep *repositoryReport) tuples() []UpdateTuple {
 				CurrentVersion: firstNonEmpty(u.CurrentVersion, u.CurrentValue),
 				NewVersion:     firstNonEmpty(u.NewVersion, u.NewValue),
 			})
+		}
+	}
+	return out
+}
+
+// dependencies returns every packageFiles[].deps[] entry, by manager in
+// sorted order, then file and dependency in report order.
+func (rep *repositoryReport) dependencies() []Dependency {
+	var out []Dependency
+	for _, m := range rep.managers() {
+		for _, pf := range rep.PackageFiles[m] {
+			for i := range pf.Deps {
+				d := &pf.Deps[i]
+				out = append(out, Dependency{
+					Manager:        m,
+					PackageFile:    pf.PackageFile,
+					DepName:        d.DepName,
+					PackageName:    firstNonEmpty(d.PackageName, d.DepName),
+					Datasource:     d.Datasource,
+					CurrentValue:   d.CurrentValue,
+					CurrentVersion: d.CurrentVersion,
+					DepType:        d.DepType,
+					SkipReason:     d.SkipReason,
+				})
+			}
 		}
 	}
 	return out

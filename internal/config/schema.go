@@ -36,7 +36,27 @@ type fileSchema struct {
 	ProfileRules    []profileRuleBlock `hcl:"profile_rule,block"`
 	Sandbox         *sandboxBlock      `hcl:"sandbox,block"`
 	Ingest          *ingestBlock       `hcl:"ingest,block"`
+	Store           *storeBlock        `hcl:"store,block"`
 	Apps            []appBlock         `hcl:"app,block"`
+}
+
+// storeBlock is the Postgres product store (DESIGN-0004 § boopd.hcl).
+// Each role reads only its own DSN.
+type storeBlock struct {
+	Enabled            *bool           `hcl:"enabled,optional"`
+	OwnerDSNSecretRef  *secretRefBlock `hcl:"owner_dsn_secret_ref,block"`
+	DSNSecretRef       *secretRefBlock `hcl:"dsn_secret_ref,block"`
+	IngestDSNSecretRef *secretRefBlock `hcl:"ingest_dsn_secret_ref,block"`
+	RODSNSecretRef     *secretRefBlock `hcl:"ro_dsn_secret_ref,block"`
+	Retention          *retentionBlock `hcl:"retention,block"`
+	DefRange           hcl.Range       `hcl:",def_range"`
+}
+
+// retentionBlock is store.retention (DESIGN-0004 § Retention, OQ6).
+type retentionBlock struct {
+	Events           hcl.Expression `hcl:"events,optional"`
+	DeliveryPayloads hcl.Expression `hcl:"delivery_payloads,optional"`
+	Offboarded       hcl.Expression `hcl:"offboarded,optional"`
 }
 
 // sandboxBlock is the sandboxed tier (DESIGN-0005 § boopd.hcl).

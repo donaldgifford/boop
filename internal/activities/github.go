@@ -47,6 +47,8 @@ type InstallationAPI interface {
 	CheckRepo(ctx context.Context, repoID int64) (*github.RepoCheck, error)
 	RepoIDBySlug(ctx context.Context, slug string) (int64, error)
 	ListTree(ctx context.Context, repoID int64, ref string) (*github.Tree, error)
+	SearchOpenBotPRs(ctx context.Context, appSlug, account string) (*github.PRSearch, error)
+	GetPullRequest(ctx context.Context, repoID int64, number int) (*github.PullRequest, error)
 	SetDiscoveredLimit(limit int)
 }
 

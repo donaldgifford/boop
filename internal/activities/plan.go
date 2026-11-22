@@ -57,6 +57,7 @@ func (a *Activities) PlanRun(ctx context.Context, in *workflows.PlanRunInput) (*
 		Cadence:     cadence,
 		Settle:      a.cfg.Ingest.Settle,
 		MinInterval: a.cfg.Ingest.MinInterval,
+		Record:      a.cfg.Store.Enabled,
 	}
 	managers, truncated := in.Managers, false
 	if res.HasFloor() && in.RepoID > 0 && in.DefaultBranch != "" {

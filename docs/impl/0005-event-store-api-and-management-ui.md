@@ -201,6 +201,204 @@ Later the same day, after the mockup:
   in `optimizeDeps.include`, because the package ships source
   (`ui/web/vite.config.ts`).
 
+## Findings (Phase 2)
+
+Choices made while writing the schema, where the design left the detail
+open:
+
+- **The idempotency key is its own table.** Postgres requires a unique
+  constraint on a partitioned table to include the partition key, so
+  `events.key` cannot be unique across months. `event_keys(key,
+  occurred_at)` is unpartitioned; `Append` inserts the key first in the
+  same transaction and skips the event when it exists. `drop_partitions`
+  prunes old keys with their partitions.
+- **`events` has a default partition** for anything outside the monthly
+  ones, such as a replayed log older than the first partition.
+  `drop_partitions` deletes its old rows too.
+- **Projections have no foreign keys.** They are rebuilt from events, and
+  an apply must not fail because a repository's events arrived before its
+  installation's.
+- **Ingest may DELETE `dashboard_items`.** `dashboard.updated` replaces a
+  repository's items, which the role table in DESIGN-0004 did not list.
+- **`boopd_ro`'s parameters** (`default_transaction_read_only`, a 5 s
+  `statement_timeout`) are set by `0003_grants.sql` when the owner may
+  alter roles, and warned about otherwise. The API's pool sets both on
+  every connection (9.6), so a managed owner without `CREATEROLE` is
+  covered.
+- **`store_meta.schema_version`** is what `RequireVersion` reads, since
+  every role can read it and only the owner can read goose's table.
+
+## Findings (Phase 3)
+
+- **Kinds with no projection** (`pr.checkbox`, `action.recheck`) have no
+  apply. Their events are recorded, and their tests check that no
+  projection changes.
+- **Repository state names.** `run.stalled` sets `stalled`,
+  `run.capacity-denied` sets `waiting`, and `run.budget-wait` sets
+  `rate-limited`. A `run.finished` that `Failed` or `TimedOut` sets
+  `errored`; any other outcome sets `idle`.
+- **A run seen before its repository's onboarding** creates a placeholder
+  row whose lifecycle guard is `-infinity`, so the onboarding still
+  applies when it arrives.
+- **Arrival order.** Rebuild equals the incremental result for the
+  recorded log, which delivers PR, delivery, run, installation and
+  dashboard-tick events out of order. Two orders still differ:
+  - a tick that arrives before the rewrite that first lists its item is
+    dropped incrementally;
+  - an offboarding that arrives before its onboarding leaves
+    `onboarded_at` empty.
+
+  GitHub and the worker do not produce either today. Run `boopd store
+  rebuild` if one is ever seen.
+- **Rebuild is one transaction as the owner.** Writers block on the
+  truncated tables until it commits, then apply on top, so no event is
+  lost or applied twice.
+
+## Findings (Phase 4)
+
+- **purl details the design's table left open:**
+  - Docker images outside Docker Hub carry their registry as
+    `repository_url`.
+  - A digest version makes an `oci` purl whose `repository_url` is the
+    full image path.
+  - A GitHub Action at a path (`actions/cache/save`) keeps the path as
+    the subpath.
+  - PyPI names are normalised (lower case, `_` to `-`).
+  - The `run.finished` apply computes `purl_from`, `purl_to` and
+    `dependencies.purl` at write time. A dependency's purl uses
+    `currentVersion`, so a range with no resolved version has none.
+- **The real Renovate 44 live fixture already has deps** (140, from a
+  run against a scratch repository). The golden pins them, so there was
+  nothing to re-record. `PackageName` falls back to `depName`, which
+  Renovate omits when the two match.
+- **The dashboard's last box follows a rule.** Renovate writes
+  `<!-- manual job -->` after a `---` that follows Detected Dependencies.
+  The parser ends a section at a rule, so that box has no section.
+- **Global boxes** (`rebase-all-open-prs`, `create-all-rate-limited-prs`,
+  `create-all-awaiting-schedule-prs`, `approve-all-pending-prs`, `manual
+  job`, `create-config-migration-pr`) are items with no branch, so a
+  tick on one is found by `Diff` like any other.
+- **The proxmox-go-sdk#34 fixtures come from the issue's edit history**
+  (GraphQL `userContentEdits`). `internal/renovate/dashboard/testdata/README.md`
+  records the query and which revision is which.
+
+## Findings (Phase 5)
+
+- **Recording is off the critical path.** `RepoWorkflow` starts
+  `RecordRun` and `RecordEvents` without waiting for them. It waits for
+  any still in flight only before it ends or continues as new. Both
+  retry without limit at low priority (`storeOptions`), so a store outage
+  delays the next ContinueAsNew, not a run.
+- **Identifiers:**
+  - The `runs` id is `<workflow run id>:<attempt>`. The run's events are
+    `run:<run id>:started` and `run:<run id>:finished`.
+  - Decision keys are `wf:<workflow id>:<run id>:<seq>`, with
+    `RepoState.RecordSeq` carried through ContinueAsNew.
+  - `RepoState.CauseKey` is the last `run-scheduled` or `action.recheck`
+    key, and it becomes the next run's `cause_key`.
+- **What is recorded where:**
+  - `repo.run-scheduled` is recorded for the first due time, each cadence
+    decision and each webhook event.
+  - `run.budget-wait` and `run.capacity-denied` are recorded once per
+    acquire, not on every retry.
+  - `run.stalled` is recorded when the stall limit is reached.
+- **Gating.** `GetVersion("store-record")` plus `RunPlan.Record` for
+  `RepoWorkflow`, and plus `DiscoveryInput.Record` for
+  `DiscoveryWorkflow`. The discovery Schedule's input carries `Record`
+  from `store.enabled`, and the worker updates the Schedule at start.
+- **Workflows do not import `internal/store`** (a depguard rule). They
+  carry the kind strings and plain record types, and a test keeps the
+  kinds in the store's catalogue. The `delivery` cause of a webhook
+  decision waits for Phase 6's delivery keys.
+- **Replay.** The histories recorded before the gate are kept as
+  `*-pre-store.json`. The re-recorded set carries the gate's marker, and
+  two new histories record to the store.
+- **The append outcome label is `applied`**, as in DESIGN-0004's metrics
+  table, not `appended`.
+
+## Findings (Phase 6)
+
+- **StoreSink runs after the answer is written** and before the handler
+  returns, so GitHub sees the 2xx only after ingest has recorded the
+  delivery. That is what lets the audit call a listed 2xx without a
+  `delivery.received` missed, without a grace period. A store failure is
+  logged and counted by `boopd_store_append_total{outcome="error"}`. It
+  never changes the answer. The append is bounded by
+  `StoreAppendTimeout` (5 s).
+- **Keys:**
+  - `delivery.received` is
+    `delivery:<guid>:received:<received at, RFC3339Nano>`, so a
+    redelivery of the same GUID is a new event.
+  - Derived events are `delivery:<guid>:<kind>[:i]`, with the received
+    key as their cause.
+  - Audit events are `audit:<guid>:<newest GitHub attempt id>:<kind>`.
+    A lost cursor re-reads to duplicates, and a later attempt is new.
+- **The audit writes attempt 1**, the row `delivery.received` writes,
+  so GitHub's status and ingest's outcome share one `webhook_deliveries`
+  row per GUID. Delivery IDs that are not UUIDs (only tests send them)
+  are not recorded.
+- **Missed takes precedence over redelivered.** A 2xx redelivery that
+  ingest has no record of is still missed.
+- **`boopd ingest` opens the store before dialling Temporal**, so a
+  missing DSN or an unmigrated schema fails at start.
+- **`docs/config.md`'s `store` example was not valid HCL.** It used
+  one-line blocks with two attributes, which HCL rejects, and is now
+  spelled out. No test decodes that example; `examples/boopd.hcl` only
+  mentions the block in a comment.
+- **Open from Phase 5:** a webhook decision's `cause_key` is still the
+  workflow's own key. The received key carries the receipt time, which
+  the workflow does not know. `Changed.DeliveryID` reaches the workflow,
+  so the API can join a decision to its delivery on `delivery_id`
+  instead.
+
+## Findings (Phase 7)
+
+- **The search is scoped to the installation's account.** An
+  installation token's search also covers public repositories elsewhere.
+  The query is `is:pr is:open author:app/<slug> user:<account>`, and the
+  account comes from `ListInstallations`. The slug is the bot login
+  without `[bot]`: `webhook.bot` when set, else `<app name>[bot]`.
+- **What left the open set:** the PRs the store holds open in the
+  installation's repositories (`OpenPullRequests`, joined on
+  `repositories.installation_id`) that the search did not list. A PR or
+  repository that answers 404 is skipped. Offboarding removes the
+  repository's rows.
+- **`pr.synced` keys** are
+  `reconcile:<repo>:<number>:<updated_at>:<state>`. A second pass over
+  unchanged PRs appends only duplicates, and `apply_pr`'s guard on
+  `gh_updated_at` keeps a newer webhook state over a stale search
+  answer.
+- **Discovery runs it after the installations' passes** and only when
+  recording, behind `GetVersion("pr-reconcile")`. It runs at low
+  priority with a 30-minute StartToClose, a heartbeat on every read and
+  three attempts. A failure counts in `DiscoveryResult.ReconcileFailed`.
+  The recording discovery history from Phase 5 is kept as
+  `discovery-store-record-pre-reconcile.json`.
+- GitHub's search returns at most 1000 results, so a fleet with more open
+  bot PRs than that on one account syncs only the first 1000 per pass.
+
+## Findings (Phase 8)
+
+- **The events cutoff is rounded down to its month.** `drop_partitions`
+  deletes idempotency keys and default-partition rows older than the
+  time it is given. With the exact cutoff, a partition that stays would
+  lose its events' keys. Rounding to the month keeps events, keys and
+  the default partition expiring together, a month at a time.
+- **The offboarded rule needed a grant.** Migration 0004 gives
+  `boopd_worker` DELETE on `dashboard_items` and `dashboards`, which
+  ingest otherwise owns. `SchemaVersion` is now 4, so a worker or ingest
+  from this build refuses to start until `boopd migrate` has run.
+- **One activity, one rule.** `StoreMaintenanceWorkflow` runs
+  `MaintainStore` for each rule in turn, at low priority with three
+  attempts. A failed rule is counted, and the next day's pass catches
+  up. The rule names live in both packages (depguard), and a test keeps
+  them in step.
+- **The clock override is the workflow's start time**, passed as
+  `MaintainStoreInput.Now`. `ensure_partitions` still uses the
+  database's clock, which is right for creating months ahead.
+- A retention of `0` keeps everything for that rule. Partitions are
+  still created.
+
 ## Implementation Phases
 
 Each phase ends with `just lint`, `just test` and its own checks green,
@@ -210,19 +408,19 @@ with one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 1.1 Status changes: DESIGN-0004 → Approved; ADR-0006 → Accepted,
+- [x] 1.1 Status changes: DESIGN-0004 → Approved; ADR-0006 → Accepted,
   with "realised by DESIGN-0004".
-- [ ] 1.2 Go modules: `github.com/jackc/pgx/v5`,
+- [x] 1.2 Go modules: `github.com/jackc/pgx/v5`,
   `github.com/pressly/goose/v3`, `github.com/coreos/go-oidc/v3`,
   `github.com/getkin/kin-openapi`. Tools as `go tool` in `go.mod`:
   `oapi-codegen` v2.8.0 and `sqlc` (OQ4).
-- [ ] 1.3 `mise.toml`: pins for `bun` (1.3.14) and `vacuum`. Playwright
+- [x] 1.3 `mise.toml`: pins for `bun` (1.3.14) and `vacuum`. Playwright
   runs from its pinned image, not mise.
-- [ ] 1.4 Test database (OQ2): `internal/store/storetest` starts a
+- [x] 1.4 Test database (OQ2): `internal/store/storetest` starts a
   pinned `postgres:17` container through Docker for tests under the
   `integration` tag, like `temporaltest` for the dev server. `just
   test-integration` covers it, and CI's integration job gets Docker.
-- [ ] 1.5 `justfile` recipes: `generate-sql`, `generate-api`, `lint-api`
+- [x] 1.5 `justfile` recipes: `generate-sql`, `generate-api`, `lint-api`
   (vacuum plus drift), `lint-sql` (sqlc vet plus drift), and `ui-*`
   (install, lint, test, build, e2e, visual).
 
@@ -236,13 +434,13 @@ with one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 2.1 `internal/store/migrations/0001_events.sql`:
+- [x] 2.1 `internal/store/migrations/0001_events.sql`:
   - `events`, partitioned by month on `occurred_at`;
   - a unique `key` (OQ7);
   - the indexes from DESIGN-0004;
   - `ensure_partitions(months_ahead int)` and `drop_partitions(before
     timestamptz)` as `SECURITY DEFINER` functions.
-- [ ] 2.2 `0002_projections.sql`:
+- [x] 2.2 `0002_projections.sql`:
   - `installations`, `repositories`, `runs`;
   - `branch_updates`, `dependencies`;
   - `pull_requests`, `dashboard_items`;
@@ -250,17 +448,17 @@ with one commit per numbered task. The PR split is in OQ1.
   - `store_meta(schema_version)`.
 
   Keys and columns are as in DESIGN-0004 § Tables.
-- [ ] 2.3 `0003_grants.sql`: grants to the existing roles `boopd_worker`,
+- [x] 2.3 `0003_grants.sql`: grants to the existing roles `boopd_worker`,
   `boopd_ingest` and `boopd_ro` (OQ8). `events` has no UPDATE or DELETE
   for anyone but the owner, and `boopd_ro` has
   `default_transaction_read_only`.
-- [ ] 2.4 `internal/store/migrate.go`: a goose Provider over the
+- [x] 2.4 `internal/store/migrate.go`: a goose Provider over the
   embedded files, under an advisory lock, with the version table
   `goose_boopd_version`. `RequireVersion(ctx, pool, n)` makes a role
   refuse to start below the schema it needs.
-- [ ] 2.5 `boopd migrate --config <file>` in `cmd/boopd`, using the
+- [x] 2.5 `boopd migrate --config <file>` in `cmd/boopd`, using the
   owner DSN from `store.owner_dsn_secret_ref` (migrate only).
-- [ ] 2.6 Tests (integration): up from empty and idempotent re-run;
+- [x] 2.6 Tests (integration): up from empty and idempotent re-run;
   role grants (a `boopd_ro` INSERT fails, a `boopd_ingest` UPDATE on
   `events` fails); partition functions.
 
@@ -275,25 +473,25 @@ with one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 3.1 `internal/store/event.go`: `Event{Key, OccurredAt, Kind,
+- [x] 3.1 `internal/store/event.go`: `Event{Key, OccurredAt, Kind,
   Source, InstallationID, RepoID, PRNumber, Actor, CauseKey, Summary,
   Data}`. `Data` is a typed struct per kind with `V int`, registered in
   a `kinds` table (OQ5).
-- [ ] 3.2 `internal/store/append.go`: `Append(ctx, events ...Event)`.
+- [x] 3.2 `internal/store/append.go`: `Append(ctx, events ...Event)`.
   - In one transaction it runs `INSERT … ON CONFLICT (key) DO NOTHING
     RETURNING id`, then the kind's apply for each inserted row.
   - A duplicate skips its apply.
   - It updates `boopd_store_append_total{role,kind,outcome}` and
     `boopd_store_append_seconds`.
-- [ ] 3.3 sqlc queries in `internal/store/queries/*.sql` and the
+- [x] 3.3 sqlc queries in `internal/store/queries/*.sql` and the
   generated package `internal/store/db`. jsonb maps to `json.RawMessage`.
-- [ ] 3.4 Applies (`internal/store/apply_*.go`), one per kind in the
+- [x] 3.4 Applies (`internal/store/apply_*.go`), one per kind in the
   DESIGN-0004 catalogue. Each applies the order guard: it compares the
   source timestamp, or `gh_updated_at` for PRs, and ignores older data.
-- [ ] 3.5 `boopd store rebuild --config <file>`: truncate the
+- [x] 3.5 `boopd store rebuild --config <file>`: truncate the
   projections, then stream `events` in `(occurred_at, id)` order through
   the same applies, in batches. The owner DSN is required.
-- [ ] 3.6 Tests (integration), per kind:
+- [x] 3.6 Tests (integration), per kind:
   - apply a fixture;
   - re-apply (no-op);
   - apply an older event (ignored).
@@ -310,17 +508,17 @@ with one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 4.1 `internal/purl`: `FromRenovate(datasource, packageName,
+- [x] 4.1 `internal/purl`: `FromRenovate(datasource, packageName,
   version string) (string, bool)` with DESIGN-0004's table. It
   percent-encodes the namespace (`@types/node`), handles docker library
   images and digests, and returns `false` when there is no type. Unit
   table tests.
-- [ ] 4.2 `internal/renovate/report.go`: decode `packageFiles[].deps[]`
+- [x] 4.2 `internal/renovate/report.go`: decode `packageFiles[].deps[]`
   (`depName`, `packageName`, `datasource`, `currentValue`,
   `currentVersion`, `depType`, `skipReason`). `RunResult.Dependencies`
   carries them, capped (OQ5). Refresh the testdata from a real report
   with deps.
-- [ ] 4.3 `internal/renovate/dashboard`: `Parse(body string) (Snapshot,
+- [x] 4.3 `internal/renovate/dashboard`: `Parse(body string) (Snapshot,
   error)`.
   - Sections are keyed by machine marker (`approve-branch`,
     `unschedule-branch`, `unlimit-branch`, `retry-branch`,
@@ -328,10 +526,10 @@ with one commit per numbered task. The PR split is in OQ1.
     unknown ones).
   - Each item records its branch, title, dependencies and ticked state.
   - `Diff(before, after Snapshot) []Tick` finds what a human ticked.
-- [ ] 4.4 Testdata: the proxmox-go-sdk#34 bodies from before and after
+- [x] 4.4 Testdata: the proxmox-go-sdk#34 bodies from before and after
   the pin fix, a body with every section, an unknown marker, and a bot
   rewrite versus a human tick.
-- [ ] 4.5 `boopd_dashboard_parse_total{outcome}`.
+- [x] 4.5 `boopd_dashboard_parse_total{outcome}`.
 
 #### Success Criteria
 
@@ -343,36 +541,36 @@ with one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 5.1 `internal/config`: the `store` block (`enabled`, the four DSN
+- [x] 5.1 `internal/config`: the `store` block (`enabled`, the four DSN
   secret refs: owner, worker, ingest, ro; `retention`), validation, and
   `docs/config.md` rows.
-- [ ] 5.2 The worker builds a pgx pool from the worker DSN when
+- [x] 5.2 The worker builds a pgx pool from the worker DSN when
   `store.enabled`, checks `RequireVersion`, and closes the pool on stop.
-- [ ] 5.3 `RecordRun` activity. It maps `RunResult` to `run.started` and
+- [x] 5.3 `RecordRun` activity. It maps `RunResult` to `run.started` and
   `run.finished` (runs, branch_updates with purls, dependencies with
   purls, the repository state). The key is `run:<run id>:<attempt>`, and
   the cause is the `run-scheduled` event key.
-- [ ] 5.4 `RecordEvents` activity for workflow decisions. The key is
+- [x] 5.4 `RecordEvents` activity for workflow decisions. The key is
   `wf:<workflow id>:<run id>:<seq>`, where `seq` is a workflow-local
   counter carried through ContinueAsNew.
-- [ ] 5.5 `storeOptions` (unlimited retry, 10 s start-to-close, low
+- [x] 5.5 `storeOptions` (unlimited retry, 10 s start-to-close, low
   priority) in `internal/workflows/options.go`.
-- [ ] 5.6 `RepoWorkflow`: call `RecordRun` after the outcome decision,
+- [x] 5.6 `RepoWorkflow`: call `RecordRun` after the outcome decision,
   and `RecordEvents` at IMPL-0004's decision points (onboarded,
   offboarded, refreshed, run-scheduled, stalled, capacity-denied,
   budget-wait). Both are gated by `store.enabled`, which `PlanRun`
   returns as `RunPlan.Record`, so a disabled store adds no activities.
-- [ ] 5.7 The `recheck` payload: `Recheck{Actor, RequestID}`, optional.
+- [x] 5.7 The `recheck` payload: `Recheck{Actor, RequestID}`, optional.
   The workflow decodes it when present (`ReceiveAsync` into a value,
   tolerating an empty payload) and records `action.recheck`. Tests with
   and without a payload (OQ9).
-- [ ] 5.8 `DiscoveryWorkflow` records `discovery.finished`, and
+- [x] 5.8 `DiscoveryWorkflow` records `discovery.finished`, and
   `discovered` signals record `repo.onboarded{via: discovery}` the first
   time.
-- [ ] 5.9 Workflow versioning: gate the new activity calls with
+- [x] 5.9 Workflow versioning: gate the new activity calls with
   `workflow.GetVersion("store-record", …)`. Extend IMPL-0004's replay
   histories, then replay.
-- [ ] 5.10 Tests:
+- [x] 5.10 Tests:
   - activity tests against the test database;
   - workflow testsuite tests for the activity calls and the gating;
   - replay.
@@ -388,11 +586,11 @@ with one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 6.1 `internal/ingest`: `StoreSink` implements IMPL-0004's `Sink`.
+- [x] 6.1 `internal/ingest`: `StoreSink` implements IMPL-0004's `Sink`.
   It writes `delivery.received` with the payload subset (OQ7 of
   DESIGN-0004) using the ingest DSN. A failure is logged and counted,
   and never changes the HTTP answer.
-- [ ] 6.2 Derived events from the same delivery, appended in the same
+- [x] 6.2 Derived events from the same delivery, appended in the same
   call:
   - `pull_request.*` whose PR author is the bot gives `pr.*`;
   - a bot `issues.edited` on its dashboard gives `dashboard.updated`
@@ -400,14 +598,14 @@ with one commit per numbered task. The PR split is in OQ1.
   - a human edit gives `dashboard.ticked` (from the `changes.body.from`
     diff);
   - `installation*` events give `installation.*`.
-- [ ] 6.3 `boopd ingest` builds a pool when `store.enabled` and checks
+- [x] 6.3 `boopd ingest` builds a pool when `store.enabled` and checks
   `RequireVersion`; without the store it keeps `LogSink`.
-- [ ] 6.4 Delivery audit: `ListHookDeliveries` appends
+- [x] 6.4 Delivery audit: `ListHookDeliveries` appends
   `delivery.failed`, `delivery.redelivered` and `delivery.missed`. A GUID
   with a 2xx at GitHub and no `delivery.received` is missed, and
   `boopd_ingest_deliveries_missed_total` starts counting (IMPL-0004
   OQ6).
-- [ ] 6.5 Tests: the handler with `StoreSink` against the test database
+- [x] 6.5 Tests: the handler with `StoreSink` against the test database
   (each derived kind; a store outage still answers 202); the audit's
   missed classification.
 
@@ -421,16 +619,16 @@ with one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 7.1 `internal/platform/github`: `SearchOpenBotPRs(ctx, appSlug)`
+- [x] 7.1 `internal/platform/github`: `SearchOpenBotPRs(ctx, appSlug)`
   as one GraphQL search per installation (`is:pr is:open
   author:app/<slug>`, 100 per page), plus `GetPullRequest(repoID,
   number)` for PRs that left the open set.
-- [ ] 7.2 `ReconcilePullRequests` activity, run per installation after
+- [x] 7.2 `ReconcilePullRequests` activity, run per installation after
   each discovery pass. It appends `pr.synced` for every open PR and for
   each one that closed or merged since. Its cost goes through the budget
   `ReadRateLimit` already watches.
-- [ ] 7.3 `fakegithub`: the search query and the PR GET.
-- [ ] 7.4 Tests: reconcile against fakegithub (opened, merged and closed
+- [x] 7.3 `fakegithub`: the search query and the PR GET.
+- [x] 7.4 Tests: reconcile against fakegithub (opened, merged and closed
   while ingest was off); the order guard keeps a newer webhook state.
 
 #### Success Criteria
@@ -441,14 +639,14 @@ with one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 8.1 `StoreMaintenanceWorkflow` and its activities. They create
+- [x] 8.1 `StoreMaintenanceWorkflow` and its activities. They create
   partitions two months ahead, drop partitions past `retention.events`,
   null `webhook_deliveries.payload` past `retention.delivery_payloads`,
   delete offboarded projections past `retention.offboarded`, and delete
   `runs` past `retention.events`.
-- [ ] 8.2 A daily Schedule (`store-maintenance`, overlap `SKIP`) when
+- [x] 8.2 A daily Schedule (`store-maintenance`, overlap `SKIP`) when
   `store.enabled`.
-- [ ] 8.3 Tests (integration): each rule, with a clock override.
+- [x] 8.3 Tests (integration): each rule, with a clock override.
 
 #### Success Criteria
 

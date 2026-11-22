@@ -31,8 +31,20 @@ import (
 	"github.com/donaldgifford/boop/internal/kube"
 	"github.com/donaldgifford/boop/internal/platform"
 	"github.com/donaldgifford/boop/internal/profiles"
+	"github.com/donaldgifford/boop/internal/store"
 	"github.com/donaldgifford/boop/internal/workflows"
 )
+
+// Recorder is the worker's store: it appends events, answers the two
+// reads the worker needs (which deliveries ingest recorded, for the
+// delivery audit; which PRs the store holds open, for the PR reconcile)
+// and runs retention. *store.Store implements it.
+type Recorder interface {
+	Append(ctx context.Context, events ...store.Event) error
+	ReceivedDeliveries(ctx context.Context, guids []string) (map[string]bool, error)
+	OpenPullRequests(ctx context.Context, installationID int64) ([]store.PRRef, error)
+	Maintain(ctx context.Context, rule store.MaintenanceRule, now time.Time, r store.Retention) (int64, error)
+}
 
 // Deps are what the activities need. Config must have had ReadSecrets
 // called.
@@ -53,6 +65,8 @@ type Deps struct {
 	Timings RunTimings
 	// Now is the clock; time.Now when nil.
 	Now func() time.Time
+	// Store records runs and decisions; nil when store.enabled is false.
+	Store Recorder
 }
 
 // Activities holds every boopd activity (DESIGN-0001 § Topology and
@@ -69,6 +83,7 @@ type Activities struct {
 	runLog    *slog.Logger
 	timings   RunTimings
 	now       func() time.Time
+	store     Recorder
 
 	mu       sync.Mutex
 	appOf    map[int64]string // installation id -> app name, learned from listings
@@ -90,6 +105,7 @@ func New(deps *Deps) *Activities {
 		runLog:    deps.RunLog,
 		timings:   deps.Timings.withDefaults(),
 		now:       deps.Now,
+		store:     deps.Store,
 		appOf:     make(map[int64]string),
 		presetID:  make(map[string]int64),
 	}
@@ -204,13 +220,17 @@ func (a *Activities) minterFor(app *config.App) (platform.Minter, error) {
 // name. The budget activity registers separately (Budget.Register).
 func (a *Activities) Register(r Registry) {
 	for name, fn := range map[string]any{
-		workflows.ListInstallationsActivity:    a.ListInstallations,
-		workflows.DiscoverInstallationActivity: a.DiscoverInstallation,
-		workflows.CheckRepoActivity:            a.CheckRepo,
-		workflows.ReadRateLimitActivity:        a.ReadRateLimit,
-		workflows.RunRenovateActivity:          a.RunRenovate,
-		workflows.PlanRunActivity:              a.PlanRun,
-		workflows.ListHookDeliveriesActivity:   a.ListHookDeliveries,
+		workflows.ListInstallationsActivity:     a.ListInstallations,
+		workflows.DiscoverInstallationActivity:  a.DiscoverInstallation,
+		workflows.CheckRepoActivity:             a.CheckRepo,
+		workflows.ReadRateLimitActivity:         a.ReadRateLimit,
+		workflows.RunRenovateActivity:           a.RunRenovate,
+		workflows.PlanRunActivity:               a.PlanRun,
+		workflows.ListHookDeliveriesActivity:    a.ListHookDeliveries,
+		workflows.RecordRunActivity:             a.RecordRun,
+		workflows.RecordEventsActivity:          a.RecordEvents,
+		workflows.ReconcilePullRequestsActivity: a.ReconcilePullRequests,
+		workflows.MaintainStoreActivity:         a.MaintainStore,
 	} {
 		r.RegisterActivityWithOptions(fn, activity.RegisterOptions{Name: name})
 	}

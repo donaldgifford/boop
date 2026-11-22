@@ -1,7 +1,7 @@
 ---
 id: ADR-0006
 title: "Postgres product store written by activities"
-status: Proposed
+status: Accepted
 author: Donald Gifford
 created: 2026-10-01
 ---
@@ -27,6 +27,9 @@ created: 2026-10-01
 `boopd` keeps a Postgres store of repositories, runs and proposed updates,
 behind its own HTTP API and UI. Activities write it, and the API reads it.
 Nothing in it drives scheduling. It is built after the spike.
+
+Realised by [DESIGN-0004](../design/0004-boopd-api-and-management-ui-event-store-pr-inventory-and-estate.md)
+(accepted 2026-11-21).
 
 ## Context
 

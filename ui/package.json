@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite --config web/vite.config.ts",
     "build": "vite build --config web/vite.config.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "e2e": "playwright test",
+    "visual": "playwright test --project visual"
   },
   "dependencies": {
     "@tabler/icons-react": "^3.49.0",

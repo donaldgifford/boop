@@ -80,6 +80,9 @@ type rwProbe struct {
 	checkInputs         []CheckRepoInput
 	sandboxed           bool     // PlanRun answers the sandboxed profile "python"
 	plan                *RunPlan // PlanRun answers this when set
+
+	recordedRuns []RecordRunInput
+	recorded     []RecordedEvent
 }
 
 func newRW(t *testing.T, script ...runReply) *rwProbe {
@@ -157,6 +160,19 @@ func newRW(t *testing.T, script ...runReply) *rwProbe {
 		p.checks = p.checks[1:]
 		return &c, nil
 	}, activity.RegisterOptions{Name: CheckRepoActivity})
+
+	env.RegisterActivityWithOptions(func(_ context.Context, in *RecordRunInput) error {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		p.recordedRuns = append(p.recordedRuns, *in)
+		return nil
+	}, activity.RegisterOptions{Name: RecordRunActivity})
+	env.RegisterActivityWithOptions(func(_ context.Context, in *RecordEventsInput) error {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		p.recorded = append(p.recorded, in.Events...)
+		return nil
+	}, activity.RegisterOptions{Name: RecordEventsActivity})
 
 	env.OnSignalExternalWorkflow(mock.Anything, InstallationWorkflowID(1), "", ReportSignal, mock.Anything).Return(
 		func(_, _, _, _ string, arg any) error {

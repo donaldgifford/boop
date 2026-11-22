@@ -32,6 +32,9 @@ const (
 	PriorityHigh Priority = 1
 	// PriorityNormal is a scheduled run.
 	PriorityNormal Priority = 3
+	// PriorityLow is bookkeeping that never holds up a run: recording to
+	// the store (IMPL-0005 5.5).
+	PriorityLow Priority = 5
 )
 
 // The /rate_limit resources the budget tracks (DESIGN-0001 OQ6). The

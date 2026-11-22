@@ -25,7 +25,13 @@ import (
 	"github.com/donaldgifford/boop/internal/workflows"
 )
 
-const actionEdited = "edited"
+// GitHub actions the routing table and the store sink both read.
+const (
+	actionEdited    = "edited"
+	actionDeleted   = "deleted"
+	actionSuspend   = "suspend"
+	actionUnsuspend = "unsuspend"
+)
 
 // PushCommitCap is the most commits GitHub lists in a push payload. A
 // push at the cap may hide a config change, so it counts as one.
@@ -175,7 +181,7 @@ func touchesConfig(commits []*github.HeadCommit, paths []string) bool {
 
 // repositoryActions are the repository actions that change a slug,
 // branch or lifecycle; edited counts only with changes.default_branch.
-var repositoryActions = []string{"renamed", "transferred", "archived", "unarchived", "deleted"}
+var repositoryActions = []string{"renamed", "transferred", "archived", "unarchived", actionDeleted}
 
 // routeRepository is the repository row.
 func routeRepository(e *github.RepositoryEvent, p *Payload) []Action {
@@ -200,18 +206,18 @@ func routeInstallation(e *github.InstallationEvent, p *Payload, app *config.App)
 	switch p.Action {
 	case "created", "new_permissions_accepted":
 		return discovery(app, p.InstallationID)
-	case "suspend", "unsuspend":
+	case actionSuspend, actionUnsuspend:
 		acts := []Action{{
 			Kind:       KindSignal,
 			WorkflowID: workflows.InstallationWorkflowID(p.InstallationID),
 			Signal:     workflows.SuspendSignal,
-			Arg:        workflows.Suspend{Suspended: p.Action == "suspend"},
+			Arg:        workflows.Suspend{Suspended: p.Action == actionSuspend},
 		}}
-		if p.Action == "unsuspend" {
+		if p.Action == actionUnsuspend {
 			acts = append(acts, discovery(app, p.InstallationID)...)
 		}
 		return acts
-	case "deleted":
+	case actionDeleted:
 		return changedEach(e.Repositories, p, workflows.ChangedReasonInstallationDeleted)
 	}
 	return nil

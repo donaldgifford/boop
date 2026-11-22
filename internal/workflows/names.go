@@ -29,6 +29,10 @@ limitations under the License.
 // CapacityWorkflow (capacity.go) is a second lease entity on the same
 // lease book (leases.go): the cluster-wide runs.max_concurrent cap a
 // RepoWorkflow takes after its installation lease (IMPL-0002).
+// RepoWorkflow and DiscoveryWorkflow record runs and decisions to the
+// event store through the RecordRun and RecordEvents activities, behind
+// the store-record version gate and store.enabled (repo_record.go,
+// IMPL-0005 Phase 5). The store is never imported here.
 // The package moves to donaldgifford/x in Phase 0 (ADR-0007).
 package workflows
 
@@ -45,6 +49,9 @@ const (
 	// DeliveryAuditWorkflowName audits the App's webhook deliveries
 	// (DESIGN-0003 § Delivery audit).
 	DeliveryAuditWorkflowName = "DeliveryAuditWorkflow"
+	// StoreMaintenanceWorkflowName applies the store's retention daily
+	// (DESIGN-0004 § Retention).
+	StoreMaintenanceWorkflowName = "StoreMaintenanceWorkflow"
 )
 
 // Activity names (DESIGN-0001 § Topology and packages). The activities
@@ -60,6 +67,15 @@ const (
 	PlanRunActivity              = "PlanRun"
 	RunRenovateActivity          = "RunRenovate"
 	ListHookDeliveriesActivity   = "ListHookDeliveries"
+	// ReconcilePullRequestsActivity syncs the store's bot PRs with
+	// GitHub after each discovery pass (DESIGN-0004 OQ5).
+	ReconcilePullRequestsActivity = "ReconcilePullRequests"
+	// MaintainStoreActivity runs one retention rule.
+	MaintainStoreActivity = "MaintainStore"
+	// RecordRunActivity and RecordEventsActivity write to the event
+	// store (DESIGN-0004 § Workflow and activity changes).
+	RecordRunActivity    = "RecordRun"
+	RecordEventsActivity = "RecordEvents"
 )
 
 // Signal names accepted by RepoWorkflow (DESIGN-0001 § RepoWorkflow,
@@ -130,6 +146,15 @@ func DeliveryAuditScheduleID(app string) string {
 	return "delivery-audit/" + app
 }
 
+// StoreMaintenanceScheduleID is the daily retention Schedule's ID; there
+// is one per Temporal namespace.
+const StoreMaintenanceScheduleID = "store-maintenance"
+
+// MaintenanceRules are the store's retention rules, in the order
+// StoreMaintenanceWorkflow runs them. The store's catalogue is the same
+// (a test keeps them in step).
+var MaintenanceRules = []string{"partitions", "delivery-payloads", "offboarded", "runs"}
+
 // DiscoveryWorkflowID is the workflow ID the Schedule's action starts.
 // The server appends the fire time, giving ADR-0002's
 // discovery/<platform>/<schedule time>.
@@ -157,8 +182,8 @@ const (
 	// MetricDeliveriesFailed counts webhook deliveries GitHub reports
 	// failed, by app and event (the delivery audit).
 	MetricDeliveriesFailed = "boopd_ingest_deliveries_failed_total"
-	// MetricDeliveriesMissed counts deliveries GitHub sent that ingest
-	// never recorded. It needs the store (IMPL-0005); until then the
-	// audit registers it at zero.
+	// MetricDeliveriesMissed counts deliveries GitHub sent with a 2xx
+	// that ingest never recorded, by app and event. It needs the store;
+	// without it the audit counts none.
 	MetricDeliveriesMissed = "boopd_ingest_deliveries_missed_total"
 )

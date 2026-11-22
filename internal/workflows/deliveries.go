@@ -23,7 +23,8 @@ import (
 // DeliveryAuditWorkflow audits one App's webhook deliveries (DESIGN-0003
 // § Delivery audit): one ListHookDeliveries call for the deliveries
 // since its cursor, the failed ones counted in
-// boopd_ingest_deliveries_failed_total{app,event}, then a wait of Every
+// boopd_ingest_deliveries_failed_total{app,event} and the missed ones in
+// boopd_ingest_deliveries_missed_total{app,event}, then a wait of Every
 // and ContinueAsNew with the new cursor. The delivery-audit/<app>
 // Schedule starts it, and with overlap skip restarts it only if the
 // chain ends. A failed pass keeps the cursor, so the next one re-reads.
@@ -49,17 +50,18 @@ func DeliveryAuditWorkflow(ctx workflow.Context, in *DeliveryAuditInput) error {
 	return workflow.NewContinueAsNewError(ctx, DeliveryAuditWorkflowName, &next)
 }
 
-// recordDeliveries counts one pass's failed deliveries by event, and
-// registers the missed counter for the same events at zero.
+// recordDeliveries counts one pass's failed and missed deliveries by
+// event.
 func recordDeliveries(ctx workflow.Context, app string, res *DeliveryAudit) {
 	metrics := workflow.GetMetricsHandler(ctx)
-	failed := 0
+	failed, missed := 0, 0
 	for _, c := range res.Counts {
 		tagged := metrics.WithTags(map[string]string{"app": app, "event": c.Event})
 		tagged.Counter(MetricDeliveriesFailed).Inc(int64(c.Failed))
-		tagged.Counter(MetricDeliveriesMissed).Inc(0)
+		tagged.Counter(MetricDeliveriesMissed).Inc(int64(c.Missed))
 		failed += c.Failed
+		missed += c.Missed
 	}
 	workflow.GetLogger(ctx).Info("delivery audit", "app", app, "read", res.Read, "pages", res.Pages,
-		"failed", failed, "newest", res.Newest)
+		"failed", failed, "missed", missed, "newest", res.Newest)
 }
