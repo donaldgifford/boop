@@ -80,11 +80,12 @@ release:
   header: |
     ## Release {{ .Tag }} ({{ .Date }})
 
-    The container image and Helm chart for this release carry the same
+    The container images and Helm chart for this release carry the same
     version:
 
     ```text
     ghcr.io/donaldgifford/boopd:{{ .Version }}
+    ghcr.io/donaldgifford/boopd-ui:{{ .Version }}
     oci://ghcr.io/donaldgifford/charts/boopd --version {{ .Version }}
     ```
 

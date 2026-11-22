@@ -49,7 +49,7 @@ helm-config-validate:
     #!/usr/bin/env bash
     set -euo pipefail
     mkdir -p {{ build_dir }}
-    for v in {{ chart_dir }}/ci/ci-values.yaml {{ chart_dir }}/tests/values/example.yaml {{ chart_dir }}/tests/values/ingest.yaml {{ chart_dir }}/tests/values/sandbox-report.yaml {{ chart_dir }}/tests/values/sandbox-enforce.yaml; do
+    for v in {{ chart_dir }}/ci/ci-values.yaml {{ chart_dir }}/tests/values/example.yaml {{ chart_dir }}/tests/values/ingest.yaml {{ chart_dir }}/tests/values/sandbox-report.yaml {{ chart_dir }}/tests/values/sandbox-enforce.yaml {{ chart_dir }}/tests/values/store-api-ui.yaml; do
         out="{{ build_dir }}/$(basename "$v" .yaml).hcl"
         helm template {{ chart_name }} {{ chart_dir }} -f "$v" --show-only templates/config.yaml \
             | yq '.data["boopd.hcl"]' > "$out"

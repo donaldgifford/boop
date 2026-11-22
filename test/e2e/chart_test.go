@@ -19,6 +19,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -55,6 +56,7 @@ type chartHarness struct {
 	env    *Env
 	srv    *temporaltest.Server
 	repoID int64
+	caPEM  []byte // the e2e CA, which the stub GitHub's and the mock issuer's certificate chain to
 }
 
 // TestChart_WorkerRunsUnderChartRBAC (IMPL-0001 task 7.8, the chart
@@ -195,8 +197,13 @@ func installChart(ctx context.Context, t *testing.T, opts ...chartOption) *chart
 	if err := os.WriteFile(file, b, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	helm(ctx, t, "upgrade", "--install", "boopd", filepath.Join("..", "..", "charts", "boopd"),
-		"--namespace", env.Namespace, "--values", file, "--wait", "--timeout", "4m")
+	install := []string{
+		"upgrade", "--install", "boopd", filepath.Join("..", "..", "charts", "boopd"),
+		"--namespace", env.Namespace, "--values", file, "--wait", "--timeout", "4m",
+	}
+	if out, err := exec.CommandContext(ctx, "helm", install...).CombinedOutput(); err != nil {
+		t.Fatalf("helm %s: %v\n%s\n%s", strings.Join(install, " "), err, out, podLogs(ctx, env))
+	}
 	t.Cleanup(func() { //nolint:contextcheck // cleanup runs after ctx is canceled
 		if t.Failed() {
 			t.Logf("worker log:\n%s", h.workerLogs(context.Background(), t))
@@ -212,7 +219,10 @@ func installChart(ctx context.Context, t *testing.T, opts ...chartOption) *chart
 func (h *chartHarness) deployStubGitHub(ctx context.Context, t *testing.T) {
 	t.Helper()
 	ns := h.env.Namespace
-	caPEM, certPEM, keyPEM := issue(t, "stub-github", "stub-github."+ns+".svc")
+	// The certificate also serves the mock issuer (store_test.go), so one
+	// CA covers both.
+	caPEM, certPEM, keyPEM := issue(t, "stub-github", "stub-github."+ns+".svc", "mock-oidc", "mock-oidc."+ns+".svc")
+	h.caPEM = caPEM
 	h.secret(ctx, t, "e2e-ca", map[string][]byte{"ca.crt": caPEM})
 	h.secret(ctx, t, "stub-github-tls", map[string][]byte{"tls.crt": certPEM, "tls.key": keyPEM})
 
@@ -345,6 +355,25 @@ func (h *chartHarness) workerLogs(ctx context.Context, t *testing.T) string {
 	return string(raw)
 }
 
+// podLogs is every pod's log in the test namespace, for a failed
+// install.
+func podLogs(ctx context.Context, env *Env) string {
+	pods, err := env.Clientset.CoreV1().Pods(env.Namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return fmt.Sprintf("(pods: %v)", err)
+	}
+	var b strings.Builder
+	for i := range pods.Items {
+		p := &pods.Items[i]
+		raw, err := env.Clientset.CoreV1().Pods(env.Namespace).GetLogs(p.Name, &corev1.PodLogOptions{}).DoRaw(ctx)
+		if err != nil {
+			raw = []byte(err.Error())
+		}
+		fmt.Fprintf(&b, "--- %s (%s):\n%s\n", p.Name, p.Status.Phase, raw)
+	}
+	return b.String()
+}
+
 // records returns the JSON log records in logs whose msg is msg.
 func records(logs, msg string) []map[string]any {
 	var out []map[string]any
@@ -371,7 +400,9 @@ func helm(ctx context.Context, t *testing.T, args ...string) {
 // holds for it: boopd's config refuses an image without one. An imported
 // image has no repo digest (it was never pulled), so the kubelet could
 // not find it by digest; tagging it with its digested name adds one.
-// BOOPD_E2E_STUB_DIGEST overrides the lookup.
+// BOOPD_E2E_STUB_DIGEST overrides the lookup. Parallel tests share the
+// node, so tagging is serialized and skipped once the digested name
+// exists: a concurrent tag --force removes it for a moment.
 func stubImageDigest(ctx context.Context, t *testing.T, image string) string {
 	t.Helper()
 	if d := os.Getenv("BOOPD_E2E_STUB_DIGEST"); d != "" {
@@ -390,6 +421,8 @@ func stubImageDigest(ctx context.Context, t *testing.T, image string) string {
 		}
 		return string(out)
 	}
+	stubTagMu.Lock()
+	defer stubTagMu.Unlock()
 	out := ctr("ls", "name=="+image)
 	for _, line := range strings.Split(out, "\n") {
 		f := strings.Fields(line)
@@ -398,13 +431,18 @@ func stubImageDigest(ctx context.Context, t *testing.T, image string) string {
 			if i := strings.LastIndex(image, ":"); i > strings.LastIndex(image, "/") {
 				repo = image[:i]
 			}
-			ctr("tag", "--force", image, repo+"@"+f[2])
+			if digested := repo + "@" + f[2]; !strings.Contains(ctr("ls", "name=="+digested), digested) {
+				ctr("tag", image, digested)
+			}
 			return image + "@" + f[2]
 		}
 	}
 	t.Fatalf("no digest for %s in the k3d node:\n%s", image, out)
 	return ""
 }
+
+// stubTagMu serializes stubImageDigest's ctr calls across parallel tests.
+var stubTagMu sync.Mutex
 
 // issue returns a fresh CA and a serving certificate for names, PEM.
 func issue(t *testing.T, names ...string) (caPEM, certPEM, keyPEM []byte) {

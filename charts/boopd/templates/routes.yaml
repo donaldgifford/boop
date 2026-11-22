@@ -1,0 +1,76 @@
+{{- /*
+The API's and the UI's Ingress and HTTPRoute. The API's route only its
+/api prefix (machine clients; the UI reaches the API in-cluster), never
+/healthz, /readyz or metrics. The UI's route everything to the BFF,
+which serves its own /api proxy.
+*/ -}}
+{{- range $role, $prefix := dict "api" "/api" "ui" "/" }}
+{{- $v := get $.Values $role }}
+{{- if $v.enabled }}
+{{- $name := include "boopd.role.fullname" (list $ $role) }}
+{{- if $v.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "boopd.role.labels" (list $ $role) | nindent 4 }}
+  {{- with $v.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with $v.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with $v.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range $v.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          - path: {{ $prefix }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $name }}
+                port:
+                  name: http
+    {{- end }}
+{{- end }}
+{{- if $v.httpRoute.enabled }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "boopd.role.labels" (list $ $role) | nindent 4 }}
+  {{- with $v.httpRoute.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- required (printf "%s.httpRoute.parentRefs needs at least one Gateway" $role) $v.httpRoute.parentRefs | toYaml | nindent 4 }}
+  {{- with $v.httpRoute.hostnames }}
+  hostnames:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: {{ $prefix }}
+      backendRefs:
+        - name: {{ $name }}
+          port: {{ $v.service.port }}
+{{- end }}
+{{- end }}
+{{- end }}

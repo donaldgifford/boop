@@ -26,10 +26,15 @@ const VARIANTS: Readonly<Record<string, Variant>> = {
   closed: "ignored",
   ignored: "ignored",
   idle: "muted",
+  skipped: "muted",
+  timedout: "destructive",
+  "waiting-budget": "warning",
 };
 
+// stateVariant matches case-insensitively: run outcomes arrive as
+// "Succeeded", phases and states in lower case.
 export function stateVariant(state: string): Variant {
-  return VARIANTS[state] ?? "muted";
+  return VARIANTS[state.toLowerCase()] ?? "muted";
 }
 
 export function StateBadge({ state }: { state: string }) {

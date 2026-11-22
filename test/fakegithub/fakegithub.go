@@ -62,6 +62,9 @@ type Repo struct {
 	// marks the listing truncated, as GitHub does past its limits.
 	Files         []string
 	TreeTruncated bool
+	// Installation limits the repository to one installation's listing;
+	// zero lists it under every installation.
+	Installation int64
 }
 
 // configPath is where the repository's config file lives.
@@ -642,16 +645,40 @@ func (s *Server) listRepos(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, message("bad gateway"))
 		return
 	}
-	lo := min((page-1)*per, len(s.repos))
-	hi := min(lo+per, len(s.repos))
+	repos := s.reposFor(tokenInstallation(r, s.mints))
+	lo := min((page-1)*per, len(repos))
+	hi := min(lo+per, len(repos))
 	out := make([]map[string]any, 0, hi-lo)
 	for i := lo; i < hi; i++ {
-		out = append(out, repoJSON(&s.repos[i]))
+		out = append(out, repoJSON(&repos[i]))
 	}
-	if hi < len(s.repos) {
+	if hi < len(repos) {
 		w.Header().Set("Link", fmt.Sprintf(`<%s/api/v3/installation/repositories?per_page=%d&page=%d>; rel="next"`, s.URL, per, page+1))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"total_count": len(s.repos), "repositories": out})
+	writeJSON(w, http.StatusOK, map[string]any{"total_count": len(repos), "repositories": out})
+}
+
+// reposFor is the repositories installation lists: those limited to it
+// and those under every installation. s.mu is held.
+func (s *Server) reposFor(installation int64) []Repo {
+	out := make([]Repo, 0, len(s.repos))
+	for i := range s.repos {
+		if s.repos[i].Installation == 0 || s.repos[i].Installation == installation {
+			out = append(out, s.repos[i])
+		}
+	}
+	return out
+}
+
+// tokenInstallation is the installation r's token was minted for, or 0.
+func tokenInstallation(r *http.Request, mints []Mint) int64 {
+	tok := strings.TrimPrefix(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), "token ")
+	for _, m := range mints {
+		if m.Token == tok {
+			return m.InstallationID
+		}
+	}
+	return 0
 }
 
 func (s *Server) rateLimit(w http.ResponseWriter) {

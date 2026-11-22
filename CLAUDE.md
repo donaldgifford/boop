@@ -150,12 +150,16 @@ internal/store/           # Postgres event store (DESIGN-0004): goose migrations
 internal/store/storetest/ # throwaway Postgres container with the four roles, for integration tests
 test/stub-renovate/       # stub Renovate image for e2e (bake target stub-renovate; never pushed)
 test/stub-github/         # test/fakegithub over TLS as an image for the chart e2e (bake target stub-github; never pushed)
+test/stub-oidc/           # the UI's mock OIDC issuer as an image for the store, API and UI e2e (bake target stub-oidc; never pushed)
 test/e2e/                 # k3d e2e suite, build tag e2e; `just e2e`
 test/fakegithub/          # in-process GitHub (App, mint/revoke, paging, probes, /rate_limit) for tests
 examples/boopd.hcl        # the design's example config; `boopd config validate` keeps it loadable
 docs/webhooks.md          # enabling webhook ingest: App settings, secret, exposure, verification, audit, rollback
 docs/config.md            # boopd.hcl reference: every setting, default, chart key; a test keeps it complete
+docs/api.md               # the API: IdP clients and mappers, authz file, endpoints, paging, errors, correlator entry points
+docs/ui.md                # the UI: enabling, sessions and key rotation, pages, status page, security
 docs/investigation/       # INV-0001 is the founding document
+ui/                       # boopd-ui (DESIGN-0004): server/ the Bun + Hono BFF (OIDC, sealed session, /api proxy), web/ the React SPA on @donaldgifford/design-system, scripts/ the gates; ui.just recipes
 charts/boopd/             # Helm chart + unittest suites + values.schema.json; charts/redis is the cache subchart
 Dockerfile                # multi-stage distroless build (VERSION/COMMIT/DATE args)
 docker-bake.hcl           # bake targets: default (local), ci, release
@@ -173,6 +177,15 @@ mise.toml                 # pinned toolchain: go, golangci-lint, helm, ct, k3d, 
   chart e2e (`TestChart_*`) helm-installs `charts/boopd` with the stubs
   and a host dev server; CI's "E2E Tests" job does the same and is the
   chart gate
+- `just e2e-ui` — after `just e2e`: build and import `boopd-ui`, run
+  `TestUI_Playwright` (store, API and UI installed and seeded; the
+  Playwright flows from the host). CI's "UI E2E Tests" job. Needs Bun
+  and Playwright's Chromium
+- `just lint-api` / `just lint-sql` — vacuum over `api/openapi.yaml`,
+  sqlc vet, and fail on `internal/api/gen` / `internal/store/db` drift
+- `just ui-install`, `ui-lint`, `ui-test`, `ui-build` — the UI's gates
+  (`NPM_TOKEN`, else `gh auth token` with `read:packages`, installs the
+  design system)
 - `just build` — binary into `build/bin/boopd`
 - `just docker-build` — host-native image via bake
 - `just helm-test` — chart lint (helm + ct) and helm-unittest suites
@@ -197,6 +210,11 @@ The chart manages the container environment — the service must honor:
   `extraEnv` appends raw entries. Colliding with the chart-managed
   names fails the render (`validateEnvCollisions` helper).
 - Probes hit `/healthz` and `/readyz` on the listen port.
+- The roles beside the worker read the same file: `ingest`, `api`
+  (`api.*`, authz at `/etc/boopd/authz.yaml`) and the `migrate` hook
+  (`store.enabled`). Each mounts only its own DSN key of
+  `store.existingSecret`. `boopd-ui` is configured by env from `ui.*`
+  and `ui.existingSecret` (`ui/README.md`).
 
 ## Releases
 

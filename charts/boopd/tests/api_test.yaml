@@ -1,0 +1,158 @@
+---
+suite: api
+templates:
+  - templates/api.yaml
+  - templates/api-authz-configmap.yaml
+  - templates/routes.yaml
+  - templates/networkpolicy.yaml
+  - templates/config.yaml
+  - templates/migrate-job.yaml
+tests:
+  - it: renders nothing for the API by default
+    templates:
+      - templates/api.yaml
+      - templates/api-authz-configmap.yaml
+      - templates/routes.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders the ServiceAccount, Deployment, Service and PDB
+    values: [values/store-api-ui.yaml]
+    template: templates/api.yaml
+    asserts:
+      - hasDocuments:
+          count: 4
+      - isKind:
+          of: ServiceAccount
+        documentIndex: 0
+      - isKind:
+          of: Deployment
+        documentIndex: 1
+      - isKind:
+          of: Service
+        documentIndex: 2
+      - isKind:
+          of: PodDisruptionBudget
+        documentIndex: 3
+
+  - it: gives the API no ServiceAccount token
+    values: [values/store-api-ui.yaml]
+    template: templates/api.yaml
+    asserts:
+      - equal:
+          path: automountServiceAccountToken
+          value: false
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+        documentIndex: 1
+
+  - it: runs boopd api with the config, the authz file and the read-only DSN only
+    values: [values/store-api-ui.yaml]
+    template: templates/api.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: [api, --config, /etc/boopd/boopd.hcl]
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content: {name: authz, mountPath: /etc/boopd/authz.yaml, subPath: authz.yaml, readOnly: true}
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: store-dsn
+            secret:
+              secretName: boopd-store
+              defaultMode: 0440
+              items:
+                - {key: ro-dsn, path: ro-dsn}
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: secret-4228400466
+          any: true
+
+  - it: renders the authz file and rolls the pods when it changes
+    values: [values/store-api-ui.yaml]
+    asserts:
+      - equal:
+          path: data["authz.yaml"]
+          value: |
+            clients: {}
+            operators:
+            - platform
+            owners:
+              platform:
+              - '*'
+              team-web:
+              - acme-web
+        template: templates/api-authz-configmap.yaml
+      - exists:
+          path: spec.template.metadata.annotations["checksum/authz"]
+        template: templates/api.yaml
+        documentIndex: 1
+
+  - it: renders the api block with the mounted authz file
+    values: [values/store-api-ui.yaml]
+    template: templates/config.yaml
+    asserts:
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'api \{\n  auth \{\n    issuer = "https://keycloak.example/realms/fartlab"\n    audience = "boopd-api"\n  \}\n  authz_file = "/etc/boopd/authz.yaml"\n  status_public = true'
+
+  - it: routes only /api
+    values: [values/store-api-ui.yaml]
+    template: templates/routes.yaml
+    set:
+      api.ingress: {enabled: true, hosts: [{host: boop-api.example.com}]}
+      api.httpRoute: {enabled: true, parentRefs: [{name: gw}]}
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0]
+          value:
+            path: /api
+            pathType: Prefix
+            backend: {service: {name: RELEASE-NAME-boopd-api, port: {name: http}}}
+        documentIndex: 0
+      - equal:
+          path: spec.rules[0].matches[0].path
+          value: {type: PathPrefix, value: /api}
+        documentIndex: 1
+
+  - it: takes the listen port from the UI and reaches Postgres read-only, Temporal and the IdP
+    values: [values/store-api-ui.yaml]
+    template: templates/networkpolicy.yaml
+    set:
+      networkPolicies.enabled: true
+    documentIndex: 3
+    asserts:
+      - equal:
+          path: spec.ingress[0].from[0].podSelector.matchLabels
+          value: {app.kubernetes.io/name: boopd-ui, app.kubernetes.io/instance: RELEASE-NAME}
+      - equal:
+          path: spec.egress
+          value:
+            - ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+            - ports: [{port: 5432, protocol: TCP}]
+            - ports: [{port: 7233, protocol: TCP}]
+            - ports: [{port: 443, protocol: TCP}]
+
+  - it: fails without the store
+    template: templates/migrate-job.yaml
+    set:
+      api.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "api.enabled needs store.enabled"
+
+  - it: fails without token verification
+    template: templates/migrate-job.yaml
+    set:
+      api.enabled: true
+      store: {enabled: true, existingSecret: boopd-store}
+    asserts:
+      - failedTemplate:
+          errorPattern: "api.enabled needs boopd.api.auth.issuer and boopd.api.auth.audience"

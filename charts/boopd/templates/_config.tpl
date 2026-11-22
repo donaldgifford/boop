@@ -132,6 +132,36 @@ ingest {
 {{- include "boopd.hclAttrs" (list . (list "path:path" "settle:settle" "minInterval:min_interval" "auditEvery:audit_every") 2) }}
 }
 {{- end }}
+{{- with .Values.store }}
+{{- if .enabled }}
+{{- $ref := dict "name" .existingSecret }}
+
+store {
+  enabled = true
+{{- include "boopd.hclSecretRef" (list "owner_dsn_secret_ref" (merge (dict "key" .keys.owner) $ref) 2) }}
+{{- include "boopd.hclSecretRef" (list "dsn_secret_ref" (merge (dict "key" .keys.worker) $ref) 2) }}
+{{- include "boopd.hclSecretRef" (list "ingest_dsn_secret_ref" (merge (dict "key" .keys.ingest) $ref) 2) }}
+{{- include "boopd.hclSecretRef" (list "ro_dsn_secret_ref" (merge (dict "key" .keys.ro) $ref) 2) }}
+{{- with ($c.store | default dict).retention }}
+
+  retention {
+{{- include "boopd.hclAttrs" (list . (list "events:events" "deliveryPayloads:delivery_payloads" "offboarded:offboarded") 4) }}
+  }
+{{- end }}
+}
+{{- end }}
+{{- end }}
+{{- if .Values.api.enabled }}
+{{- $a := $c.api | default dict }}
+
+api {
+  auth {
+{{- include "boopd.hclAttrs" (list $a.auth (list "issuer:issuer" "audience:audience" "nameClaim:name_claim" "groupsClaim:groups_claim") 4) }}
+  }
+  authz_file = "/etc/boopd/authz.yaml"
+{{- include "boopd.hclAttrs" (list $a (list "statusPublic:status_public") 2) }}
+}
+{{- end }}
 {{- with .Values.sandbox }}
 {{- if .enabled }}
 

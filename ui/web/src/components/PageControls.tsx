@@ -8,7 +8,7 @@ import { useState } from "react";
 
 import { OptionHeading, OptionItem, OptionSeparator } from "@donaldgifford/design-system/blocks/option-rows";
 import { SegmentedControl } from "@donaldgifford/design-system/blocks/segmented-control";
-import { owners } from "../fixtures";
+import { useMe } from "../api/queries";
 
 export const RANGES = ["1d", "7d", "30d", "90d"] as const;
 export type Range = (typeof RANGES)[number];
@@ -34,6 +34,8 @@ export function OwnerScope() {
   const { owner } = useScope();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const me = useMe().data;
+  const owners = me?.owners ?? [];
   const choose = (next: string | undefined) => {
     setOpen(false);
     void navigate({ to: ".", search: (prev: ScopeSearch) => ({ ...prev, owner: next }) });
@@ -47,13 +49,14 @@ export function OwnerScope() {
       </PopoverTrigger>
       <PopoverContent align="end" className="w-64 gap-0 p-1">
         <OptionHeading>Owner scope</OptionHeading>
-        {owners.map((o, i) => (
-          <div key={o.label}>
-            <OptionItem current={o.owner === owner} detail={o.detail} onClick={() => choose(o.owner)}>
-              {o.label}
-            </OptionItem>
-            {i === 0 ? <OptionSeparator /> : null}
-          </div>
+        <OptionItem current={owner === undefined} detail={me?.all_owners ? "every owner" : `${owners.length} visible`} onClick={() => choose(undefined)}>
+          All visible owners
+        </OptionItem>
+        {owners.length > 0 ? <OptionSeparator /> : null}
+        {owners.map((o) => (
+          <OptionItem key={o} current={o === owner} onClick={() => choose(o)}>
+            <span className="font-mono">{o}</span>
+          </OptionItem>
         ))}
       </PopoverContent>
     </Popover>

@@ -144,6 +144,19 @@ boopd:
   #       bot: boop-bot[bot]
   #       secretRef: {name: boop-bot-webhook, key: secret}
   apps: {}
+  # The store's retention (DESIGN-0004 § Retention), rendered into the
+  # `store` block when store.enabled: `events`, `deliveryPayloads`,
+  # `offboarded` as durations. Empty keeps the config's defaults (400,
+  # 30 and 90 days).
+  store:
+    retention: {}
+  # The API's token verification (DESIGN-0004 § The API), rendered into
+  # the `api` block when api.enabled: `auth.issuer` and `auth.audience`
+  # (both required), `auth.nameClaim`, `auth.groupsClaim`, and
+  # `statusPublic`. The chart sets authz_file to the mounted api.authz.
+  api:
+    auth: {}
+    statusPublic: ""
 
 # Renovate's datasource cache (IMPL-0001 OQ7): the local redis subchart,
 # a cache with no persistence. AUTH is an ACL user limited to keyPrefix
@@ -417,6 +430,217 @@ ingest:
     temporal:
       - ports:
           - {port: 7233, protocol: TCP}
+
+# The Postgres product store (DESIGN-0004). The chart runs no database:
+# existingSecret holds one DSN per Postgres role, and each boopd role
+# mounts only its own (keys below). The schema is applied by a hook Job
+# as the owner before the roles roll.
+store:
+  # -- Record events and projections from the worker and ingest; needed
+  # by the API.
+  enabled: false
+  # -- Secret with the four DSNs (keys below). Required with enabled.
+  existingSecret: ""
+  # -- The Secret's key per Postgres role.
+  # @default -- owner-dsn, worker-dsn, ingest-dsn, ro-dsn
+  keys:
+    owner: owner-dsn
+    worker: worker-dsn
+    ingest: ingest-dsn
+    ro: ro-dsn
+  migrate:
+    # -- `helm` (pre-install/pre-upgrade hooks) or `argocd` (PreSync).
+    # Either way the migration finishes before the roles roll.
+    hook: helm
+    # -- Retries of the migrate Job.
+    backoffLimit: 2
+    # -- Deadline of one migrate run, in seconds.
+    activeDeadlineSeconds: 600
+    # -- Migrate container resources.
+    resources: {}
+  # With networkPolicies.enabled, the egress rules reaching Postgres.
+  networkPolicy:
+    # -- Egress rules (NetworkPolicyEgressRule list) to the read-write
+    # service (CNPG's `-rw`): ingest and migrate. The worker has no
+    # policy of its own.
+    # @default -- TCP 5432 to anywhere
+    rw:
+      - ports:
+          - {port: 5432, protocol: TCP}
+    # -- Egress rules to the read-only service (CNPG's `-ro`): the API.
+    # @default -- TCP 5432 to anywhere
+    ro:
+      - ports:
+          - {port: 5432, protocol: TCP}
+
+# The API role, `boopd api` (DESIGN-0004 § The API): reads the store as
+# boopd_ro and signals Temporal for a recheck. boopd.api.auth configures
+# token verification.
+api:
+  # -- Render the API Deployment, ServiceAccount, Service, PDB and authz
+  # ConfigMap. Needs store.enabled and boopd.api.auth.
+  enabled: false
+  # -- API replicas; stateless.
+  replicaCount: 2
+  # -- Above the API's drain of requests in flight.
+  terminationGracePeriodSeconds: 30
+  # -- API container resources.
+  resources: {}
+  pdb:
+    # -- Render a PodDisruptionBudget for the API pods.
+    enabled: true
+    # -- PDB maxUnavailable.
+    maxUnavailable: 1
+  service:
+    # -- API Service type.
+    type: ClusterIP
+    # -- API Service port, to the listen port.
+    port: 8080
+  # -- The authz file (docs/api.md): `owners` (group -> owner logins,
+  # or "*"), `operators` (groups allowed to POST actions) and `clients`
+  # (a machine client's azp -> groups). Rendered into a ConfigMap and
+  # mounted at /etc/boopd/authz.yaml; a change rolls the pods.
+  # @default -- See values.yaml
+  authz:
+    owners: {}
+    operators: []
+    clients: {}
+  # Temporal OIDC client for the API (boopd-api); empty uses the
+  # worker's temporal.auth.oidc clientId and existingSecret.
+  temporalOidc:
+    # -- OIDC client ID for the API.
+    clientId: ""
+    # -- Secret with key `client-secret` for the API's OIDC client.
+    existingSecret: ""
+  ingress:
+    # -- Render an Ingress for the API (machine clients; the UI reaches
+    # the API in-cluster).
+    enabled: false
+    # -- Ingress class.
+    className: ""
+    # -- Ingress annotations.
+    annotations: {}
+    # -- Hosts: `[{host: boop-api.example.com}]`; each routes /api.
+    hosts: []
+    # -- Ingress TLS entries.
+    tls: []
+  httpRoute:
+    # -- Render a Gateway API HTTPRoute for the API's /api prefix.
+    enabled: false
+    # -- Gateways to attach to.
+    parentRefs: []
+    # -- HTTPRoute hostnames.
+    hostnames: []
+    # -- HTTPRoute annotations.
+    annotations: {}
+  # With networkPolicies.enabled, the API pods take ingress on the
+  # listen port from the UI and `from`, and reach DNS, Postgres
+  # (store.networkPolicy.ro), Temporal and the IdP only.
+  networkPolicy:
+    # -- More peers allowed to the listen port (an ingress controller).
+    from: []
+    # -- Peers allowed to the metrics port: Prometheus.
+    metricsFrom: []
+    # -- Egress rules reaching Temporal.
+    # @default -- TCP 7233 to anywhere
+    temporal:
+      - ports:
+          - {port: 7233, protocol: TCP}
+    # -- Egress rules reaching the IdP (discovery and JWKS).
+    # @default -- TCP 443 to anywhere
+    idp:
+      - ports:
+          - {port: 443, protocol: TCP}
+
+# The management UI, boopd-ui (DESIGN-0004 § The UI): a BFF holding the
+# session, proxying /api to the API Service. Needs api.enabled.
+ui:
+  # -- Render the UI Deployment, ServiceAccount, Service and PDB.
+  enabled: false
+  # -- UI replicas; sessions are sealed cookies, so any replica serves.
+  replicaCount: 2
+  image:
+    # -- UI image repository.
+    repository: ghcr.io/donaldgifford/boopd-ui
+    # -- UI image tag; empty uses the chart's appVersion (lockstep).
+    tag: ""
+    # -- UI image pull policy.
+    pullPolicy: IfNotPresent
+  # -- UI container resources.
+  # @default -- See values.yaml
+  resources:
+    requests: {cpu: 50m, memory: 96Mi}
+    limits: {cpu: 500m, memory: 256Mi}
+  pdb:
+    # -- Render a PodDisruptionBudget for the UI pods.
+    enabled: true
+    # -- PDB maxUnavailable.
+    maxUnavailable: 1
+  service:
+    # -- UI Service type.
+    type: ClusterIP
+    # -- UI Service port, to the BFF's 3000.
+    port: 80
+  # -- The UI's public origin (PUBLIC_URL): https, the redirect URI's
+  # base; http only on localhost (the e2e). Required.
+  publicURL: ""
+  # -- Secret with `client-secret` (the boopd-ui OIDC client) and
+  # `session-keys` (comma-separated, 32+ bytes each, newest first).
+  # Required.
+  existingSecret: ""
+  oidc:
+    # -- The issuer (OIDC_ISSUER). Required.
+    issuer: ""
+    # -- The confidential client (OIDC_CLIENT_ID).
+    clientId: boopd-ui
+    # -- Scopes; empty keeps the BFF's default.
+    scopes: []
+    # -- `client_secret_post` or `client_secret_basic`; empty keeps the
+    # BFF's default.
+    tokenAuthMethod: ""
+    # -- Extra authorize parameters, e.g. `{audience: boopd-api}`.
+    authorizationParams: {}
+  # -- A session's absolute end (UI_SESSION_TTL); empty keeps 8h.
+  sessionTTL: ""
+  # -- The sidebar's external links: `[{label: Grafana, url: https://...}]`.
+  links: []
+  # -- Extra env for the BFF, e.g. NODE_EXTRA_CA_CERTS for an IdP under
+  # a private CA (with extraVolumes and extraVolumeMounts).
+  extraEnv: []
+  # -- Extra volumes for the UI pod.
+  extraVolumes: []
+  # -- Extra volume mounts for the BFF container.
+  extraVolumeMounts: []
+  ingress:
+    # -- Render an Ingress for the UI.
+    enabled: false
+    # -- Ingress class, e.g. tailscale.
+    className: ""
+    # -- Ingress annotations.
+    annotations: {}
+    # -- Hosts: `[{host: boop.example.com}]`.
+    hosts: []
+    # -- Ingress TLS entries.
+    tls: []
+  httpRoute:
+    # -- Render a Gateway API HTTPRoute for the UI.
+    enabled: false
+    # -- Gateways to attach to.
+    parentRefs: []
+    # -- HTTPRoute hostnames.
+    hostnames: []
+    # -- HTTPRoute annotations.
+    annotations: {}
+  # With networkPolicies.enabled, the UI pods take ingress from `from`
+  # and reach DNS, the API Service and the IdP only.
+  networkPolicy:
+    # -- Peers allowed to the UI port: the ingress controller or gateway.
+    from: []
+    # -- Egress rules reaching the IdP (discovery, token, revocation).
+    # @default -- TCP 443 to anywhere
+    idp:
+      - ports:
+          - {port: 443, protocol: TCP}
 
 rbac:
   # -- Create the worker's Role and RoleBinding in the runs namespace:

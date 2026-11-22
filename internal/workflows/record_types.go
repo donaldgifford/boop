@@ -31,6 +31,10 @@ const (
 	KindRunBudgetWait     = "run.budget-wait"
 	KindActionRecheck     = "action.recheck"
 	KindDiscoveryFinished = "discovery.finished"
+	// KindInstallationAdded and KindInstallationSuspended are a discovery
+	// pass's view of each listed installation.
+	KindInstallationAdded     = "installation.added"
+	KindInstallationSuspended = "installation.suspended"
 )
 
 // Onboarding paths, RecordRepository.Via.
@@ -71,11 +75,12 @@ type RecordedEvent struct {
 	// Actor is who asked, for an action.
 	Actor *RecordActor
 
-	Repository *RecordRepository
-	Scheduled  *RecordScheduled
-	State      *RecordState
-	Recheck    *RecordRecheck
-	Discovery  *RecordDiscovery
+	Repository   *RecordRepository
+	Scheduled    *RecordScheduled
+	State        *RecordState
+	Recheck      *RecordRecheck
+	Discovery    *RecordDiscovery
+	Installation *RecordInstallation
 }
 
 // RecordActor is a recorded event's actor.
@@ -113,6 +118,12 @@ type RecordState struct {
 // RecordRecheck is action.recheck.
 type RecordRecheck struct {
 	RequestID string
+}
+
+// RecordInstallation is installation.added and installation.suspended.
+type RecordInstallation struct {
+	App     string
+	Account string
 }
 
 // RecordDiscovery is discovery.finished.

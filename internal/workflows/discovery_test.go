@@ -181,8 +181,8 @@ func TestTargetedDiscoveryID(t *testing.T) {
 }
 
 // With Record, the pass reconciles each discovered installation's PRs
-// and ends by recording discovery.finished with its totals; without it,
-// nothing is reconciled or recorded.
+// and ends by recording each listed installation and discovery.finished
+// with its totals; without it, nothing is reconciled or recorded.
 func TestDiscoveryWorkflow_RecordsThePass(t *testing.T) {
 	t.Parallel()
 	for _, record := range []bool{true, false} {
@@ -191,7 +191,9 @@ func TestDiscoveryWorkflow_RecordsThePass(t *testing.T) {
 		env := suite.NewTestWorkflowEnvironment()
 		env.RegisterWorkflowWithOptions(DiscoveryWorkflow, workflow.RegisterOptions{Name: DiscoveryWorkflowName})
 		env.RegisterActivityWithOptions(func(context.Context, *ListInstallationsInput) ([]InstallationInfo, error) {
-			return []InstallationInfo{{ID: 1, Account: "acme"}, {ID: 2, Account: "beta"}, {ID: 3, Account: "gone"}}, nil
+			return []InstallationInfo{
+				{ID: 1, Account: "acme"}, {ID: 2, Account: "beta"}, {ID: 3, Account: "gone"}, {ID: 4, Account: "paused", Suspended: true},
+			}, nil
 		}, activity.RegisterOptions{Name: ListInstallationsActivity})
 		env.RegisterActivityWithOptions(func(_ context.Context, in *DiscoverInput) (*DiscoverSummary, error) {
 			if in.InstallationID == 3 {
@@ -199,8 +201,14 @@ func TestDiscoveryWorkflow_RecordsThePass(t *testing.T) {
 			}
 			return &DiscoverSummary{InstallationID: in.InstallationID, Seen: 5, Onboarded: 1, ProbeCost: 2}, nil
 		}, activity.RegisterOptions{Name: DiscoverInstallationActivity})
-		var reconciled []ReconcilePRsInput
+		// The pass reconciles installations in parallel.
+		var (
+			mu         sync.Mutex
+			reconciled []ReconcilePRsInput
+		)
 		env.RegisterActivityWithOptions(func(_ context.Context, in *ReconcilePRsInput) (*ReconcilePRsResult, error) {
+			mu.Lock()
+			defer mu.Unlock()
 			reconciled = append(reconciled, *in)
 			return &ReconcilePRsResult{Open: 2, Synced: 2}, nil
 		}, activity.RegisterOptions{Name: ReconcilePullRequestsActivity})
@@ -230,10 +238,25 @@ func TestDiscoveryWorkflow_RecordsThePass(t *testing.T) {
 		if !slices.Equal(reconciled, want) || res.PRsSynced != 4 || res.ReconcileFailed != 0 {
 			t.Errorf("reconciled %+v (synced %d), want %+v: the failed installation skipped", reconciled, res.PRsSynced, want)
 		}
-		if len(recorded) != 1 || recorded[0].Kind != KindDiscoveryFinished || recorded[0].Discovery == nil {
-			t.Fatalf("recorded = %+v, want one discovery.finished", recorded)
+		if len(recorded) != 5 || recorded[4].Kind != KindDiscoveryFinished || recorded[4].Discovery == nil {
+			t.Fatalf("recorded = %+v, want four installations and discovery.finished", recorded)
 		}
-		d := recorded[0].Discovery
+		for i, want := range []struct {
+			kind    string
+			account string
+		}{
+			{KindInstallationAdded, "acme"},
+			{KindInstallationAdded, "beta"},
+			{KindInstallationAdded, "gone"},
+			{KindInstallationSuspended, "paused"},
+		} {
+			e := recorded[i]
+			if e.Kind != want.kind || e.InstallationID != int64(i+1) || e.Installation == nil ||
+				e.Installation.App != "main" || e.Installation.Account != want.account {
+				t.Errorf("recorded[%d] = %+v, want %s for %s", i, e, want.kind, want.account)
+			}
+		}
+		d := recorded[4].Discovery
 		if d.App != "main" || d.Seen != 10 || d.Onboarded != 2 || d.ProbeCost != 4 || d.Failed != 1 || d.StartedAt.After(d.FinishedAt) {
 			t.Errorf("discovery.finished = %+v", d)
 		}

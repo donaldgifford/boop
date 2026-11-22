@@ -584,3 +584,124 @@ strings, so the others keep their YAML form.
 {{- end -}}
 {{- toJson $out -}}
 {{- end }}
+
+{{/*
+A store role's DSN volume and mount: (list <root> <key>). Only the
+role's own key is projected, at <secretsDir>/<existingSecret>/<key>,
+the path the config's *_dsn_secret_ref names. Empty without
+store.enabled.
+*/}}
+{{- define "boopd.storeDSNVolume" -}}
+{{- $ := index . 0 -}}
+{{- if $.Values.store.enabled -}}
+- name: store-dsn
+  secret:
+    secretName: {{ $.Values.store.existingSecret }}
+    defaultMode: 0440
+    items:
+      - key: {{ index . 1 }}
+        path: {{ index . 1 }}
+{{- end }}
+{{- end }}
+
+{{- define "boopd.storeDSNMount" -}}
+{{- $ := index . 0 -}}
+{{- if $.Values.store.enabled -}}
+- name: store-dsn
+  mountPath: {{ printf "%s/%s" $.Values.boopd.secretsDir $.Values.store.existingSecret }}
+  readOnly: true
+{{- end }}
+{{- end }}
+
+{{/*
+The store, API and UI roles' names, labels and selectors: (list <root>
+<role>). Like ingest's, each carries its own app.kubernetes.io/name so
+no other Deployment or Service selects its pods.
+*/}}
+{{- define "boopd.role.fullname" -}}
+{{- printf "%s-%s" (include "boopd.fullname" (index . 0) | trunc 50 | trimSuffix "-") (index . 1) -}}
+{{- end }}
+
+{{- define "boopd.role.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "boopd.name" (index . 0) }}-{{ index . 1 }}
+app.kubernetes.io/instance: {{ (index . 0).Release.Name }}
+{{- end }}
+
+{{- define "boopd.role.labels" -}}
+{{- $ := index . 0 -}}
+helm.sh/chart: {{ include "boopd.chart" $ }}
+{{ include "boopd.role.selectorLabels" . }}
+app.kubernetes.io/component: {{ index . 1 }}
+{{- if $.Chart.AppVersion }}
+app.kubernetes.io/version: {{ include "boopd.appVersion" $ | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ $.Release.Service }}
+{{- end }}
+
+{{/*
+The migrate hook's annotations: (list <root> <weight>). helm runs it
+pre-install and pre-upgrade; argocd as a PreSync hook. Either way the
+roles roll only after it succeeds, and the last run is kept until the
+next for its logs.
+*/}}
+{{- define "boopd.migrate.hook" -}}
+{{- $ := index . 0 -}}
+{{- if eq $.Values.store.migrate.hook "argocd" -}}
+argocd.argoproj.io/hook: PreSync
+argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+argocd.argoproj.io/sync-wave: {{ index . 1 | quote }}
+{{- else -}}
+helm.sh/hook: pre-install,pre-upgrade
+helm.sh/hook-weight: {{ index . 1 | quote }}
+helm.sh/hook-delete-policy: before-hook-creation
+{{- end -}}
+{{- end }}
+
+{{/*
+A root context for the API's Temporal env and credentials: the
+worker's, with api.temporalOidc's client when set.
+*/}}
+{{- define "boopd.api.temporalValues" -}}
+{{- $v := deepCopy .Values -}}
+{{- with .Values.api.temporalOidc.clientId -}}
+{{- $_ := set $v.temporal.auth.oidc "clientId" . -}}
+{{- end -}}
+{{- with .Values.api.temporalOidc.existingSecret -}}
+{{- $_ := set $v.temporal.auth.oidc "existingSecret" . -}}
+{{- end -}}
+{{- toJson $v -}}
+{{- end }}
+
+{{/*
+Render guards for the store, API and UI roles (IMPL-0005 13.5): each
+combination that would start a role the binary refuses, or expose the
+UI without sign-in, fails here instead.
+*/}}
+{{- define "boopd.roles.validate" -}}
+{{- $ui := .Values.ui -}}
+{{- $auth := (.Values.boopd.api | default dict).auth | default dict -}}
+{{- if and .Values.store.enabled (not .Values.store.existingSecret) -}}
+{{- fail "store.enabled needs store.existingSecret: the Secret with the owner, worker, ingest and ro DSNs" -}}
+{{- end -}}
+{{- if or $ui.ingress.enabled $ui.httpRoute.enabled -}}
+{{- if not (and $ui.enabled $ui.oidc.issuer $ui.existingSecret) -}}
+{{- fail "ui.ingress and ui.httpRoute need the UI with sign-in: ui.enabled, ui.oidc.issuer and ui.existingSecret" -}}
+{{- end -}}
+{{- end -}}
+{{- if $ui.enabled -}}
+{{- if not .Values.api.enabled -}}
+{{- fail "ui.enabled needs api.enabled: the UI is a client of the API" -}}
+{{- end -}}
+{{- if not (and $ui.oidc.issuer $ui.oidc.clientId $ui.existingSecret $ui.publicURL) -}}
+{{- fail "ui.enabled needs ui.oidc.issuer, ui.oidc.clientId, ui.existingSecret (client-secret, session-keys) and ui.publicURL" -}}
+{{- end -}}
+{{- end -}}
+{{- if .Values.api.enabled -}}
+{{- if not .Values.store.enabled -}}
+{{- fail "api.enabled needs store.enabled: the API reads the store" -}}
+{{- end -}}
+{{- if not (and $auth.issuer $auth.audience) -}}
+{{- fail "api.enabled needs boopd.api.auth.issuer and boopd.api.auth.audience: the API never serves unauthenticated" -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
