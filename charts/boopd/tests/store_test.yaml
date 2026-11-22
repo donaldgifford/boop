@@ -1,0 +1,187 @@
+---
+suite: store
+templates:
+  - templates/migrate-job.yaml
+  - templates/deployment.yaml
+  - templates/ingest.yaml
+  - templates/config.yaml
+  - templates/networkpolicy.yaml
+tests:
+  - it: renders no migrate hook by default
+    template: templates/migrate-job.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: runs the migration as a helm pre-install and pre-upgrade hook, its config first
+    values: [values/store-api-ui.yaml]
+    template: templates/migrate-job.yaml
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: ConfigMap
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations
+          value:
+            helm.sh/hook: pre-install,pre-upgrade
+            helm.sh/hook-weight: "-10"
+            helm.sh/hook-delete-policy: before-hook-creation
+        documentIndex: 0
+      - isKind:
+          of: Job
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations
+          value:
+            helm.sh/hook: pre-install,pre-upgrade
+            helm.sh/hook-weight: "0"
+            helm.sh/hook-delete-policy: before-hook-creation
+        documentIndex: 1
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: [migrate, --config, /etc/boopd/boopd.hcl]
+        documentIndex: 1
+      - equal:
+          path: spec.template.spec.volumes[0].configMap.name
+          value: RELEASE-NAME-boopd-migrate
+        documentIndex: 1
+
+  - it: runs it as an Argo CD PreSync hook with hook argocd
+    values: [values/store-api-ui.yaml]
+    template: templates/migrate-job.yaml
+    set:
+      store.migrate.hook: argocd
+    asserts:
+      - equal:
+          path: metadata.annotations
+          value:
+            argocd.argoproj.io/hook: PreSync
+            argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+            argocd.argoproj.io/sync-wave: "0"
+        documentIndex: 1
+      - notExists:
+          path: metadata.annotations["helm.sh/hook"]
+        documentIndex: 1
+
+  - it: mounts the owner DSN only into the migrate Job, with no token
+    values: [values/store-api-ui.yaml]
+    template: templates/migrate-job.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: store-dsn
+            secret:
+              secretName: boopd-store
+              defaultMode: 0440
+              items:
+                - {key: owner-dsn, path: owner-dsn}
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: store-dsn
+            mountPath: /etc/boopd/secrets/boopd-store
+            readOnly: true
+
+  - it: mounts the worker DSN only into the worker
+    values: [values/store-api-ui.yaml]
+    template: templates/deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: store-dsn
+            secret:
+              secretName: boopd-store
+              defaultMode: 0440
+              items:
+                - {key: worker-dsn, path: worker-dsn}
+
+  - it: mounts the ingest DSN only into ingest
+    values: [values/store-api-ui.yaml]
+    template: templates/ingest.yaml
+    documentIndex: 1
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: store-dsn
+            secret:
+              secretName: boopd-store
+              defaultMode: 0440
+              items:
+                - {key: ingest-dsn, path: ingest-dsn}
+
+  - it: mounts no DSN without the store
+    values: [values/ingest.yaml]
+    templates:
+      - templates/deployment.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: store-dsn
+          any: true
+
+  - it: renders the store block with the four refs and the retention
+    values: [values/store-api-ui.yaml]
+    template: templates/config.yaml
+    asserts:
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'store \{\n  enabled = true\n  owner_dsn_secret_ref \{\n    name = "boopd-store"\n    key  = "owner-dsn"'
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'ro_dsn_secret_ref \{\n    name = "boopd-store"\n    key  = "ro-dsn"'
+      - matchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'retention \{\n    events = "9600h"'
+
+  - it: leaves the store block out by default
+    values: [values/ingest.yaml]
+    template: templates/config.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["boopd.hcl"]
+          pattern: 'store \{'
+
+  - it: fails without the DSN Secret
+    template: templates/migrate-job.yaml
+    set:
+      store.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "store.enabled needs store.existingSecret"
+
+  - it: lets migrate and ingest reach Postgres read-write under the policies
+    values: [values/store-api-ui.yaml]
+    template: templates/networkpolicy.yaml
+    set:
+      networkPolicies.enabled: true
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            ports:
+              - {port: 5432, protocol: TCP}
+        documentIndex: 2
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-boopd-migrate
+        documentIndex: 5
+      - equal:
+          path: spec.ingress
+          value: []
+        documentIndex: 5
+      - contains:
+          path: spec.egress
+          content:
+            ports:
+              - {port: 5432, protocol: TCP}
+        documentIndex: 5

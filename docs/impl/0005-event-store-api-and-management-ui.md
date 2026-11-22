@@ -1103,7 +1103,7 @@ page stops using them.
 - [x] 13.5 Guards: `ui.enabled` requires `api.enabled` and auth; the
   roles with `store.enabled` require `store.existingSecret`; a UI route
   without auth fails.
-- [ ] 13.6 helm-unittest suites `store_test.yaml`, `api_test.yaml`,
+- [x] 13.6 helm-unittest suites `store_test.yaml`, `api_test.yaml`,
   `ui_test.yaml`:
   - the hooks;
   - each role mounts only its own DSN;
