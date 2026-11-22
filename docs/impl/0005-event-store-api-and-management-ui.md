@@ -964,7 +964,7 @@ page stops using them.
 - [x] 12.1 Estate (`/`): KPI strip, the open-PR trend, PR age buckets,
   runs by outcome, top pending packages, ecosystems, and the
   installations table.
-- [ ] 12.2 Pull requests (`/pulls`): a DataTable with filter chips, sorted
+- [x] 12.2 Pull requests (`/pulls`): a DataTable with filter chips, sorted
   oldest first, and a drawer with updates (package, from → to, purl),
   the timeline and a GitHub link.
 - [ ] 12.3 Waiting (`/waiting`): items grouped by section, with waiting

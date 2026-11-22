@@ -1,11 +1,17 @@
-import { DataTable, dataTableColumns } from "@donaldgifford/design-system/blocks/data-table";
+import { dataTableColumns } from "@donaldgifford/design-system/blocks/data-table";
 import { DetailsGrid } from "@donaldgifford/design-system/blocks/details-grid";
-import { LoadMore } from "@donaldgifford/design-system/blocks/load-more";
+import { ErrorState } from "@donaldgifford/design-system/blocks/error-state";
+import { FilterBar } from "@donaldgifford/design-system/blocks/filter-bar";
+import { FilterChip } from "@donaldgifford/design-system/blocks/filter-chip";
+import { InlineEmpty, InlineLoading } from "@donaldgifford/design-system/blocks/inline-state";
+import { OptionHeading, OptionItem } from "@donaldgifford/design-system/blocks/option-rows";
 import { PageHeader } from "@donaldgifford/design-system/blocks/page-header";
+import { SegmentedControl } from "@donaldgifford/design-system/blocks/segmented-control";
+import { Time } from "@donaldgifford/design-system/blocks/time";
 import { Timeline } from "@donaldgifford/design-system/blocks/timeline";
 import { Badge } from "@donaldgifford/design-system/components/badge";
 import { Button } from "@donaldgifford/design-system/components/button";
-import { Card } from "@donaldgifford/design-system/components/card";
+import { Popover, PopoverContent, PopoverTrigger } from "@donaldgifford/design-system/components/popover";
 import { useMediaQuery } from "@donaldgifford/design-system/hooks/use-media-query";
 import { cn } from "@donaldgifford/design-system/lib/utils";
 import { DETAIL_INLINE_QUERY, DetailPanel, DetailSection } from "@donaldgifford/design-system/shell/detail-panel";
@@ -13,187 +19,240 @@ import { IconExternalLink } from "@tabler/icons-react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 
-import { FilterBar } from "@donaldgifford/design-system/blocks/filter-bar";
-import { FilterChip } from "@donaldgifford/design-system/blocks/filter-chip";
-import { InlineEmpty } from "@donaldgifford/design-system/blocks/inline-state";
-import { SegmentedControl } from "@donaldgifford/design-system/blocks/segmented-control";
-import { StateBadge, UpdateTypeBadge } from "../components/badges";
-import { Endpoint, PageControls, parseScopeSearch, type ScopeSearch } from "../components/PageControls";
-import { type PullRequest, type PullState, pulls, pullTimeline } from "../fixtures";
-import { when } from "../lib/when";
+import type { Schemas } from "../api/client";
+import { type PullRequestFilters, usePullRequest, usePullRequests } from "../api/queries";
+import { StateBadge } from "../components/badges";
+import { eventItem } from "../components/events";
+import { ListCard } from "../components/ListCard";
+import { PageControls, parseScopeSearch, type ScopeSearch } from "../components/PageControls";
+import { UpdateRow, UpdateSummary } from "../components/updates";
+import { daysSince } from "../lib/format";
 
-// A filter in force. In the mockup a chip removes its filter; the real
-// page opens that filter's editor.
-interface ActiveFilter {
-  name: string;
-  value: string;
-}
+const STATES = ["open", "merged", "closed"] as const;
 
+// PullsSearch is the page's URL: the scope, the filters, and the open
+// pull request as "<repo id>-<number>".
 export interface PullsSearch extends ScopeSearch {
-  state?: PullState | undefined;
+  state?: string | undefined;
+  manager?: string | undefined;
+  update_type?: string | undefined;
+  older_than?: number | undefined;
+  automerge?: boolean | undefined;
+  label?: string | undefined;
+  purl?: string | undefined;
   open?: string | undefined;
 }
 
-const STATES: readonly PullState[] = ["open", "merged", "closed"];
+// The filters a chip shows and removes. state has its own control.
+const CHIP_FILTERS = ["manager", "update_type", "older_than", "automerge", "label", "purl"] as const;
+type ChipFilter = (typeof CHIP_FILTERS)[number];
+
+const str = (v: unknown) => (typeof v === "string" && v !== "" ? v : undefined);
 
 export function parsePullsSearch(search: Record<string, unknown>): PullsSearch {
   const out: PullsSearch = parseScopeSearch(search);
-  if (typeof search.state === "string" && (STATES as readonly string[]).includes(search.state)) out.state = search.state as PullState;
-  if (typeof search.open === "string" && search.open !== "") out.open = search.open;
+  const state = str(search.state);
+  if (state && (STATES as readonly string[]).includes(state)) out.state = state;
+  for (const k of ["manager", "update_type", "label", "purl", "open"] as const) {
+    const v = str(search[k]);
+    if (v) out[k] = v;
+  }
+  const older = Number(search.older_than);
+  if (Number.isInteger(older) && older > 0) out.older_than = older;
+  if (search.automerge === true || search.automerge === "true") out.automerge = true;
+  if (search.automerge === false || search.automerge === "false") out.automerge = false;
   return out;
 }
 
-const helper = dataTableColumns<PullRequest>();
+// PRESETS are the filters "Add filter" offers.
+const PRESETS: readonly { label: string; patch: Partial<PullsSearch> }[] = [
+  { label: "major updates", patch: { update_type: "major" } },
+  { label: "not automerged", patch: { automerge: false } },
+  { label: "open over 30 days", patch: { older_than: 30 } },
+  { label: "open over 90 days", patch: { older_than: 90 } },
+];
+
+export function filtersOf(s: PullsSearch): PullRequestFilters {
+  return {
+    state: s.state ?? "open",
+    owner: s.owner,
+    manager: s.manager,
+    update_type: s.update_type,
+    older_than: s.older_than,
+    automerge: s.automerge,
+    label: s.label,
+    purl: s.purl,
+  };
+}
+
+export const prId = (pr: Pick<Schemas["PullRequest"], "repo_id" | "number">) => `${pr.repo_id}-${pr.number}`;
+
+function parsePrId(id: string | undefined): { repoId: number; number: number } | undefined {
+  const m = id?.match(/^(\d+)-(\d+)$/);
+  return m ? { repoId: Number(m[1]), number: Number(m[2]) } : undefined;
+}
+
+const helper = dataTableColumns<Schemas["PullRequest"]>();
 const columns = helper.columns([
-  helper.accessor("repo", {
+  helper.accessor("slug", {
     header: "Repository",
     cell: ({ row }) => (
       <span className="font-mono text-xs">
-        {row.original.repo} <span className="text-muted-foreground">#{row.original.number}</span>
+        {row.original.slug} <span className="text-muted-foreground">#{row.original.number}</span>
       </span>
     ),
   }),
-  helper.accessor("title", { header: "Update", cell: ({ row }) => <UpdateCell pr={row.original} />, enableSorting: false }),
-  helper.accessor("updateType", { header: "Type", cell: ({ getValue }) => <UpdateTypeBadge type={getValue()} />, enableSorting: false }),
-  helper.accessor("manager", { header: "Manager", cell: ({ getValue }) => <span className="font-mono text-xs">{getValue()}</span>, meta: { hideBelow: "lg" } }),
-  helper.accessor("checks", { header: "Checks", cell: ({ getValue }) => <StateBadge state={getValue()} />, enableSorting: false, meta: { hideBelow: "compact" } }),
-  helper.accessor("ageDays", { header: "Age", cell: ({ getValue }) => `${getValue()} d`, meta: { numeric: true } }),
+  helper.accessor("title", { header: "Update", cell: ({ row }) => <UpdateSummary updates={row.original.updates} fallback={row.original.title} /> }),
+  helper.accessor("state", { header: "State", cell: ({ getValue }) => <StateBadge state={getValue()} />, meta: { hideBelow: "compact" } }),
+  helper.accessor((pr) => pr.updates[0]?.manager ?? "", { id: "manager", header: "Manager", cell: ({ getValue }) => <span className="font-mono text-xs">{getValue()}</span>, meta: { hideBelow: "lg" } }),
+  helper.accessor("opened_at", { header: "Age", cell: ({ getValue }) => <AgeCell iso={getValue()} />, meta: { numeric: true } }),
 ]);
 
-function UpdateCell({ pr }: { pr: PullRequest }) {
-  const update = pr.updates[0];
-  if (!update) return <>{pr.title}</>;
-  return (
-    <span className="font-mono text-xs">
-      {update.package} <span className="text-muted-foreground">{update.from} →</span> {update.to}
-    </span>
-  );
+function AgeCell({ iso }: { iso: string | null | undefined }) {
+  const d = daysSince(iso);
+  return d === undefined ? <span className="text-muted-foreground">—</span> : <>{d} d</>;
 }
-
-const PAGE = 12;
 
 export function PullsView() {
   const search = useSearch({ strict: false }) as PullsSearch;
   const navigate = useNavigate();
   const inline = useMediaQuery(DETAIL_INLINE_QUERY);
-  const [extra, setExtra] = useState<readonly ActiveFilter[]>([{ name: "older_than", value: "0d" }]);
-  const [shown, setShown] = useState(PAGE);
-
-  const state = search.state ?? "open";
-  const inState = pulls.filter((p) => p.state === state && (search.owner === undefined || p.repo.startsWith(`${search.owner}/`)));
-  const rows = inState.slice(0, shown);
-  const selected = pulls.find((p) => p.id === search.open);
+  const list = usePullRequests(filtersOf(search));
+  const selected = parsePrId(search.open);
   const patch = (next: Partial<PullsSearch>) => void navigate({ to: ".", search: (prev: PullsSearch) => ({ ...prev, ...next }) });
+  const active = CHIP_FILTERS.filter((k) => search[k] !== undefined);
+  const clearAll = Object.fromEntries(CHIP_FILTERS.map((k) => [k, undefined])) as Partial<PullsSearch>;
 
   return (
     <>
-      <PageHeader title="Pull requests" description={<Endpoint path="/api/v1/pull-requests" />} actions={<PageControls range={false} />} />
+      <PageHeader title="Pull requests" description="Renovate's pull requests, oldest first" actions={<PageControls range={false} />} />
       <div className="flex flex-wrap items-center gap-3">
         <SegmentedControl
           label="State"
-          value={state}
+          value={search.state ?? "open"}
           options={STATES.map((s) => ({ value: s, label: s[0]?.toUpperCase() + s.slice(1) }))}
-          onValueChange={(next) => {
-            setShown(PAGE);
-            patch({ state: next, open: undefined });
-          }}
+          onValueChange={(next) => patch({ state: next, open: undefined })}
         />
-        <FilterBar className="flex-1" count={`${inState.length} of ${pulls.length}`} {...(extra.length > 0 ? { onClear: () => setExtra([]) } : {})}>
-          <FilterChip name="state" value={state} disabled />
-          {extra.map((f) => (
-            <FilterChip
-              key={f.name}
-              name={f.name}
-              value={
-                <>
-                  {f.value}{" "}
-                  <span aria-hidden="true" className="ml-0.5 opacity-70">
-                    ×
-                  </span>
-                </>
-              }
-              aria-label={`Remove filter ${f.name} = ${f.value}`}
-              onClick={() => setExtra((prev) => prev.filter((x) => x.name !== f.name))}
-            />
+        <FilterBar className="flex-1" count={list.isPending ? undefined : `${list.items.length}${list.hasNextPage ? "+" : ""} shown`} {...(active.length > 0 ? { onClear: () => patch(clearAll) } : {})}>
+          {active.map((k) => (
+            <RemovableChip key={k} name={k} value={String(search[k])} onRemove={() => patch({ [k]: undefined } as Partial<PullsSearch>)} />
           ))}
-          <FilterChip onClick={() => setExtra((prev) => (prev.some((f) => f.name === "automerge") ? prev : [...prev, { name: "automerge", value: "false" }]))} />
+          <AddFilter onAdd={patch} />
         </FilterBar>
       </div>
 
       <div className={cn("grid items-start gap-4", selected && inline && "grid-cols-[minmax(0,1fr)_minmax(0,28rem)]")}>
-        <Card className="gap-0 py-0">
-          <DataTable
-            columns={columns}
-            data={rows}
-            label="Pull requests, oldest first"
-            bare
-            getRowId={(row) => row.id}
-            onRowClick={(row) => patch({ open: row.id })}
-            selectedId={selected?.id}
-            compact={Boolean(selected && inline)}
-            empty={<InlineEmpty>No pull requests match these filters.</InlineEmpty>}
-          />
-          <LoadMore loaded={rows.length} total={inState.length} hasMore={rows.length < inState.length} onMore={() => setShown((n) => n + PAGE)} noun="pull requests" />
-        </Card>
-
-        <DetailPanel
-          open={selected !== undefined}
-          onOpenChange={(open) => {
-            if (!open) patch({ open: undefined });
-          }}
-          inline={inline}
-          subject={selected?.id}
-          title={selected ? `${selected.repo} #${selected.number}` : ""}
-          description={selected?.title}
-          footer={
-            <Button variant="outline" size="sm" nativeButton={false} render={<a href="https://github.com" target="_blank" rel="noopener noreferrer" />}>
-              Open on GitHub
-              <IconExternalLink aria-hidden="true" className="size-3.5" />
-            </Button>
-          }
-        >
-          {selected ? <PullDetail pr={selected} /> : null}
-        </DetailPanel>
+        <ListCard
+          list={list}
+          columns={columns}
+          label="Pull requests, oldest first"
+          noun="pull requests"
+          getRowId={prId}
+          onRowClick={(row) => patch({ open: prId(row) })}
+          selectedId={search.open}
+          compact={Boolean(selected && inline)}
+        />
+        <PullDrawer selected={selected} inline={inline} onClose={() => patch({ open: undefined })} />
       </div>
     </>
   );
 }
 
-function PullDetail({ pr }: { pr: PullRequest }) {
+function RemovableChip({ name, value, onRemove }: { name: ChipFilter; value: string; onRemove: () => void }) {
+  return (
+    <FilterChip
+      name={name}
+      value={
+        <>
+          {value}{" "}
+          <span aria-hidden="true" className="ml-0.5 opacity-70">
+            ×
+          </span>
+        </>
+      }
+      aria-label={`Remove filter ${name} = ${value}`}
+      onClick={onRemove}
+    />
+  );
+}
+
+function AddFilter({ onAdd }: { onAdd: (patch: Partial<PullsSearch>) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger render={<FilterChip />} />
+      <PopoverContent align="start" className="w-56 gap-0 p-1">
+        <OptionHeading>Add filter</OptionHeading>
+        {PRESETS.map((p) => (
+          <OptionItem
+            key={p.label}
+            onClick={() => {
+              setOpen(false);
+              onAdd(p.patch);
+            }}
+          >
+            {p.label}
+          </OptionItem>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function PullDrawer({ selected, inline, onClose }: { selected: { repoId: number; number: number } | undefined; inline: boolean; onClose: () => void }) {
+  const detail = usePullRequest(selected?.repoId, selected?.number);
+  const pr = detail.data;
+  return (
+    <DetailPanel
+      open={selected !== undefined}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      inline={inline}
+      subject={selected ? `${selected.repoId}-${selected.number}` : undefined}
+      title={pr ? `${pr.slug} #${pr.number}` : selected ? `#${selected.number}` : ""}
+      description={pr?.title}
+      footer={
+        pr ? (
+          <Button variant="outline" size="sm" nativeButton={false} render={<a href={pr.url} target="_blank" rel="noopener noreferrer" />}>
+            Open on GitHub
+            <IconExternalLink aria-hidden="true" className="size-3.5" />
+          </Button>
+        ) : null
+      }
+    >
+      {detail.isError ? <ErrorState error={detail.error} /> : pr ? <PullDetail pr={pr} /> : selected ? <InlineLoading /> : null}
+    </DetailPanel>
+  );
+}
+
+function PullDetail({ pr }: { pr: Schemas["PullRequestDetail"] }) {
+  const age = daysSince(pr.opened_at);
   return (
     <>
       <DetailsGrid
         columns={2}
         items={[
           { label: "State", value: <StateBadge state={pr.state} /> },
-          { label: "Checks", value: <StateBadge state={pr.checks} /> },
-          { label: "Opened", value: when(pr.openedAt) },
-          { label: "Age", value: `${pr.ageDays} days` },
-          { label: "Manager", value: <span className="font-mono text-xs">{pr.manager}</span> },
           { label: "Automerge", value: pr.automerge ? <Badge variant="success">on</Badge> : <Badge variant="muted">off</Badge> },
+          { label: "Opened", value: pr.opened_at ? <Time iso={pr.opened_at} /> : "—" },
+          { label: "Age", value: age === undefined ? "—" : `${age} days` },
+          { label: "Branch", value: <span className="font-mono text-xs">{pr.branch}</span> },
+          { label: "Labels", value: pr.labels.length > 0 ? pr.labels.join(", ") : "—" },
         ]}
       />
       <DetailSection title="Updates">
-        <ul className="grid gap-2">
-          {pr.updates.map((u) => (
-            <li key={u.purl} className="rounded-lg border px-3 py-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-mono text-xs">{u.package}</span>
-                <UpdateTypeBadge type={u.updateType} />
-              </div>
-              <div className="mt-1 font-mono text-xs">
-                <span className="text-muted-foreground">{u.from} →</span> {u.to}
-              </div>
-              <div className="mt-1 truncate font-mono text-label text-muted-foreground">{u.purl}</div>
-            </li>
-          ))}
-        </ul>
+        {pr.updates.length > 0 ? (
+          <ul className="grid gap-2">
+            {pr.updates.map((u) => (
+              <UpdateRow key={`${u.package_file}:${u.package_name}`} update={u} />
+            ))}
+          </ul>
+        ) : (
+          <InlineEmpty>No updates recorded for this branch yet.</InlineEmpty>
+        )}
       </DetailSection>
-      <DetailSection title="Timeline">
-        <Timeline
-          items={pullTimeline(pr).map((e) => ({ id: e.id, actor: e.actor, verb: e.verb, object: e.object, detail: e.detail, when: when(e.at), tone: e.tone, tags: [{ label: e.kind, variant: "outline" as const }] }))}
-        />
-      </DetailSection>
+      <DetailSection title="Timeline">{pr.timeline.length > 0 ? <Timeline items={pr.timeline.map(eventItem)} /> : <InlineEmpty>No events.</InlineEmpty>}</DetailSection>
     </>
   );
 }
