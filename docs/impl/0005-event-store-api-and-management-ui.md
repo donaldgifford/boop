@@ -967,7 +967,7 @@ page stops using them.
 - [x] 12.2 Pull requests (`/pulls`): a DataTable with filter chips, sorted
   oldest first, and a drawer with updates (package, from → to, purl),
   the timeline and a GitHub link.
-- [ ] 12.3 Waiting (`/waiting`): items grouped by section, with waiting
+- [x] 12.3 Waiting (`/waiting`): items grouped by section, with waiting
   since, ticked by and a dashboard link.
 - [ ] 12.4 Repository (`/repositories/$id`): a header with the live
   phase and Recheck (operators); tabs for Timeline (with causes), Runs,

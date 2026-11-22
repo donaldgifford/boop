@@ -8,6 +8,7 @@ import { PlaceholderView } from "./views/placeholder";
 import { parsePullsSearch, PullsView } from "./views/pulls";
 import { RepositoryView } from "./views/repository";
 import { StatusView } from "./views/status";
+import { parseWaitingSearch, WaitingView } from "./views/waiting";
 
 const rootRoute = createRootRoute({ component: Outlet });
 
@@ -26,7 +27,8 @@ const shellRoute = createRoute({
 const estateRoute = createRoute({ getParentRoute: () => shellRoute, path: "/", component: EstateView });
 const pullsRoute = createRoute({ getParentRoute: () => shellRoute, path: "/pulls", validateSearch: parsePullsSearch, component: PullsView });
 const repositoryRoute = createRoute({ getParentRoute: () => shellRoute, path: "/repositories/$id", component: RepositoryView });
-const placeholders = (["/waiting", "/packages", "/repositories", "/runs", "/events", "/deliveries"] as const).map((path) =>
+const waitingRoute = createRoute({ getParentRoute: () => shellRoute, path: "/waiting", validateSearch: parseWaitingSearch, component: WaitingView });
+const placeholders = (["/packages", "/repositories", "/runs", "/events", "/deliveries"] as const).map((path) =>
   createRoute({ getParentRoute: () => shellRoute, path, component: PlaceholderView }),
 );
 
@@ -37,7 +39,7 @@ const notFoundRoute = createRoute({ getParentRoute: () => shellRoute, path: "$",
 // session will be asked for (DESIGN-0004).
 const statusRoute = createRoute({ getParentRoute: () => rootRoute, path: "/status", component: StatusView });
 
-const routeTree = rootRoute.addChildren([shellRoute.addChildren([estateRoute, pullsRoute, repositoryRoute, ...placeholders, notFoundRoute]), statusRoute]);
+const routeTree = rootRoute.addChildren([shellRoute.addChildren([estateRoute, pullsRoute, waitingRoute, repositoryRoute, ...placeholders, notFoundRoute]), statusRoute]);
 
 export const router = createRouter({ routeTree, defaultErrorComponent: RouteError, defaultNotFoundComponent: NotFound });
 
