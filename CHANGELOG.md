@@ -44,6 +44,24 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(api)* Authz visibility, operator gate and owner narrowing (IMPL-0005 9.5)
 - *(api)* Boopd api role with read-only pool, lazy Temporal, OIDC readiness (IMPL-0005 9.6)
 - *(api)* Read endpoints, live state, recheck, estate and status (IMPL-0005 10.1-10.5)
+- *(ui)* The BFF: OIDC code + PKCE, sealed session, API proxy, static, health (IMPL-0005 11.3)
+- *(ui)* Generated API types, the drift check and the API client (IMPL-0005 11.6)
+- *(ui)* The shell: /me gate, links group, sign-out form, breadcrumbs, palette, error views (IMPL-0005 11.4)
+- *(ui)* Check-dist and check-tokens gates, wired into ui-lint and ui-build (IMPL-0005 11.8)
+- *(ui)* The estate page on /estate, /estate/series and /installations (IMPL-0005 12.1)
+- *(ui)* Pull requests page with URL filters, chips and the detail drawer (IMPL-0005 12.2)
+- *(ui)* Waiting page with Dependency Dashboard items by section (IMPL-0005 12.3)
+- *(ui)* Repository page with live phase, operator recheck and six tabs (IMPL-0005 12.4)
+- *(ui)* Repositories, packages, runs, events, deliveries and status pages on the API (IMPL-0005 12.5)
+- *(chart)* Store, api and ui values and schema; store and api blocks in boopd.hcl (IMPL-0005 13.1)
+- *(chart)* The migrate hook Job with the owner DSN only, helm or argocd style (IMPL-0005 13.2)
+- *(chart)* The API and UI roles, the authz ConfigMap, their routes, and each role's own DSN (IMPL-0005 13.3)
+- *(chart)* NetworkPolicies for the API, the UI and migrate, and ingest to Postgres (IMPL-0005 13.4)
+- *(chart)* Guards for the store secret, the API's auth and store, and the UI's sign-in (IMPL-0005 13.5)
+
+### Bug Fixes
+
+- *(workflows)* Discovery records each listed installation
 
 ### Documentation
 
@@ -59,6 +77,17 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Phase 8 findings, retention Schedule in the config reference (IMPL-0005 Phase 8)
 - Phase 9 findings, the API package and layout (IMPL-0005 Phase 9)
 - Phase 10 findings, the API package doc and layout (IMPL-0005 Phase 10)
+- Phase 11 findings, the UI README, layout and the local dev stack (IMPL-0005 Phase 11)
+- Phase 12 findings and the design-system component gaps per page (IMPL-0005 12.7)
+- Phase 12 UI README and findings; keep golangci-lint out of node_modules (IMPL-0005 Phase 12)
+- *(chart)* Helm-docs for the store, api and ui values; validate the rendered store and api config (IMPL-0005 13.7)
+- Phase 13 findings (IMPL-0005 Phase 13)
+- Phase 14 findings (IMPL-0005 Phase 14)
+- The API guide: identity setup, authz file, endpoints, paging, errors, correlator (IMPL-0005 15.3)
+- The UI guide: enabling, sessions and key rotation, pages, status page, security (IMPL-0005 15.4)
+- Config.md's store, API and UI chart notes; CLAUDE.md layout, recipes and roles (IMPL-0005 15.5)
+- DESIGN-0004 implemented; DESIGN-0003's records are stored (IMPL-0005 15.6)
+- Phase 15 findings; the workflows package doc names the installation records (IMPL-0005 Phase 15)
 
 ### Styling
 
@@ -77,6 +106,15 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(store)* Each retention rule against fixtures placed by a clock override (IMPL-0005 8.3)
 - *(api)* Contract tests with the authn and authz matrix (IMPL-0005 9.7)
 - *(api)* Endpoints, visibility, recheck and estate over a seeded store (IMPL-0005 10.6)
+- *(ui)* Shell, nav, error-view and ESLint-ban tests with the shell harness (IMPL-0005 11.9)
+- *(ui)* Polling intervals for lists, events and a running repository (IMPL-0005 12.6)
+- *(ui)* Page tests over seeded caches, the Playwright flows, axe and visual specs (IMPL-0005 12.8)
+- *(chart)* Store, api and ui suites: hooks, own DSNs, no tokens, guards, policies (IMPL-0005 13.6)
+- *(e2e)* Postgres with the four roles and the mock issuer over TLS in the e2e cluster (IMPL-0005 14.1)
+- *(e2e)* Store and API scenarios; dashboard sections stored as the API's enum (IMPL-0005 14.2)
+- *(e2e)* Per-installation stub repositories; serialize the stub image's digest tag
+- *(fakegithub)* Preallocate the listing test's names
+- *(e2e)* The UI's Playwright flows against the k3d stack (IMPL-0005 14.3)
 
 ### Miscellaneous Tasks
 
@@ -84,6 +122,11 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Pin vacuum in mise (IMPL-0005 1.3)
 - Add the generate, lint-api, lint-sql and ui test/e2e/visual recipes (IMPL-0005 1.5)
 - *(api)* Vacuum ruleset for the contract (IMPL-0005 9.2)
+- *(ui)* BFF and test toolchain, ESLint with the HTML-sink ban, dev proxy (IMPL-0005 11.1)
+- *(renovate)* The design system gets its own pull request and the registry token (IMPL-0005 11.2)
+- *(ui)* The boopd-ui image and the ui-dev, ui-ci, ui-release bake targets (IMPL-0005 11.7)
+- UI and API lint jobs; pull the store's Postgres for the integration tests (IMPL-0005 15.1)
+- *(release)* Build, sign and attest the boopd-ui image at the release tag (IMPL-0005 15.2)
 
 ## [0.7.0] - 2026-11-12
 
