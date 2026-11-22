@@ -633,6 +633,56 @@ boop's own components stay in `ui/`: `UpdateRow`/`UpdateSummary`,
   ships Go files. `node_modules` is now excluded with the other vendored
   paths.
 
+## Findings (Phase 14)
+
+- **Dashboard sections were stored as headings.** The store kept
+  "Pending Approval" where the API's enum and the UI expect
+  `pending-approval`. `dashboard.SectionKey` maps a heading to the enum,
+  and ingest's sink stores the key. The e2e caught it; the unit tests
+  had used the headings on both sides.
+- **Discovery never recorded installations.** DESIGN-0004 names
+  discovery as a source of `installation.*`. Only ingest wrote them,
+  so without webhooks the store had no installations, and a caller
+  scoped to some owners saw nothing (the viewer's "No owners
+  visible"). Now each recording pass appends `installation.added`, or
+  `.suspended`, for every listed installation, behind the
+  `record-installations` version. The events list gains one row per
+  installation per pass; the store's upsert keeps the newest.
+- **The stub Renovate's report had no datasources**, so no dependency
+  had a purl. The fixtures now carry a datasource, packageName and
+  current version.
+- **The stub GitHub lists repositories per installation** when a
+  repository sets `Installation`, and `POST /_stub/installations`
+  replaces the installations. The UI e2e uses both for a repository the
+  viewer cannot see.
+- **The k3d image import:**
+  - A batch `k3d image import` left stale images in the node, so the
+    recipe and CI import one image at a time.
+  - Parallel chart tests raced on `ctr images tag --force` for the stub
+    Renovate's digested name. Tagging is now serialized and skipped
+    once the name exists.
+- **`host.k3d.internal` can drop out of CoreDNS** after a cluster
+  restart, and a stuck `k3d cluster start` was the trigger here. It was
+  patched by hand in the local cluster's NodeHosts. CI creates a fresh
+  cluster each time, so nothing in the repo changes.
+- **The UI e2e runs from the host:**
+  - Port-forwards on fixed ports: the UI on 3300 (its public URL is
+    `http://localhost:3300`, which the BFF and now the schema accept on
+    loopback), and the issuer on 9443.
+  - Chromium maps the issuer's in-cluster name to the forward
+    (`BOOP_E2E_HOST_RULES`) and accepts the e2e CA's certificate
+    (`BOOP_E2E_IGNORE_HTTPS`).
+  - The BFF trusts the CA through `NODE_EXTRA_CA_CERTS`.
+  - All 16 chromium flows pass locally.
+- **Visual baselines: deferred, human required.** The visual project's
+  screenshots render in the pinned Playwright image. The stack run is the
+  flows only (`--project=chromium`). The baselines are first generated
+  and committed from that image against a seeded stack.
+- **CI not yet observed.** The UI E2E Tests job installs the design
+  system with the workflow's `GITHUB_TOKEN`. That needs the package to
+  grant this repository read access (a package setting), and it runs
+  with the first push of the branch.
+
 ## Implementation Phases
 
 Each phase ends with `just lint`, `just test` and its own checks green,
@@ -1178,6 +1228,8 @@ page stops using them.
   - `TestStore_Rebuild`: rebuilt projections equal the live ones.
 - [x] 14.3 The UI's Playwright suite runs against the k3d stack in CI as
   its own job (OQ11).
+  - Visual baselines from the pinned Playwright image: `deferred - human
+    required`.
 
 #### Success Criteria
 
@@ -1187,7 +1239,7 @@ page stops using them.
 
 #### Tasks
 
-- [ ] 15.1 `ci.yml`:
+- [x] 15.1 `ci.yml`:
   - a UI job (install with `NPM_TOKEN` from `GITHUB_TOKEN` and
     `packages: read`, lint, test, build, check-api, check-dist,
     check-tokens);
