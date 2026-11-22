@@ -7,6 +7,31 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Features
 
+- *(api)* The v1 contract, api/openapi.yaml (IMPL-0005 9.1)
+- *(api)* Strict std-http server generated into internal/api/gen (IMPL-0005 9.3)
+- *(api)* Problem, cursor, middleware, authn and the contract harness from repo-guardian (IMPL-0005 9.4)
+- *(api)* Authz visibility, operator gate and owner narrowing (IMPL-0005 9.5)
+- *(api)* Boopd api role with read-only pool, lazy Temporal, OIDC readiness (IMPL-0005 9.6)
+- *(api)* Read endpoints, live state, recheck, estate and status (IMPL-0005 10.1-10.5)
+
+### Documentation
+
+- Phase 9 findings, the API package and layout (IMPL-0005 Phase 9)
+- Phase 10 findings, the API package doc and layout (IMPL-0005 Phase 10)
+
+### Testing
+
+- *(api)* Contract tests with the authn and authz matrix (IMPL-0005 9.7)
+- *(api)* Endpoints, visibility, recheck and estate over a seeded store (IMPL-0005 10.6)
+
+### Miscellaneous Tasks
+
+- *(api)* Vacuum ruleset for the contract (IMPL-0005 9.2)
+
+## [0.8.0] - 2026-11-22
+
+### Features
+
 - *(ui)* Mockup of the boop UI on the design system
 - *(ui)* Move the mockup to design-system 0.4.0 and add the status page
 - *(store)* Events table, partitions and idempotency keys (IMPL-0005 2.1)
@@ -38,12 +63,6 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(workflows)* ReconcilePullRequests after each recording discovery pass (IMPL-0005 7.2)
 - *(store)* StoreMaintenanceWorkflow applies retention (IMPL-0005 8.1)
 - *(worker)* Daily store-maintenance Schedule when the store is enabled (IMPL-0005 8.2)
-- *(api)* The v1 contract, api/openapi.yaml (IMPL-0005 9.1)
-- *(api)* Strict std-http server generated into internal/api/gen (IMPL-0005 9.3)
-- *(api)* Problem, cursor, middleware, authn and the contract harness from repo-guardian (IMPL-0005 9.4)
-- *(api)* Authz visibility, operator gate and owner narrowing (IMPL-0005 9.5)
-- *(api)* Boopd api role with read-only pool, lazy Temporal, OIDC readiness (IMPL-0005 9.6)
-- *(api)* Read endpoints, live state, recheck, estate and status (IMPL-0005 10.1-10.5)
 
 ### Documentation
 
@@ -57,8 +76,6 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Phase 6 findings, ingest package doc and the missed metric (IMPL-0005 6.5)
 - Phase 7 findings and package docs (IMPL-0005 Phase 7)
 - Phase 8 findings, retention Schedule in the config reference (IMPL-0005 Phase 8)
-- Phase 9 findings, the API package and layout (IMPL-0005 Phase 9)
-- Phase 10 findings, the API package doc and layout (IMPL-0005 Phase 10)
 
 ### Styling
 
@@ -75,15 +92,12 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(workflows)* Replay histories with store recording, and the pre-store ones kept (IMPL-0005 5.9)
 - *(activities)* PR reconcile against fakegithub and the store (IMPL-0005 7.4)
 - *(store)* Each retention rule against fixtures placed by a clock override (IMPL-0005 8.3)
-- *(api)* Contract tests with the authn and authz matrix (IMPL-0005 9.7)
-- *(api)* Endpoints, visibility, recheck and estate over a seeded store (IMPL-0005 10.6)
 
 ### Miscellaneous Tasks
 
 - Add pgx, goose, go-oidc, kin-openapi and the oapi-codegen and sqlc tools (IMPL-0005 1.2)
 - Pin vacuum in mise (IMPL-0005 1.3)
 - Add the generate, lint-api, lint-sql and ui test/e2e/visual recipes (IMPL-0005 1.5)
-- *(api)* Vacuum ruleset for the contract (IMPL-0005 9.2)
 
 ## [0.7.0] - 2026-11-12
 
