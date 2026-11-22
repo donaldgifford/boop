@@ -239,7 +239,7 @@ func TestDiscoverInstallation_GraphQL(t *testing.T) {
 		Slug: "acme/r1", DefaultBranch: "main", InstallationID: 1, DiscoveryInterval: 6 * time.Hour,
 		Extends: []string{"local>acme/renovate-config"},
 	}
-	if !equalDiscovered(c.Arg, wantSig) {
+	if !equalDiscovered(&c.Arg, &wantSig) {
 		t.Errorf("signal = %+v, want %+v", c.Arg, wantSig)
 	}
 	if c.State == nil || c.State.RepoID != 1 || c.State.Platform != workflows.Platform || c.State.LastSeen.IsZero() {
@@ -247,9 +247,9 @@ func TestDiscoverInstallation_GraphQL(t *testing.T) {
 	}
 }
 
-func equalDiscovered(a, b workflows.Discovered) bool {
+func equalDiscovered(a, b *workflows.Discovered) bool {
 	return a.Slug == b.Slug && a.DefaultBranch == b.DefaultBranch && a.InstallationID == b.InstallationID &&
-		a.DiscoveryInterval == b.DiscoveryInterval && slices.Equal(a.Extends, b.Extends)
+		a.DiscoveryInterval == b.DiscoveryInterval && slices.Equal(a.Extends, b.Extends) && a.Record == b.Record
 }
 
 // TestDiscoverInstallation_LargeInstallation is issue #14's shape: 170

@@ -17,12 +17,14 @@ limitations under the License.
 package workflows
 
 import (
+	"errors"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -186,5 +188,84 @@ func TestRepoWorkflow_RecordsWaitsAndStall(t *testing.T) {
 	}
 	if len(p.recordedRuns) != StallLimit+1 {
 		t.Errorf("RecordRun calls = %d, want every timed-out attempt (%d)", len(p.recordedRuns), StallLimit+1)
+	}
+}
+
+// An execution that predates the store-record gate continues as new
+// when a discovered signal says the store is on, keeping its schedule
+// and without a run, so the next execution records (an upgrade adopts
+// running workflows).
+func TestRepoWorkflow_AdoptsOnRecordingDiscovery(t *testing.T) {
+	t.Parallel()
+	p := newRW(t, succeeded())
+	p.plan = recordingPlan()
+	p.env.OnGetVersion(storeRecordChange, workflow.DefaultVersion, 1).Return(workflow.DefaultVersion)
+	in := state(t0)
+	in.NextDue = t0.Add(testCadence)
+	p.env.RegisterDelayedCallback(func() {
+		p.env.SignalWorkflow(DiscoveredSignal, Discovered{
+			Slug: "acme/app", DefaultBranch: "main", InstallationID: 1, DiscoveryInterval: testEvery, Record: true,
+		})
+	}, time.Hour)
+	err := p.run(in, 2*testCadence)
+	var can *workflow.ContinueAsNewError
+	if !errors.As(err, &can) {
+		t.Fatalf("workflow: %v, want ContinueAsNew on a recording discovery", err)
+	}
+	var next RepoState
+	if err := converter.GetDefaultDataConverter().FromPayloads(can.Input, &next); err != nil {
+		t.Fatal(err)
+	}
+	if !next.NextDue.Equal(in.NextDue) || next.Recorded || len(p.runs) != 0 {
+		t.Errorf("carried %+v after %d runs, want the schedule kept, not recorded, no run", next, len(p.runs))
+	}
+}
+
+// A continued execution the store has not seen records its onboarding
+// and schedule once, before its first run; one already recorded does
+// not.
+func TestRepoWorkflow_BackfillsOnce(t *testing.T) {
+	t.Parallel()
+	for _, recorded := range []bool{false, true} {
+		p := newRW(t, succeeded())
+		p.plan = recordingPlan()
+		in := state(t0)
+		in.NextDue = t0.Add(testCadence)
+		in.LastRun = &RunSummary{Outcome: OutcomeSucceeded, StartedAt: t0.Add(-testCadence)}
+		in.Recorded = recorded
+		p.keepSeen(testCadence / 2)
+		_ = p.run(in, testCadence/2)
+
+		// Record activities are not awaited, so their order is not fixed.
+		var want []string
+		if !recorded {
+			want = []string{KindRepoOnboarded, KindRepoRunScheduled}
+		}
+		got := kinds(p.recorded)
+		slices.Sort(got)
+		if !slices.Equal(got, want) {
+			t.Errorf("Recorded=%v: recorded %v, want %v", recorded, got, want)
+		}
+		for i := range p.recorded {
+			if e := &p.recorded[i]; e.Kind == KindRepoRunScheduled && (e.Scheduled == nil || !e.Scheduled.NextDue.Equal(in.NextDue)) {
+				t.Errorf("backfilled schedule = %+v, want the carried NextDue", e.Scheduled)
+			}
+		}
+	}
+}
+
+// Discovered signals without Record, as in histories from before it
+// existed, never make an execution continue as new.
+func TestRepoWorkflow_NoAdoptWithoutRecord(t *testing.T) {
+	t.Parallel()
+	p := newRW(t, succeeded())
+	p.plan = recordingPlan()
+	p.env.OnGetVersion(storeRecordChange, workflow.DefaultVersion, 1).Return(workflow.DefaultVersion)
+	p.keepSeen(3 * testCadence)
+	if err := p.run(state(t0), 3*testCadence); err != nil {
+		t.Fatalf("workflow: %v, want it to run on without continuing as new", err)
+	}
+	if len(p.runs) != 2 {
+		t.Errorf("runs = %d, want 2", len(p.runs))
 	}
 }

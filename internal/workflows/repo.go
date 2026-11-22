@@ -107,6 +107,13 @@ type repo struct {
 	recordV workflow.Version
 	record  bool
 	records []workflow.Future
+	// backfillV is storeBackfillChange's version. adopt is set when a
+	// discovered signal says the store is on and this execution neither
+	// records nor has recorded its onboarding (it predates the
+	// store-record gate, or the store was off when it started): it
+	// continues as new, and the new execution backfills.
+	backfillV workflow.Version
+	adopt     bool
 }
 
 // RepoWorkflow owns one repository: it waits for its due time, a
@@ -135,10 +142,12 @@ func RepoWorkflow(ctx workflow.Context, in *RepoState) error {
 	}
 	r.sandboxV = workflow.GetVersion(ctx, sandboxChange, workflow.DefaultVersion, 1)
 	r.recordV = workflow.GetVersion(ctx, storeRecordChange, workflow.DefaultVersion, 1)
+	r.backfillV = workflow.GetVersion(ctx, storeBackfillChange, workflow.DefaultVersion, 1)
 	if err := r.plan(ctx, PriorityNormal); err != nil {
 		return err
 	}
 	r.firstDue(ctx)
+	r.backfill(ctx)
 	r.upsert(ctx, PhaseWaiting)
 
 	for {
@@ -149,6 +158,10 @@ func RepoWorkflow(ctx workflow.Context, in *RepoState) error {
 		if end {
 			r.flushRecords(ctx)
 			return nil
+		}
+		if r.adopt {
+			workflow.GetLogger(ctx).Info("continuing as new to record to the store", "repo_id", r.s.RepoID)
+			return r.continueAsNew(ctx)
 		}
 		end, err := r.runOnce(ctx, prio)
 		if err != nil {
@@ -297,6 +310,10 @@ func (r *repo) wait(ctx workflow.Context) (prio Priority, end bool) {
 			return atPrio, false
 		case "recheck":
 			return PriorityHigh, false
+		case "discovered":
+			if r.adopt {
+				return 0, false
+			}
 		case "absent":
 			if gone := r.checkRepo(ctx); gone {
 				return 0, true
@@ -335,6 +352,9 @@ func (r *repo) applyDiscovered(d *Discovered, now time.Time) {
 	r.s.Extends = d.Extends
 	r.s.LastSeen = now
 	r.nextCheck = time.Time{}
+	if d.Record && !r.s.Recorded {
+		r.adopt = true
+	}
 }
 
 // absentAt is when the absence check is due: LastSeen + 3 × the

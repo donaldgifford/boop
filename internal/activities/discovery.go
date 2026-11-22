@@ -208,6 +208,7 @@ func (a *Activities) signalDiscovered(ctx context.Context, app *config.App, inst
 		InstallationID:    installationID,
 		DiscoveryInterval: app.Discovery.Every,
 		Extends:           extends,
+		Record:            a.store != nil,
 	}
 	state := &workflows.RepoState{
 		Platform:          workflows.Platform,
