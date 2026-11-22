@@ -961,7 +961,7 @@ page stops using them.
 
 #### Tasks
 
-- [ ] 12.1 Estate (`/`): KPI strip, the open-PR trend, PR age buckets,
+- [x] 12.1 Estate (`/`): KPI strip, the open-PR trend, PR age buckets,
   runs by outcome, top pending packages, ecosystems, and the
   installations table.
 - [ ] 12.2 Pull requests (`/pulls`): a DataTable with filter chips, sorted
