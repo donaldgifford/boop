@@ -1253,7 +1253,7 @@ page stops using them.
   `boopd-api` and `boopd-ui`, the audience mapper), authz file, the
   endpoint overview, cursors, errors, and the correlator's entry points
   (`/updates`, `/dependencies` by purl).
-- [ ] 15.4 `docs/ui.md`: enabling, sessions and key rotation, pages,
+- [x] 15.4 `docs/ui.md`: enabling, sessions and key rotation, pages,
   the status page, and security.
 - [ ] 15.5 `docs/config.md` rows; CLAUDE.md layout (`internal/store`,
   `internal/api`, `internal/purl`, `ui/`, `api/`) and roles.
