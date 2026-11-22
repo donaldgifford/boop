@@ -593,6 +593,46 @@ boop's own components stay in `ui/`: `UpdateRow`/`UpdateSummary`,
 `WaitingSections`, `ListCard`, the run and pull request columns, and
 `eventItem`.
 
+## Findings (Phase 13)
+
+- **The migrate hook carries its own config.** A pre-install hook runs
+  before the release's ConfigMap exists, so the hook renders boopd.hcl
+  into its own hook ConfigMap at weight -10 (sync-wave -10 under Argo
+  CD), and the Job runs at 0.
+  - Both use `before-hook-creation`, so the last run's logs stay until
+    the next upgrade.
+  - The roles roll only after the hook succeeds, which is the "waiting
+    before the roles start".
+- **One DSN per role, by projection.** `store.existingSecret` holds four
+  keys, and each pod projects only its own key under
+  `<secretsDir>/<secret>/`:
+  - worker: `worker-dsn`;
+  - ingest: `ingest-dsn`;
+  - api: `ro-dsn`;
+  - migrate: `owner-dsn`.
+
+  The config names all four refs. Each role reads only its own.
+- **The worker gets no NetworkPolicy.** It has none today (it talks to
+  GitHub, the Kubernetes API and Temporal), so "worker → Postgres -rw"
+  needs nothing. Ingest's existing policy gains `store.networkPolicy.rw`.
+  The API, UI and migrate policies are new.
+- **The UI's secrets are env from `ui.existingSecret`** (`client-secret`,
+  `session-keys`), since the BFF reads its environment. The pod has no
+  volumes and no ServiceAccount token. `API_UPSTREAM` is the API
+  Service's in-cluster name.
+- **Guards fail at render**, from `boopd.roles.validate`, included by
+  `migrate-job.yaml`. They cover:
+  - the store without its Secret;
+  - the API without the store or `boopd.api.auth`;
+  - the UI without the API or sign-in;
+  - a UI route without sign-in.
+- **Byte-identical with everything off.** The default, example, ingest,
+  existing-secret and sandbox renders match the pre-Phase-13 renders
+  except for the redis subchart's random password.
+- **`golangci-lint` was walking `ui/node_modules`**, where an npm package
+  ships Go files. `node_modules` is now excluded with the other vendored
+  paths.
+
 ## Implementation Phases
 
 Each phase ends with `just lint`, `just test` and its own checks green,
