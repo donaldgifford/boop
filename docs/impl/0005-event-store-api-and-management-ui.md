@@ -1081,7 +1081,7 @@ page stops using them.
 
 #### Tasks
 
-- [ ] 13.1 Values and schema:
+- [x] 13.1 Values and schema:
   - `store` (`enabled`, `existingSecret` with the four DSN keys,
     `migrate` hook style `helm` or `argocd`);
   - `api` (Deployment, replicas, PDB, Service, authz, `ingress` and
