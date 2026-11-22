@@ -98,6 +98,30 @@ renders with an existing Secret are identical.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` | Affinity rules |
+| api.authz | object | See values.yaml | The authz file (docs/api.md): `owners` (group -> owner logins, or "*"), `operators` (groups allowed to POST actions) and `clients` (a machine client's azp -> groups). Rendered into a ConfigMap and mounted at /etc/boopd/authz.yaml; a change rolls the pods. |
+| api.enabled | bool | `false` | Render the API Deployment, ServiceAccount, Service, PDB and authz ConfigMap. Needs store.enabled and boopd.api.auth. |
+| api.httpRoute.annotations | object | `{}` | HTTPRoute annotations. |
+| api.httpRoute.enabled | bool | `false` | Render a Gateway API HTTPRoute for the API's /api prefix. |
+| api.httpRoute.hostnames | list | `[]` | HTTPRoute hostnames. |
+| api.httpRoute.parentRefs | list | `[]` | Gateways to attach to. |
+| api.ingress.annotations | object | `{}` | Ingress annotations. |
+| api.ingress.className | string | `""` | Ingress class. |
+| api.ingress.enabled | bool | `false` | Render an Ingress for the API (machine clients; the UI reaches the API in-cluster). |
+| api.ingress.hosts | list | `[]` | Hosts: `[{host: boop-api.example.com}]`; each routes /api. |
+| api.ingress.tls | list | `[]` | Ingress TLS entries. |
+| api.networkPolicy.from | list | `[]` | More peers allowed to the listen port (an ingress controller). |
+| api.networkPolicy.idp | list | TCP 443 to anywhere | Egress rules reaching the IdP (discovery and JWKS). |
+| api.networkPolicy.metricsFrom | list | `[]` | Peers allowed to the metrics port: Prometheus. |
+| api.networkPolicy.temporal | list | TCP 7233 to anywhere | Egress rules reaching Temporal. |
+| api.pdb.enabled | bool | `true` | Render a PodDisruptionBudget for the API pods. |
+| api.pdb.maxUnavailable | int | `1` | PDB maxUnavailable. |
+| api.replicaCount | int | `2` | API replicas; stateless. |
+| api.resources | object | `{}` | API container resources. |
+| api.service.port | int | `8080` | API Service port, to the listen port. |
+| api.service.type | string | `"ClusterIP"` | API Service type. |
+| api.temporalOidc.clientId | string | `""` | OIDC client ID for the API. |
+| api.temporalOidc.existingSecret | string | `""` | Secret with key `client-secret` for the API's OIDC client. |
+| api.terminationGracePeriodSeconds | int | `30` | Above the API's drain of requests in flight. |
 | args | list | `["worker","--config","/etc/boopd/boopd.hcl"]` | Container args. The default runs the worker role against the chart-rendered config file. |
 | boopd | object | See values.yaml | boopd.hcl, rendered into the `<fullname>-config` ConfigMap and mounted read-only at /etc/boopd/boopd.hcl. The keys mirror the config file's blocks in camelCase (docs/config.md in the boop repository is the reference for every setting and its chart key); an empty or absent key leaves the file's default. |
 | command | list | `[]` | Override the container command (default: image entrypoint) |
@@ -199,6 +223,15 @@ renders with an existing Secret are identical.
 | serviceMonitor.enabled | bool | `false` | Create Prometheus ServiceMonitor |
 | serviceMonitor.interval | string | `"30s"` | Scrape interval |
 | serviceMonitor.labels | object | `{}` | Additional labels for ServiceMonitor |
+| store.enabled | bool | `false` | Record events and projections from the worker and ingest; needed by the API. |
+| store.existingSecret | string | `""` | Secret with the four DSNs (keys below). Required with enabled. |
+| store.keys | object | owner-dsn, worker-dsn, ingest-dsn, ro-dsn | The Secret's key per Postgres role. |
+| store.migrate.activeDeadlineSeconds | int | `600` | Deadline of one migrate run, in seconds. |
+| store.migrate.backoffLimit | int | `2` | Retries of the migrate Job. |
+| store.migrate.hook | string | `"helm"` | `helm` (pre-install/pre-upgrade hooks) or `argocd` (PreSync). Either way the migration finishes before the roles roll. |
+| store.migrate.resources | object | `{}` | Migrate container resources. |
+| store.networkPolicy.ro | list | TCP 5432 to anywhere | Egress rules to the read-only service (CNPG's `-ro`): the API. |
+| store.networkPolicy.rw | list | TCP 5432 to anywhere | Egress rules (NetworkPolicyEgressRule list) to the read-write service (CNPG's `-rw`): ingest and migrate. The worker has no policy of its own. |
 | temporal.address | string | `""` | Frontend `host:port`. Required. |
 | temporal.auth.oidc | object | `{"audience":"","clientId":"","existingSecret":"","scopes":[],"tokenUrl":""}` | Authenticate with a bearer token from an OAuth2 client-credentials grant (Keycloak and the like) instead of mTLS. The token is cached and renewed a minute before it expires. |
 | temporal.auth.oidc.audience | string | `""` | `audience` parameter, for IdPs that take one. Keycloak sets the audience with a client-scope mapper instead. |
@@ -214,6 +247,36 @@ renders with an existing Secret are identical.
 | temporal.tls.serverName | string | `""` | Server name to verify the frontend certificate against. |
 | terminationGracePeriodSeconds | int | `3600` | Seconds Kubernetes waits after SIGTERM. Must exceed the RunRenovate StartToClose (58m) so a draining worker lets in-flight runs reach their soft deadlines (DESIGN-0001 § Worker shutdown). |
 | tolerations | list | `[]` | Tolerations |
+| ui.enabled | bool | `false` | Render the UI Deployment, ServiceAccount, Service and PDB. |
+| ui.existingSecret | string | `""` | Secret with `client-secret` (the boopd-ui OIDC client) and `session-keys` (comma-separated, 32+ bytes each, newest first). Required. |
+| ui.httpRoute.annotations | object | `{}` | HTTPRoute annotations. |
+| ui.httpRoute.enabled | bool | `false` | Render a Gateway API HTTPRoute for the UI. |
+| ui.httpRoute.hostnames | list | `[]` | HTTPRoute hostnames. |
+| ui.httpRoute.parentRefs | list | `[]` | Gateways to attach to. |
+| ui.image.pullPolicy | string | `"IfNotPresent"` | UI image pull policy. |
+| ui.image.repository | string | `"ghcr.io/donaldgifford/boopd-ui"` | UI image repository. |
+| ui.image.tag | string | `""` | UI image tag; empty uses the chart's appVersion (lockstep). |
+| ui.ingress.annotations | object | `{}` | Ingress annotations. |
+| ui.ingress.className | string | `""` | Ingress class, e.g. tailscale. |
+| ui.ingress.enabled | bool | `false` | Render an Ingress for the UI. |
+| ui.ingress.hosts | list | `[]` | Hosts: `[{host: boop.example.com}]`. |
+| ui.ingress.tls | list | `[]` | Ingress TLS entries. |
+| ui.links | list | `[]` | The sidebar's external links: `[{label: Grafana, url: https://...}]`. |
+| ui.networkPolicy.from | list | `[]` | Peers allowed to the UI port: the ingress controller or gateway. |
+| ui.networkPolicy.idp | list | TCP 443 to anywhere | Egress rules reaching the IdP (discovery, token, revocation). |
+| ui.oidc.authorizationParams | object | `{}` | Extra authorize parameters, e.g. `{audience: boopd-api}`. |
+| ui.oidc.clientId | string | `"boopd-ui"` | The confidential client (OIDC_CLIENT_ID). |
+| ui.oidc.issuer | string | `""` | The issuer (OIDC_ISSUER). Required. |
+| ui.oidc.scopes | list | `[]` | Scopes; empty keeps the BFF's default. |
+| ui.oidc.tokenAuthMethod | string | `""` | `client_secret_post` or `client_secret_basic`; empty keeps the BFF's default. |
+| ui.pdb.enabled | bool | `true` | Render a PodDisruptionBudget for the UI pods. |
+| ui.pdb.maxUnavailable | int | `1` | PDB maxUnavailable. |
+| ui.publicURL | string | `""` | The UI's public origin (PUBLIC_URL): https, the redirect URI's base. Required. |
+| ui.replicaCount | int | `2` | UI replicas; sessions are sealed cookies, so any replica serves. |
+| ui.resources | object | See values.yaml | UI container resources. |
+| ui.service.port | int | `80` | UI Service port, to the BFF's 3000. |
+| ui.service.type | string | `"ClusterIP"` | UI Service type. |
+| ui.sessionTTL | string | `""` | A session's absolute end (UI_SESSION_TTL); empty keeps 8h. |
 | worker.buildId | string | `""` | Worker deployment build ID (TEMPORAL_BUILD_ID); empty uses image.tag, then appVersion without a leading v. |
 
 ## Development

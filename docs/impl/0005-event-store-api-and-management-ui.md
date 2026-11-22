@@ -1109,7 +1109,7 @@ page stops using them.
   - each role mounts only its own DSN;
   - the ui has no ServiceAccount token;
   - the guards and the NetworkPolicies.
-- [ ] 13.7 `just helm-docs`, and the rendered-config validate.
+- [x] 13.7 `just helm-docs`, and the rendered-config validate.
 
 #### Success Criteria
 

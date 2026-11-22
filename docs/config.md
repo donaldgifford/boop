@@ -574,6 +574,8 @@ labelled blocks become maps keyed by label:
 | `order`, `default_profile`, `unknown_profile` | `boopd.order`, `boopd.defaultProfile`, `boopd.unknownProfile` |
 | `profile_rule` | `boopd.profileRules`, a list |
 | `ingest.*` | `boopd.ingest.*`: `path`, `settle`, `minInterval`, `auditEvery` |
+| `store` | rendered when top-level `store.enabled`: the four `*_dsn_secret_ref` blocks from `store.existingSecret` and `store.keys` (`owner`, `worker`, `ingest`, `ro`); `retention` from `boopd.store.retention` (`events`, `deliveryPayloads`, `offboarded`) |
+| `api` | rendered when top-level `api.enabled`: `auth` from `boopd.api.auth` (`issuer`, `audience`, `nameClaim`, `groupsClaim`), `status_public` from `boopd.api.statusPublic`; `authz_file` is always `/etc/boopd/authz.yaml`, mounted from `api.authz` |
 | `sandbox` | top-level `sandbox.*`, rendered when `sandbox.enabled`: `runtimeClass`, `serviceAccount.name`, `nodeSelector`, `tolerations` (the `toleration` blocks), `egressAllow`, `floorMode`, `floorAdd`, `tokenPermissions`, `pendingTimeout`, `checkRuntimeClass` |
 | `app "<name>"` | `boopd.apps.<name>`: `endpoint`, `appId`, `installations`, `cadence`, `privateKeySecretRef`, `discovery`, `budget`, `webhook` (`bot`, `secretRef`) |
 
