@@ -975,7 +975,7 @@ page stops using them.
 - [x] 12.5 Repositories, Packages (+ `$purl`), Runs, Events (15 s
   polling), Deliveries, and Status (public, outside the shell, 30 s
   refetch).
-- [ ] 12.6 Polling (DESIGN-0004 OQ10): 30 s for lists, and 5 s on a
+- [x] 12.6 Polling (DESIGN-0004 OQ10): 30 s for lists, and 5 s on a
   repository with a run in progress.
 - [ ] 12.7 Component gaps (INV-0005 OQ7, finding 8). For each page, list
   what the package lacks. A generic component is built in
