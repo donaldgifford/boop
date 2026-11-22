@@ -1,6 +1,7 @@
 import { createRootRoute, createRoute, createRouter, Outlet, retainSearchParams } from "@tanstack/react-router";
 
 import { parseScopeSearch } from "./components/PageControls";
+import { NotFound, RouteError } from "./shell/errors";
 import { Shell } from "./shell/Shell";
 import { EstateView } from "./views/estate";
 import { PlaceholderView } from "./views/placeholder";
@@ -16,6 +17,8 @@ const shellRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "shell",
   component: Shell,
+  errorComponent: RouteError,
+  notFoundComponent: NotFound,
   validateSearch: parseScopeSearch,
   search: { middlewares: [retainSearchParams(["owner", "range"])] },
 });
@@ -27,13 +30,16 @@ const placeholders = (["/waiting", "/packages", "/repositories", "/runs", "/even
   createRoute({ getParentRoute: () => shellRoute, path, component: PlaceholderView }),
 );
 
+// Any other path is not found, inside the frame.
+const notFoundRoute = createRoute({ getParentRoute: () => shellRoute, path: "$", component: NotFound });
+
 // The status page is public: it sits outside the shell, which is where a
 // session will be asked for (DESIGN-0004).
 const statusRoute = createRoute({ getParentRoute: () => rootRoute, path: "/status", component: StatusView });
 
-const routeTree = rootRoute.addChildren([shellRoute.addChildren([estateRoute, pullsRoute, repositoryRoute, ...placeholders]), statusRoute]);
+const routeTree = rootRoute.addChildren([shellRoute.addChildren([estateRoute, pullsRoute, repositoryRoute, ...placeholders, notFoundRoute]), statusRoute]);
 
-export const router = createRouter({ routeTree });
+export const router = createRouter({ routeTree, defaultErrorComponent: RouteError, defaultNotFoundComponent: NotFound });
 
 declare module "@tanstack/react-router" {
   interface Register {

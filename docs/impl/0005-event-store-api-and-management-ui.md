@@ -870,7 +870,7 @@ store code, so 9.1 is the one task that unblocks the rest of the UI.
 
   repo-guardian's server tests (app, auth, config, health, proxy,
   session, static) are ported as the behaviour to meet.
-- [ ] 11.4 The shell, composed from the package's parts. The mockup has
+- [x] 11.4 The shell, composed from the package's parts. The mockup has
   the sidebar with the package's `AppSwitcher` as its header, the `NAV`
   groups, the account menu, and the top bar with the trigger, search
   button and `TimeZoneToggle`. Still to add: breadcrumbs, the external
