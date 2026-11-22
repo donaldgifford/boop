@@ -1249,7 +1249,7 @@ page stops using them.
 - [x] 15.2 `release.yml`: build (with the registry token as a build
   secret), sign (cosign) and attest (SLSA) the `boopd-ui` image with the
   same tag, and add it to the release notes.
-- [ ] 15.3 `docs/api.md`: auth setup (the Keycloak clients
+- [x] 15.3 `docs/api.md`: auth setup (the Keycloak clients
   `boopd-api` and `boopd-ui`, the audience mapper), authz file, the
   endpoint overview, cursors, errors, and the correlator's entry points
   (`/updates`, `/dependencies` by purl).
