@@ -19,6 +19,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -399,7 +400,9 @@ func helm(ctx context.Context, t *testing.T, args ...string) {
 // holds for it: boopd's config refuses an image without one. An imported
 // image has no repo digest (it was never pulled), so the kubelet could
 // not find it by digest; tagging it with its digested name adds one.
-// BOOPD_E2E_STUB_DIGEST overrides the lookup.
+// BOOPD_E2E_STUB_DIGEST overrides the lookup. Parallel tests share the
+// node, so tagging is serialized and skipped once the digested name
+// exists: a concurrent tag --force removes it for a moment.
 func stubImageDigest(ctx context.Context, t *testing.T, image string) string {
 	t.Helper()
 	if d := os.Getenv("BOOPD_E2E_STUB_DIGEST"); d != "" {
@@ -418,6 +421,8 @@ func stubImageDigest(ctx context.Context, t *testing.T, image string) string {
 		}
 		return string(out)
 	}
+	stubTagMu.Lock()
+	defer stubTagMu.Unlock()
 	out := ctr("ls", "name=="+image)
 	for _, line := range strings.Split(out, "\n") {
 		f := strings.Fields(line)
@@ -426,13 +431,18 @@ func stubImageDigest(ctx context.Context, t *testing.T, image string) string {
 			if i := strings.LastIndex(image, ":"); i > strings.LastIndex(image, "/") {
 				repo = image[:i]
 			}
-			ctr("tag", "--force", image, repo+"@"+f[2])
+			if digested := repo + "@" + f[2]; !strings.Contains(ctr("ls", "name=="+digested), digested) {
+				ctr("tag", image, digested)
+			}
 			return image + "@" + f[2]
 		}
 	}
 	t.Fatalf("no digest for %s in the k3d node:\n%s", image, out)
 	return ""
 }
+
+// stubTagMu serializes stubImageDigest's ctr calls across parallel tests.
+var stubTagMu sync.Mutex
 
 // issue returns a fresh CA and a serving certificate for names, PEM.
 func issue(t *testing.T, names ...string) (caPEM, certPEM, keyPEM []byte) {

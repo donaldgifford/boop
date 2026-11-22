@@ -246,3 +246,63 @@ func get(t *testing.T, url string) (int, http.Header) {
 	defer resp.Body.Close()
 	return resp.StatusCode, resp.Header
 }
+
+// TestListRepos_PerInstallation: a repository with Installation set is
+// listed only for tokens minted for that installation.
+func TestListRepos_PerInstallation(t *testing.T) {
+	t.Parallel()
+	s := fakegithub.New(t)
+	s.SetRepos(
+		fakegithub.Repo{ID: 1, Slug: "acme/shared"},
+		fakegithub.Repo{ID: 2, Slug: "globex/own", Installation: 2},
+	)
+	list := func(installation string) []string {
+		t.Helper()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
+			s.URL+"/api/v3/app/installations/"+installation+"/access_tokens", bytes.NewBufferString("{}"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var tok struct {
+			Token string `json:"token"`
+		}
+		err = json.NewDecoder(res.Body).Decode(&tok)
+		res.Body.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		req, err = http.NewRequestWithContext(t.Context(), http.MethodGet, s.URL+"/api/v3/installation/repositories", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Authorization", "token "+tok.Token)
+		res, err = http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		var body struct {
+			Repositories []struct {
+				FullName string `json:"full_name"`
+			} `json:"repositories"`
+		}
+		if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		var names []string
+		for _, r := range body.Repositories {
+			names = append(names, r.FullName)
+		}
+		return names
+	}
+	if got, want := list("1"), []string{"acme/shared"}; !slices.Equal(got, want) {
+		t.Errorf("installation 1 lists %v, want %v", got, want)
+	}
+	if got, want := list("2"), []string{"acme/shared", "globex/own"}; !slices.Equal(got, want) {
+		t.Errorf("installation 2 lists %v, want %v", got, want)
+	}
+}
