@@ -53,6 +53,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(e2e)* Per-installation stub repositories; serialize the stub image's digest tag
 - *(fakegithub)* Preallocate the listing test's names
 - *(e2e)* The UI's Playwright flows against the k3d stack (IMPL-0005 14.3)
+- *(workflows)* Lock the reconcile mock the discovery pass calls in parallel
 
 ### Miscellaneous Tasks
 
