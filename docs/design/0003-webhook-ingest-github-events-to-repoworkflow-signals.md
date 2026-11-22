@@ -315,9 +315,10 @@ A rejected delivery (bad signature) keeps only the headers: an
 unverified body is never stored.
 
 Recording never blocks the answer to GitHub. Ingest hands the record to
-a sink after routing. Until DESIGN-0004's store exists, the sink is a
-structured log line at info plus `boopd_ingest_deliveries_total`.
-DESIGN-0004 replaces the sink with the store.
+a sink after routing. Before DESIGN-0004's store, the sink was a
+structured log line at info plus `boopd_ingest_deliveries_total`. The
+records are now stored (IMPL-0005): with `store.enabled`, the sink
+writes them to the store, and the log line and metric remain.
 
 ### RepoWorkflow: event and changed
 
@@ -348,7 +349,7 @@ it:
 Together with the delivery records, they answer "why did this
 repository run, or stop running?" without reading Temporal history.
 The workflow records them through DESIGN-0004's `RecordEvents`
-activity. Until that exists, they are workflow log lines and the
+activity: stored (IMPL-0005). They are also workflow log lines and the
 `boopd_repo_event_runs_total` metric.
 
 ```mermaid
@@ -624,8 +625,8 @@ Temporal state:
 
 Product records (the delivery records, the delivery-audit results and
 the repository events) are defined in
-[Recording deliveries](#recording-deliveries) and stored by DESIGN-0004.
-Until then they are log lines and metrics.
+[Recording deliveries](#recording-deliveries) and stored by DESIGN-0004:
+stored (IMPL-0005).
 
 ## Testing Strategy
 

@@ -1257,7 +1257,7 @@ page stops using them.
   the status page, and security.
 - [x] 15.5 `docs/config.md` rows; CLAUDE.md layout (`internal/store`,
   `internal/api`, `internal/purl`, `ui/`, `api/`) and roles.
-- [ ] 15.6 DESIGN-0004 → Implemented; DESIGN-0003's recording note
+- [x] 15.6 DESIGN-0004 → Implemented; DESIGN-0003's recording note
   → "stored (IMPL-0005)".
 
 #### Success Criteria
