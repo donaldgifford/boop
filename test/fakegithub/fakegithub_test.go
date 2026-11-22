@@ -293,7 +293,7 @@ func TestListRepos_PerInstallation(t *testing.T) {
 		if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
 			t.Fatal(err)
 		}
-		var names []string
+		names := make([]string, 0, len(body.Repositories))
 		for _, r := range body.Repositories {
 			names = append(names, r.FullName)
 		}
