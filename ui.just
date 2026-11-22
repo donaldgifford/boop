@@ -19,7 +19,7 @@ ui-lint:
 # Run the UI's unit tests (the BFF and the SPA) with bun test
 [group('ui')]
 ui-test:
-    cd ui && bun test
+    cd ui && bun run test
 
 # Build the UI into ui/dist and check it is CSP-clean (no data: URL, no
 # Google Fonts URL)
