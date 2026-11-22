@@ -23,6 +23,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 - *(api)* Contract tests with the authn and authz matrix (IMPL-0005 9.7)
 - *(api)* Endpoints, visibility, recheck and estate over a seeded store (IMPL-0005 10.6)
+- *(activities)* Poll for the budget entity's rate-limit readings
 
 ### Miscellaneous Tasks
 
