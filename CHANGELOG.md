@@ -89,6 +89,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - DESIGN-0004 implemented; DESIGN-0003's records are stored (IMPL-0005 15.6)
 - Phase 15 findings; the workflows package doc names the installation records (IMPL-0005 Phase 15)
 - PRs A, B and C opened (IMPL-0005 16.1-16.3)
+- 16.6 deferred until the PRs merge and the homelab steps (IMPL-0005 16.6)
 
 ### Styling
 
