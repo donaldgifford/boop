@@ -11,20 +11,21 @@
 ui-install:
     @cd ui && NPM_TOKEN="${NPM_TOKEN:-$(gh auth token)}" bun install --frozen-lockfile
 
-# Typecheck and lint the UI
+# Typecheck and lint the UI, and run the API-drift and colour-token gates
 [group('ui')]
 ui-lint:
-    cd ui && bun run typecheck && bun run lint
+    cd ui && bun run typecheck && bun run lint && bun run check:api && bun run check:tokens
 
 # Run the UI's unit tests (the BFF and the SPA) with bun test
 [group('ui')]
 ui-test:
     cd ui && bun test
 
-# Build the UI into ui/dist
+# Build the UI into ui/dist and check it is CSP-clean (no data: URL, no
+# Google Fonts URL)
 [group('ui')]
 ui-build:
-    cd ui && bun run build
+    cd ui && bun run check:dist
 
 # Run the UI mockup over fixture data (http://localhost:5173)
 [group('ui')]

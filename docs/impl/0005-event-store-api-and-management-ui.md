@@ -892,7 +892,7 @@ store code, so 9.1 is the one task that unblocks the rest of the UI.
 - [x] 11.7 `ui/Dockerfile` (Bun build, deps, distroless) with
   `NPM_TOKEN` as a build secret, and the `docker-bake.hcl` targets
   `ui-dev`, `ui-ci` and `ui-release`, with the same tag as `boopd`.
-- [ ] 11.8 Gates in `ui/scripts`: `check-api` (type drift), `check-dist`
+- [x] 11.8 Gates in `ui/scripts`: `check-api` (type drift), `check-dist`
   (no data: URL or Google Fonts URL in the build) and `check-tokens` (no
   colour outside the package's tokens).
 - [ ] 11.9 Tests: `bun test` for the server and the shell, and the CSP
