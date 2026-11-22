@@ -90,6 +90,9 @@ spec:
               readOnly: true
             {{- include "boopd.storeDSNMount" (list . .Values.store.keys.ro) | nindent 12 }}
             {{- include "boopd.temporalMounts" $tv | nindent 12 }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- with .Values.securityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
@@ -115,6 +118,9 @@ spec:
             name: {{ include "boopd.role.fullname" (list . "api-authz") }}
         {{- include "boopd.storeDSNVolume" (list . .Values.store.keys.ro) | nindent 8 }}
         {{- include "boopd.temporalVolumes" $tv | nindent 8 }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

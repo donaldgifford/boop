@@ -179,3 +179,16 @@ target "stub-github" {
   tags       = ["${STUB_GITHUB_IMAGE}"]
   output     = ["type=docker"]
 }
+
+// The mock OIDC issuer for the store, API and UI e2e (IMPL-0005 14.1).
+// Like the other stubs, built locally and in CI, never pushed.
+variable "STUB_OIDC_IMAGE" {
+  default = "ghcr.io/donaldgifford/boopd-stub-oidc:dev"
+}
+
+target "stub-oidc" {
+  context    = "."
+  dockerfile = "test/stub-oidc/Dockerfile"
+  tags       = ["${STUB_OIDC_IMAGE}"]
+  output     = ["type=docker"]
+}

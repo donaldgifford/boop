@@ -9,3 +9,5 @@ dist
 .vscode
 .idea
 .claude
+ui/node_modules
+ui/dist

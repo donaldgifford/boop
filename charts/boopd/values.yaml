@@ -604,6 +604,13 @@ ui:
   sessionTTL: ""
   # -- The sidebar's external links: `[{label: Grafana, url: https://...}]`.
   links: []
+  # -- Extra env for the BFF, e.g. NODE_EXTRA_CA_CERTS for an IdP under
+  # a private CA (with extraVolumes and extraVolumeMounts).
+  extraEnv: []
+  # -- Extra volumes for the UI pod.
+  extraVolumes: []
+  # -- Extra volume mounts for the BFF container.
+  extraVolumeMounts: []
   ingress:
     # -- Render an Ingress for the UI.
     enabled: false

@@ -249,6 +249,9 @@ renders with an existing Secret are identical.
 | tolerations | list | `[]` | Tolerations |
 | ui.enabled | bool | `false` | Render the UI Deployment, ServiceAccount, Service and PDB. |
 | ui.existingSecret | string | `""` | Secret with `client-secret` (the boopd-ui OIDC client) and `session-keys` (comma-separated, 32+ bytes each, newest first). Required. |
+| ui.extraEnv | list | `[]` | Extra env for the BFF, e.g. NODE_EXTRA_CA_CERTS for an IdP under a private CA (with extraVolumes and extraVolumeMounts). |
+| ui.extraVolumeMounts | list | `[]` | Extra volume mounts for the BFF container. |
+| ui.extraVolumes | list | `[]` | Extra volumes for the UI pod. |
 | ui.httpRoute.annotations | object | `{}` | HTTPRoute annotations. |
 | ui.httpRoute.enabled | bool | `false` | Render a Gateway API HTTPRoute for the UI. |
 | ui.httpRoute.hostnames | list | `[]` | HTTPRoute hostnames. |

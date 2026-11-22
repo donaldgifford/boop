@@ -29,6 +29,12 @@ export interface MockIssuerOptions {
   apiAudience?: string;
   groups?: string[];
   users?: Record<string, MockUser>;
+  // publicURL is the issuer as its clients name it (a Service name in the
+  // e2e cluster); the default is http://127.0.0.1:<port>.
+  publicURL?: string;
+  hostname?: string;
+  // tls serves https with these PEMs.
+  tls?: { cert: string; key: string };
 }
 
 export interface MockUser {
@@ -161,6 +167,8 @@ export async function startMockIssuer(opts: MockIssuerOptions = {}): Promise<Moc
 
   const server = Bun.serve({
     port: opts.port ?? 0,
+    ...(opts.hostname ? { hostname: opts.hostname } : {}),
+    ...(opts.tls ? { tls: opts.tls } : {}),
     async fetch(req) {
       const url = new URL(req.url);
       switch (url.pathname) {
@@ -214,7 +222,7 @@ export async function startMockIssuer(opts: MockIssuerOptions = {}): Promise<Moc
       }
     },
   });
-  base = `http://127.0.0.1:${server.port}`;
+  base = opts.publicURL?.replace(/\/$/, "") ?? `http://127.0.0.1:${server.port}`;
 
   return {
     url: new URL(base),

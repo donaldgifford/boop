@@ -161,10 +161,10 @@ func TestIngest(t *testing.T) {
 
 // installIngest installs the chart with ingest on behind a Temporal
 // forwarder, and port-forwards to the ingest pod.
-func installIngest(ctx context.Context, t *testing.T) *ingestHarness {
+func installIngest(ctx context.Context, t *testing.T, opts ...chartOption) *ingestHarness {
 	t.Helper()
 	ih := &ingestHarness{gh: newDeliverer(t)}
-	ih.chartHarness = installChart(ctx, t, func(ctx context.Context, t *testing.T, h *chartHarness, values map[string]any) {
+	ih.chartHarness = installChart(ctx, t, append([]chartOption{func(ctx context.Context, t *testing.T, h *chartHarness, values map[string]any) {
 		t.Helper()
 		h.secret(ctx, t, "e2e-webhook", map[string][]byte{"secret": []byte(webhookSecret)})
 		_, port, err := net.SplitHostPort(h.srv.Config.Address)
@@ -178,7 +178,7 @@ func installIngest(ctx context.Context, t *testing.T) *ingestHarness {
 		boopd["ingest"] = map[string]any{"settle": "2s", "minInterval": "1s", "auditEvery": "1m"}
 		app := boopd["apps"].(map[string]any)["e2e"].(map[string]any)
 		app["webhook"] = map[string]any{"secretRef": map[string]any{"name": "e2e-webhook", "key": "secret"}}
-	})
+	}}, opts...)...)
 	ih.repos = []fakegithub.Repo{
 		{
 			ID: ih.repoID, NodeID: "R_on", Slug: runSlug, DefaultBranch: "main",
@@ -315,15 +315,20 @@ func (h *ingestHarness) workerMetric(ctx context.Context, t *testing.T, name, ma
 // returns its base URL.
 func (h *ingestHarness) portForward(ctx context.Context, t *testing.T) string {
 	t.Helper()
-	cs, ns := h.env.Clientset, h.env.Namespace
-	pods, err := cs.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{
-		LabelSelector: "app.kubernetes.io/name=boopd-ingest,app.kubernetes.io/instance=boopd",
-		FieldSelector: "status.phase=Running",
-	})
+	port := forward(ctx, t, h.env, "app.kubernetes.io/name=boopd-ingest,app.kubernetes.io/instance=boopd", 8080)
+	return fmt.Sprintf("http://127.0.0.1:%d", port)
+}
+
+// forward port-forwards a local port to port on the first running pod
+// matching selector, until the test ends, and returns the local port.
+func forward(ctx context.Context, t *testing.T, env *Env, selector string, port int) int {
+	t.Helper()
+	cs, ns := env.Clientset, env.Namespace
+	pods, err := cs.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{LabelSelector: selector, FieldSelector: "status.phase=Running"})
 	if err != nil || len(pods.Items) == 0 {
-		t.Fatalf("no running ingest pod: %v", err)
+		t.Fatalf("no running pod for %s: %v", selector, err)
 	}
-	transport, upgrader, err := spdy.RoundTripperFor(h.env.Config)
+	transport, upgrader, err := spdy.RoundTripperFor(env.Config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -331,7 +336,7 @@ func (h *ingestHarness) portForward(ctx context.Context, t *testing.T) string {
 		Name(pods.Items[0].Name).SubResource("portforward").URL()
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, http.MethodPost, url)
 	stop, ready := make(chan struct{}), make(chan struct{})
-	fw, err := portforward.NewOnAddresses(dialer, []string{"127.0.0.1"}, []string{"0:8080"}, stop, ready, io.Discard, io.Discard)
+	fw, err := portforward.NewOnAddresses(dialer, []string{"127.0.0.1"}, []string{fmt.Sprintf("0:%d", port)}, stop, ready, io.Discard, io.Discard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -349,7 +354,7 @@ func (h *ingestHarness) portForward(ctx context.Context, t *testing.T) string {
 	if err != nil || len(ports) == 0 {
 		t.Fatalf("port-forward ports: %v", err)
 	}
-	return fmt.Sprintf("http://127.0.0.1:%d", ports[0].Local)
+	return int(ports[0].Local)
 }
 
 // deployForwarder runs the stub-github image as a TCP forwarder to the

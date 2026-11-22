@@ -96,6 +96,13 @@ spec:
             - name: UI_LINKS
               value: {{ toJson . | quote }}
             {{- end }}
+            {{- with $u.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with $u.extraVolumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- with .Values.securityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
@@ -114,6 +121,10 @@ spec:
               path: /readyz
               port: http
             periodSeconds: 10
+      {{- with $u.extraVolumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

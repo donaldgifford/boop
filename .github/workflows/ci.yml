@@ -193,12 +193,17 @@ jobs:
         uses: azure/setup-helm@v5
 
       # The chart e2e (TestChart_*) is the chart gate: it helm-installs
-      # charts/boopd with the boopd image and both stubs (IMPL-0001 7.8).
+      # charts/boopd with the boopd image and the stubs (IMPL-0001 7.8);
+      # the store e2e adds Postgres and the mock issuer (IMPL-0005 14.1).
+      # One image per import: a batch import has left stale images.
       - name: Build and import the boopd and stub images
         run: |
-          docker buildx bake --load boopd stub-renovate stub-github
-          k3d image import ghcr.io/donaldgifford/boopd-stub-renovate:dev \
-            ghcr.io/donaldgifford/boopd-stub-github:dev ghcr.io/donaldgifford/boopd:dev --cluster boop
+          docker buildx bake --load boopd stub-renovate stub-github stub-oidc
+          docker pull --quiet postgres:17.12-alpine
+          for image in ghcr.io/donaldgifford/boopd-stub-renovate:dev ghcr.io/donaldgifford/boopd-stub-github:dev \
+            ghcr.io/donaldgifford/boopd-stub-oidc:dev postgres:17.12-alpine ghcr.io/donaldgifford/boopd:dev; do
+            k3d image import "$image" --cluster boop
+          done
 
       - name: Run the e2e suite
         run: |
