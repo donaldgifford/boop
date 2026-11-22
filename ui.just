@@ -40,3 +40,13 @@ ui-e2e:
 [group('ui')]
 ui-visual *args:
     cd ui && bun run visual {{args}}
+
+# Generate the UI's API types (ui/web/src/api/schema.gen.ts) from api/openapi.yaml
+[group('generate')]
+generate-ui-api:
+    cd ui && bun run gen:api
+
+# Fail when the UI's API types drift from api/openapi.yaml
+[group('ui')]
+ui-check-api:
+    cd ui && bun run check:api

@@ -886,7 +886,7 @@ store code, so 9.1 is the one task that unblocks the rest of the UI.
 - [x] 11.5 The badge state table on the package's `Badge` variants
   (DESIGN-0004 § Visual design); the open-enum fallback to `muted`
   (`ui/web/src/components/badges.tsx`; its tests are 11.9).
-- [ ] 11.6 Generated types from `api/openapi.yaml` (`generate-ui-api`),
+- [x] 11.6 Generated types from `api/openapi.yaml` (`generate-ui-api`),
   the drift check, and the API client with the package's problem
   helpers.
 - [ ] 11.7 `ui/Dockerfile` (Bun build, deps, distroless) with
