@@ -479,6 +479,236 @@ open:
   `TestStatus_PrivacyGuard` walks the JSON and refuses any string field
   outside the allowlist.
 
+## Findings (Phase 11)
+
+- **The BFF's tests passed as a port.** All 78 behaviours carried over
+  with boop's names: the cookie, the client, the recheck POST and
+  `UI_LINKS` in place of a docs link.
+  - `proxy.test.ts` also holds the forwarded POSTs to the spec's POST
+    operations, so a new action fails the test until the proxy allows
+    it.
+  - The public paths are checked against `security: []` in
+    `api/openapi.yaml`.
+- **Links are validated at start.** `UI_LINKS` is at most ten https
+  links, and `/ui/config` passes them to the sidebar and the command
+  palette. Nothing else in the UI links out.
+- **The `/me` gate needs no 403.** `/me` is exempt from the visibility
+  gate, so a caller with no owners gets 200 with `owners: []` and
+  `all_owners: false`. The shell renders the no-access view (with a sign
+  out) instead of pages that would all answer 403.
+- **Not-found renders inside the frame.** An unmatched path never
+  matches the pathless shell route, so it fell through to the root and
+  rendered without the sidebar. A `$` splat route under the shell keeps
+  it in the frame.
+- **`check-tokens` enforces "no colour outside the package"** rather than
+  a list of removed names:
+  - Tailwind palette colours;
+  - arbitrary colour values;
+  - colour functions;
+  - `--color-*` definitions;
+  - hex colours in CSS. Hex is not checked in TSX, where `#123` is a
+    pull request number.
+
+  `web/src` passed it unchanged.
+- **No token in the image.** The token is a required build secret for the
+  build stage only. A scan of every layer, the history and the metadata
+  for the token's value found nothing.
+- **The image signs in.** The read-only image ran against the mock
+  issuer and a stub API sharing its network namespace (so both are on
+  loopback, as the config requires). The sign-in redirect, the callback,
+  the session cookie, the app under the `'self'` CSP, the proxied `/me`
+  and the cached assets all worked (`server/testing/stack.ts`, `just
+  ui-dev-stack`). Rendering in a browser is Playwright's, in Phases 12
+  and 14.
+- **Renovate reads the registry through `{{ secrets.NPM_TOKEN }}`.** The
+  runner has to provide that secret; this is noted for the homelab
+  setup (16.4).
+
+## Findings (Phase 12)
+
+- **Every page reads the API through one data layer.** It lives in
+  `web/src/api/queries.ts`:
+  - one hook per operation;
+  - query keys exported, so tests seed exactly what a page reads;
+  - cursor lists through `useList` ("Load more");
+  - polling at 30 s for lists, 15 s for events, and 5 s for a
+    repository with a run in progress. `queries.test.tsx` checks all
+    three.
+
+  The mockup's `fixtures.ts` and the placeholder page are gone.
+- **Filters live in the URL.** Each page has a `validateSearch` parser,
+  so a filtered view is a link. The owner scope and range carry across
+  pages, and a page's own filters stay behind.
+  - The open pull request is `?open=<repo id>-<number>`.
+  - A repository's tab is `?tab=`.
+- **The API keeps no Dependency Dashboard issue number.** The Waiting
+  page's "Dashboard" link is GitHub's issue search for the title in the
+  repository. If the API ever records the number, the link becomes
+  direct.
+- **Recheck is drawn for operators only** (`me.operator`). A viewer sees
+  no button; the API's 403 stays the guard. The button reports a
+  deduplicated request ("already requested in the last minute").
+- **Deliveries are not owner-scoped.** The page asks `/me` first and,
+  unless `all_owners`, explains the restriction instead of fetching a
+  403.
+- **The status page has no changelog.** The mockup drew one, but
+  `/status` carries no release list, so it was dropped. The page shows
+  the banner, the components (latency, pollers, last activity,
+  failed/missed) and the fleet totals.
+- **Search inputs navigate on every keystroke** (repositories `q`,
+  events `kind` and `actor`). Each keystroke is a new query key. A
+  debounced input would cut the requests; see the gaps below.
+
+### Component gaps (12.7)
+
+What `@donaldgifford/design-system` 0.4.0 lacks, page by page. Each
+gap is to become an issue on the design system and, once released,
+a pin bump here. Filing the issues is **deferred - human required**,
+because it is outward-facing. Workarounds stay in `ui/` until then.
+
+| Page | Gap | Workaround in `ui/` |
+| --- | --- | --- |
+| Repository, Pull requests (timeline) | `Timeline` items take `when` as a preformatted string, not an ISO time rendered with `Time` and the zone provider. | `lib/when.ts` formats it. |
+| Pull requests | `FilterChip` has no removable variant (an `onRemove` with its own × button and label). | `RemovableChip` puts a × in `value` and makes the whole chip the remove button. |
+| Waiting | `ListRow`'s subtitle is a truncated `div` under a row-wide stretched button, so a link inside needs `relative z-10`. | The repository link carries `relative z-10`. |
+| Package (`$purl`), Repository tabs | `DataTable` has no title or caption slot for a headed table inside a card. | A separate header card above each `ListCard`. |
+| Estate (installations) | `Meter` treats a high percentage as good; for budget spend, high is bad. | `BudgetCell` shows remaining and used as numbers. |
+| Repositories, Events | No debounced search input. | `Input` with `onChange` straight into the URL. |
+| Repositories (state) | `SegmentedControl` overflows with seven options on a narrow screen; there is no select fallback. | It wraps. |
+
+- **The page tests fail any unseeded request.** `views/pages.test.tsx`
+  mounts the real route tree (`appRouter`) over a seeded cache and
+  stubs `fetch` to reject, so a page that reads a key the test did not
+  seed fails instead of reaching the network.
+- **The mock issuer picks its user from a cookie.** The Playwright
+  suite signs in as an operator or a viewer by setting `mock_user` on
+  the issuer's origin. The issuer's `users` option maps the name to a
+  subject, a name and groups. The e2e stack (14.1) has to run the issuer
+  with `operator` (all owners, operator group) and `viewer` (one owner)
+  users. It also has to seed a repository both can see
+  (`BOOP_E2E_REPO_ID`), one only the operator can see
+  (`BOOP_E2E_HIDDEN_REPO_ID`) and a package (`BOOP_E2E_PURL`).
+
+boop's own components stay in `ui/`: `UpdateRow`/`UpdateSummary`,
+`WaitingSections`, `ListCard`, the run and pull request columns, and
+`eventItem`.
+
+## Findings (Phase 13)
+
+- **The migrate hook carries its own config.** A pre-install hook runs
+  before the release's ConfigMap exists, so the hook renders boopd.hcl
+  into its own hook ConfigMap at weight -10 (sync-wave -10 under Argo
+  CD), and the Job runs at 0.
+  - Both use `before-hook-creation`, so the last run's logs stay until
+    the next upgrade.
+  - The roles roll only after the hook succeeds, which is the "waiting
+    before the roles start".
+- **One DSN per role, by projection.** `store.existingSecret` holds four
+  keys, and each pod projects only its own key under
+  `<secretsDir>/<secret>/`:
+  - worker: `worker-dsn`;
+  - ingest: `ingest-dsn`;
+  - api: `ro-dsn`;
+  - migrate: `owner-dsn`.
+
+  The config names all four refs. Each role reads only its own.
+- **The worker gets no NetworkPolicy.** It has none today (it talks to
+  GitHub, the Kubernetes API and Temporal), so "worker → Postgres -rw"
+  needs nothing. Ingest's existing policy gains `store.networkPolicy.rw`.
+  The API, UI and migrate policies are new.
+- **The UI's secrets are env from `ui.existingSecret`** (`client-secret`,
+  `session-keys`), since the BFF reads its environment. The pod has no
+  volumes and no ServiceAccount token. `API_UPSTREAM` is the API
+  Service's in-cluster name.
+- **Guards fail at render**, from `boopd.roles.validate`, included by
+  `migrate-job.yaml`. They cover:
+  - the store without its Secret;
+  - the API without the store or `boopd.api.auth`;
+  - the UI without the API or sign-in;
+  - a UI route without sign-in.
+- **Byte-identical with everything off.** The default, example, ingest,
+  existing-secret and sandbox renders match the pre-Phase-13 renders
+  except for the redis subchart's random password.
+- **`golangci-lint` was walking `ui/node_modules`**, where an npm package
+  ships Go files. `node_modules` is now excluded with the other vendored
+  paths.
+
+## Findings (Phase 14)
+
+- **Dashboard sections were stored as headings.** The store kept
+  "Pending Approval" where the API's enum and the UI expect
+  `pending-approval`. `dashboard.SectionKey` maps a heading to the enum,
+  and ingest's sink stores the key. The e2e caught it; the unit tests
+  had used the headings on both sides.
+- **Discovery never recorded installations.** DESIGN-0004 names
+  discovery as a source of `installation.*`. Only ingest wrote them,
+  so without webhooks the store had no installations, and a caller
+  scoped to some owners saw nothing (the viewer's "No owners
+  visible"). Now each recording pass appends `installation.added`, or
+  `.suspended`, for every listed installation, behind the
+  `record-installations` version. The events list gains one row per
+  installation per pass; the store's upsert keeps the newest.
+- **The stub Renovate's report had no datasources**, so no dependency
+  had a purl. The fixtures now carry a datasource, packageName and
+  current version.
+- **The stub GitHub lists repositories per installation** when a
+  repository sets `Installation`, and `POST /_stub/installations`
+  replaces the installations. The UI e2e uses both for a repository the
+  viewer cannot see.
+- **The k3d image import:**
+  - A batch `k3d image import` left stale images in the node, so the
+    recipe and CI import one image at a time.
+  - Parallel chart tests raced on `ctr images tag --force` for the stub
+    Renovate's digested name. Tagging is now serialized and skipped
+    once the name exists.
+- **`host.k3d.internal` can drop out of CoreDNS** after a cluster
+  restart, and a stuck `k3d cluster start` was the trigger here. It was
+  patched by hand in the local cluster's NodeHosts. CI creates a fresh
+  cluster each time, so nothing in the repo changes.
+- **The UI e2e runs from the host:**
+  - Port-forwards on fixed ports: the UI on 3300 (its public URL is
+    `http://localhost:3300`, which the BFF and now the schema accept on
+    loopback), and the issuer on 9443.
+  - Chromium maps the issuer's in-cluster name to the forward
+    (`BOOP_E2E_HOST_RULES`) and accepts the e2e CA's certificate
+    (`BOOP_E2E_IGNORE_HTTPS`).
+  - The BFF trusts the CA through `NODE_EXTRA_CA_CERTS`.
+  - All 16 chromium flows pass locally.
+- **Visual baselines: deferred, human required.** The visual project's
+  screenshots render in the pinned Playwright image. The stack run is the
+  flows only (`--project=chromium`). The baselines are first generated
+  and committed from that image against a seeded stack.
+- **CI not yet observed.** The UI E2E Tests job installs the design
+  system with the workflow's `GITHUB_TOKEN`. That needs the package to
+  grant this repository read access (a package setting), and it runs
+  with the first push of the branch.
+
+## Findings (Phase 15)
+
+- **CI jobs.**
+  - **UI:** typecheck, lint, test, `check:api`, `check:tokens` and
+    `check:dist`.
+  - **API Lint:** `just lint-api` and `just lint-sql`, with vacuum and
+    just from `mise.toml` through mise-action. sqlc and oapi-codegen are
+    Go tools from `go.mod`.
+  - **Integration:** pulls the pinned Postgres before the run.
+  - **UI E2E Tests:** came with 14.3.
+  - The UI jobs install the design system with the workflow's
+    `GITHUB_TOKEN` (`packages: read`). The package must grant this
+    repository read access.
+- **A dry run now builds both images.** The release's `dry_run` used to
+  skip the boopd bake. Both image jobs now bake with `output=cacheonly`
+  on a dry run, which is what "a dry-run release builds both images"
+  needs. A dry run still pushes, signs and attests nothing.
+- **`check-release-refs.sh` covers `image-ui-slsa`**, so a renamed UI
+  image fails the lint job, not the release.
+- **`docz update` rewrites every document** with markdownlint capture
+  markers in each TOC, with the installed docz newer than the one that
+  last ran. That churn is unrelated to this IMPL and was not committed.
+  The design README's row was updated by hand.
+- **Not yet observed:** CI green on the PR, and a dry-run release. Both
+  run once the branch is pushed (Phase 16).
+
 ## Implementation Phases
 
 Each phase ends with `just lint`, `just test` and its own checks green,
@@ -832,7 +1062,7 @@ store code, so 9.1 is the one task that unblocks the rest of the UI.
 
 #### Tasks
 
-- [ ] 11.1 Scaffold `ui/` to INV-0005 finding 7. The mockup has
+- [x] 11.1 Scaffold `ui/` to INV-0005 finding 7. The mockup has
   `package.json`, `tsconfig.json` with the strict flags and
   `web/vite.config.ts` with Tailwind. Still to add: `server/`,
   `scripts/` and `e2e/`, `bunfig.toml`, ESLint and the dev proxy.
@@ -844,7 +1074,7 @@ store code, so 9.1 is the one task that unblocks the rest of the UI.
   - the ESLint config, with the ban on HTML sinks;
   - `web/vite.config.ts` with `@tailwindcss/vite` and the dev proxy for
     `/api`, `/auth` and `/ui`.
-- [ ] 11.2 The design system. Done in the mockup: the exact pin (0.4.0),
+- [x] 11.2 The design system. Done in the mockup: the exact pin (0.4.0),
   `.npmrc`, `just ui-install`, `globals.css` and `.dark`. Still to add:
   the Renovate rule.
   - `@donaldgifford/design-system` pinned exactly, as a devDependency;
@@ -855,7 +1085,7 @@ store code, so 9.1 is the one task that unblocks the rest of the UI.
     never grouped or automerged, and lets Renovate read the registry;
   - `globals.css` imported once from the SPA's entry, and `.dark` set on
     `<html>`.
-- [ ] 11.3 The BFF in `ui/server`, written here with repo-guardian's
+- [x] 11.3 The BFF in `ui/server`, written here with repo-guardian's
   libraries and file layout (INV-0005 OQ6):
   - config from the environment, validated at start;
   - OIDC code + PKCE as the confidential client `boopd-ui`;
@@ -870,7 +1100,7 @@ store code, so 9.1 is the one task that unblocks the rest of the UI.
 
   repo-guardian's server tests (app, auth, config, health, proxy,
   session, static) are ported as the behaviour to meet.
-- [ ] 11.4 The shell, composed from the package's parts. The mockup has
+- [x] 11.4 The shell, composed from the package's parts. The mockup has
   the sidebar with the package's `AppSwitcher` as its header, the `NAV`
   groups, the account menu, and the top bar with the trigger, search
   button and `TimeZoneToggle`. Still to add: breadcrumbs, the external
@@ -886,16 +1116,16 @@ store code, so 9.1 is the one task that unblocks the rest of the UI.
 - [x] 11.5 The badge state table on the package's `Badge` variants
   (DESIGN-0004 § Visual design); the open-enum fallback to `muted`
   (`ui/web/src/components/badges.tsx`; its tests are 11.9).
-- [ ] 11.6 Generated types from `api/openapi.yaml` (`generate-ui-api`),
+- [x] 11.6 Generated types from `api/openapi.yaml` (`generate-ui-api`),
   the drift check, and the API client with the package's problem
   helpers.
-- [ ] 11.7 `ui/Dockerfile` (Bun build, deps, distroless) with
+- [x] 11.7 `ui/Dockerfile` (Bun build, deps, distroless) with
   `NPM_TOKEN` as a build secret, and the `docker-bake.hcl` targets
   `ui-dev`, `ui-ci` and `ui-release`, with the same tag as `boopd`.
-- [ ] 11.8 Gates in `ui/scripts`: `check-api` (type drift), `check-dist`
+- [x] 11.8 Gates in `ui/scripts`: `check-api` (type drift), `check-dist`
   (no data: URL or Google Fonts URL in the build) and `check-tokens` (no
   colour outside the package's tokens).
-- [ ] 11.9 Tests: `bun test` for the server and the shell, and the CSP
+- [x] 11.9 Tests: `bun test` for the server and the shell, and the CSP
   check.
 
 #### Success Criteria
@@ -916,23 +1146,23 @@ page stops using them.
 
 #### Tasks
 
-- [ ] 12.1 Estate (`/`): KPI strip, the open-PR trend, PR age buckets,
+- [x] 12.1 Estate (`/`): KPI strip, the open-PR trend, PR age buckets,
   runs by outcome, top pending packages, ecosystems, and the
   installations table.
-- [ ] 12.2 Pull requests (`/pulls`): a DataTable with filter chips, sorted
+- [x] 12.2 Pull requests (`/pulls`): a DataTable with filter chips, sorted
   oldest first, and a drawer with updates (package, from → to, purl),
   the timeline and a GitHub link.
-- [ ] 12.3 Waiting (`/waiting`): items grouped by section, with waiting
+- [x] 12.3 Waiting (`/waiting`): items grouped by section, with waiting
   since, ticked by and a dashboard link.
-- [ ] 12.4 Repository (`/repositories/$id`): a header with the live
+- [x] 12.4 Repository (`/repositories/$id`): a header with the live
   phase and Recheck (operators); tabs for Timeline (with causes), Runs,
   Pull requests, Waiting, Dependencies and Config.
-- [ ] 12.5 Repositories, Packages (+ `$purl`), Runs, Events (15 s
+- [x] 12.5 Repositories, Packages (+ `$purl`), Runs, Events (15 s
   polling), Deliveries, and Status (public, outside the shell, 30 s
   refetch).
-- [ ] 12.6 Polling (DESIGN-0004 OQ10): 30 s for lists, and 5 s on a
+- [x] 12.6 Polling (DESIGN-0004 OQ10): 30 s for lists, and 5 s on a
   repository with a run in progress.
-- [ ] 12.7 Component gaps (INV-0005 OQ7, finding 8). For each page, list
+- [x] 12.7 Component gaps (INV-0005 OQ7, finding 8). For each page, list
   what the package lacks. A generic component is built in
   `donaldgifford/design-system` against a local link from this `ui/`,
   released, and the pin bumped here; it is not added under
@@ -947,12 +1177,16 @@ page stops using them.
 
   A missing prop or variant is an issue on the design system. boop's own
   components (the update row, dashboard-item sections) stay in `ui/`.
-- [ ] 12.8 Tests:
+- [x] 12.8 Tests:
   - component tests per page;
   - Playwright flows (login, each page, the recheck as operator and as
     viewer, an invisible owner gets 404);
   - axe on every page;
   - screenshots in the pinned Playwright image.
+
+  The component tests run in `just ui-test`. The Playwright specs
+  (`ui/e2e`) need the deployed stack, so they first run, and their
+  screenshots are first committed, in 14.3.
 
 #### Success Criteria
 
@@ -963,7 +1197,7 @@ page stops using them.
 
 #### Tasks
 
-- [ ] 13.1 Values and schema:
+- [x] 13.1 Values and schema:
   - `store` (`enabled`, `existingSecret` with the four DSN keys,
     `migrate` hook style `helm` or `argocd`);
   - `api` (Deployment, replicas, PDB, Service, authz, `ingress` and
@@ -971,27 +1205,27 @@ page stops using them.
   - `ui` (Deployment, PDB, Service, `existingSecret`, `publicURL`,
     `links` for the optional external links, `ingress` and `httpRoute`);
   - `boopd.store` and `boopd.api` rendered into `boopd.hcl`.
-- [ ] 13.2 `templates/migrate-job.yaml`, a hook Job with the owner DSN
+- [x] 13.2 `templates/migrate-job.yaml`, a hook Job with the owner DSN
   only, waiting before the roles start.
-- [ ] 13.3 `templates/api.yaml`, `api-authz-configmap.yaml` (checksum
+- [x] 13.3 `templates/api.yaml`, `api-authz-configmap.yaml` (checksum
   annotation), `ui.yaml`, and the routes for both.
-- [ ] 13.4 NetworkPolicies:
+- [x] 13.4 NetworkPolicies:
   - ui → api;
   - api → Postgres `-ro` and Temporal;
   - worker and ingest → Postgres `-rw`;
   - migrate → `-rw`;
   - ui → IdP;
   - api → IdP (JWKS).
-- [ ] 13.5 Guards: `ui.enabled` requires `api.enabled` and auth; the
+- [x] 13.5 Guards: `ui.enabled` requires `api.enabled` and auth; the
   roles with `store.enabled` require `store.existingSecret`; a UI route
   without auth fails.
-- [ ] 13.6 helm-unittest suites `store_test.yaml`, `api_test.yaml`,
+- [x] 13.6 helm-unittest suites `store_test.yaml`, `api_test.yaml`,
   `ui_test.yaml`:
   - the hooks;
   - each role mounts only its own DSN;
   - the ui has no ServiceAccount token;
   - the guards and the NetworkPolicies.
-- [ ] 13.7 `just helm-docs`, and the rendered-config validate.
+- [x] 13.7 `just helm-docs`, and the rendered-config validate.
 
 #### Success Criteria
 
@@ -1002,11 +1236,11 @@ page stops using them.
 
 #### Tasks
 
-- [ ] 14.1 e2e Postgres (OQ10): a pinned `postgres:17` Deployment in the
+- [x] 14.1 e2e Postgres (OQ10): a pinned `postgres:17` Deployment in the
   e2e namespace, with an init script creating the four roles. The chart
   installs with `store`, `api`, `ui` and `ingest` enabled, and the mock
   OIDC issuer runs as a pod.
-- [ ] 14.2 Scenarios (`test/e2e/store_test.go`, `api_test.go`):
+- [x] 14.2 Scenarios (`test/e2e/store_test.go`, `api_test.go`):
   - `TestStore_RunRecorded`: a run gives `run.finished`,
     `branch_updates` and `dependencies` with purls;
   - `TestStore_PROpenedByBot`: a signed bot `pull_request.opened` gives a
@@ -1018,8 +1252,10 @@ page stops using them.
   - `TestAPI_Visibility`: an invisible owner gets 404;
   - `TestAPI_StatusAggregateOnly`;
   - `TestStore_Rebuild`: rebuilt projections equal the live ones.
-- [ ] 14.3 The UI's Playwright suite runs against the k3d stack in CI as
+- [x] 14.3 The UI's Playwright suite runs against the k3d stack in CI as
   its own job (OQ11).
+  - Visual baselines from the pinned Playwright image: `deferred - human
+    required`.
 
 #### Success Criteria
 
@@ -1029,25 +1265,25 @@ page stops using them.
 
 #### Tasks
 
-- [ ] 15.1 `ci.yml`:
+- [x] 15.1 `ci.yml`:
   - a UI job (install with `NPM_TOKEN` from `GITHUB_TOKEN` and
     `packages: read`, lint, test, build, check-api, check-dist,
     check-tokens);
   - an API lint job (vacuum, oapi-codegen drift, sqlc vet and drift);
   - Docker for the integration tests;
   - the UI e2e job.
-- [ ] 15.2 `release.yml`: build (with the registry token as a build
+- [x] 15.2 `release.yml`: build (with the registry token as a build
   secret), sign (cosign) and attest (SLSA) the `boopd-ui` image with the
   same tag, and add it to the release notes.
-- [ ] 15.3 `docs/api.md`: auth setup (the Keycloak clients
+- [x] 15.3 `docs/api.md`: auth setup (the Keycloak clients
   `boopd-api` and `boopd-ui`, the audience mapper), authz file, the
   endpoint overview, cursors, errors, and the correlator's entry points
   (`/updates`, `/dependencies` by purl).
-- [ ] 15.4 `docs/ui.md`: enabling, sessions and key rotation, pages,
+- [x] 15.4 `docs/ui.md`: enabling, sessions and key rotation, pages,
   the status page, and security.
-- [ ] 15.5 `docs/config.md` rows; CLAUDE.md layout (`internal/store`,
+- [x] 15.5 `docs/config.md` rows; CLAUDE.md layout (`internal/store`,
   `internal/api`, `internal/purl`, `ui/`, `api/`) and roles.
-- [ ] 15.6 DESIGN-0004 → Implemented; DESIGN-0003's recording note
+- [x] 15.6 DESIGN-0004 → Implemented; DESIGN-0003's recording note
   → "stored (IMPL-0005)".
 
 #### Success Criteria
@@ -1059,11 +1295,12 @@ page stops using them.
 
 #### Tasks
 
-- [ ] 16.1 PR A, the store and writers (phases 1–8 and their chart
-  pieces), `minor`.
-- [ ] 16.2 PR B, the API (phases 9–10 and its chart pieces), `minor`.
-- [ ] 16.3 PR C, the UI (phases 11–12, the remaining chart, e2e, CI,
-  docs), `minor`.
+- [x] 16.1 PR A, the store and writers (phases 1–8 and their chart
+  pieces), `minor`: #47.
+- [x] 16.2 PR B, the API (phases 9–10 and its chart pieces), `minor`:
+  #48, stacked on #47.
+- [x] 16.3 PR C, the UI (phases 11–12, the remaining chart, e2e, CI,
+  docs), `minor`: #49, stacked on #48.
 - [ ] 16.4 **Deferred, human required.** Homelab database setup:
   - a CNPG `Cluster` for boopd with managed roles `boopd_owner`,
     `boopd_worker`, `boopd_ingest`, `boopd_ro`;
@@ -1078,6 +1315,9 @@ page stops using them.
   - a walk through every page against the real fleet (proxmox-go-sdk
     first).
 - [ ] 16.6 IMPL status → Completed, with the evidence.
+  `deferred - human required`: after #47, #48 and #49 merge (each
+  retargeted to main in turn, where CI runs), the releases are cut and
+  16.4–16.5 are done. #47's CI is green.
 
 #### Success Criteria
 

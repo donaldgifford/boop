@@ -1,0 +1,15 @@
+{{- if .Values.api.enabled -}}
+# The API's authz file (docs/api.md): groups to visible owners, the
+# operator groups, machine clients to groups. Read once at start; the
+# Deployment's checksum/authz rolls the pods on a change.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "boopd.role.fullname" (list . "api-authz") }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "boopd.role.labels" (list . "api") | nindent 4 }}
+data:
+  authz.yaml: |
+    {{- toYaml .Values.api.authz | nindent 4 }}
+{{- end }}

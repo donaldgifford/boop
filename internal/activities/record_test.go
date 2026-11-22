@@ -20,6 +20,7 @@ func TestRecordKinds_AreStoreKinds(t *testing.T) {
 		workflows.KindRepoOnboarded, workflows.KindRepoOffboarded, workflows.KindRepoRefreshed, workflows.KindRepoRunScheduled,
 		workflows.KindRunStalled, workflows.KindRunCapacityDenied, workflows.KindRunBudgetWait,
 		workflows.KindActionRecheck, workflows.KindDiscoveryFinished,
+		workflows.KindInstallationAdded, workflows.KindInstallationSuspended,
 	} {
 		if !slices.Contains(store.Kinds(), store.Kind(k)) {
 			t.Errorf("workflow kind %q is not in the store catalogue", k)

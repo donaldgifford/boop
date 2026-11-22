@@ -98,6 +98,9 @@ spec:
               subPath: boopd.hcl
               readOnly: true
             {{- include "boopd.ingest.credentialMounts" . | nindent 12 }}
+            {{- if .Values.store.enabled }}
+            {{- include "boopd.storeDSNMount" (list . .Values.store.keys.ingest) | nindent 12 }}
+            {{- end }}
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -122,6 +125,9 @@ spec:
           configMap:
             name: {{ include "boopd.fullname" . }}-config
         {{- include "boopd.ingest.credentialVolumes" . | nindent 8 }}
+        {{- if .Values.store.enabled }}
+        {{- include "boopd.storeDSNVolume" (list . .Values.store.keys.ingest) | nindent 8 }}
+        {{- end }}
         {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

@@ -4,6 +4,8 @@
 //   - default: local single-arch build (used by `docker buildx bake`)
 //   - ci:      linux/amd64 build + push of `:dev-ci` for PR validation
 //   - release: multi-arch build + push to GHCR (CI only, gated on tag)
+//   - ui-dev, ui-ci, ui-release: the same three for boopd-ui (ui/), with
+//     the same tag as boopd
 //
 // CI workflow consumes this via docker/bake-action@v6 with the `targets`
 // input. The release workflow merges in tag-derived image refs from
@@ -11,6 +13,10 @@
 
 variable "REGISTRY" {
   default = "ghcr.io/donaldgifford/boopd"
+}
+
+variable "UI_REGISTRY" {
+  default = "ghcr.io/donaldgifford/boopd-ui"
 }
 
 variable "TAG" {
@@ -100,6 +106,53 @@ target "boopd-release" {
   output = ["type=registry"]
 }
 
+// boopd-ui (IMPL-0005 11.7). The design system installs from GitHub
+// Packages, so the build needs NPM_TOKEN: it is read from the caller's
+// environment as a build secret and mounted into the build stage's
+// install only (ui/Dockerfile). `just ui-docker-build` passes it.
+target "_ui" {
+  context    = "ui"
+  dockerfile = "Dockerfile"
+  secret     = ["id=NPM_TOKEN,env=NPM_TOKEN"]
+  labels = {
+    "org.opencontainers.image.source"      = "https://github.com/donaldgifford/boop"
+    "org.opencontainers.image.licenses"    = "Apache-2.0"
+    "org.opencontainers.image.description" = "boop's management UI"
+    "org.opencontainers.image.version"     = "${VERSION}"
+    "org.opencontainers.image.revision"    = "${COMMIT}"
+  }
+}
+
+target "ui-dev" {
+  inherits = ["_ui"]
+  tags     = ["${UI_REGISTRY}:${TAG}"]
+  output   = ["type=docker"]
+}
+
+target "ui-ci" {
+  inherits  = ["_ui"]
+  tags      = ["${UI_REGISTRY}:${TAG}-ci"]
+  platforms = ["linux/amd64"]
+}
+
+// Tags come from docker/metadata-action in the release workflow
+// (bake-target docker-metadata-action-ui); these are the local defaults.
+target "docker-metadata-action-ui" {
+  tags = [
+    "${UI_REGISTRY}:${TAG}",
+    "${UI_REGISTRY}:latest",
+  ]
+}
+
+target "ui-release" {
+  inherits = ["_ui", "docker-metadata-action-ui"]
+  platforms = [
+    "linux/amd64",
+    "linux/arm64",
+  ]
+  output = ["type=registry"]
+}
+
 // Stub Renovate image for the e2e harness (IMPL-0001 task 4.6). Built
 // locally and in the E2E CI job, imported into k3d, never pushed: it is
 // in no group, so `bake`, `bake ci` and `bake release` never build it.
@@ -124,5 +177,18 @@ target "stub-github" {
   context    = "."
   dockerfile = "test/stub-github/Dockerfile"
   tags       = ["${STUB_GITHUB_IMAGE}"]
+  output     = ["type=docker"]
+}
+
+// The mock OIDC issuer for the store, API and UI e2e (IMPL-0005 14.1).
+// Like the other stubs, built locally and in CI, never pushed.
+variable "STUB_OIDC_IMAGE" {
+  default = "ghcr.io/donaldgifford/boopd-stub-oidc:dev"
+}
+
+target "stub-oidc" {
+  context    = "."
+  dockerfile = "test/stub-oidc/Dockerfile"
+  tags       = ["${STUB_OIDC_IMAGE}"]
   output     = ["type=docker"]
 }

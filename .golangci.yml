@@ -314,6 +314,7 @@ linters:
       - third_party
       - testdata
       - examples
+      - node_modules  # Go files shipped inside npm packages (ui/)
 
 issues:
   max-issues-per-linter: 0
@@ -349,3 +350,4 @@ formatters:
       - third_party$
       - builtin$
       - examples$
+      - node_modules

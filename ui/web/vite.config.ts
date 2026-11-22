@@ -2,8 +2,11 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-// The SPA builds into ui/dist. Assets are never inlined as data: URIs,
-// because the BFF's CSP will have no data: source (DESIGN-0004 § The UI).
+// The SPA builds into ui/dist, which the BFF serves. Assets are never
+// inlined as data: URIs, because the BFF's CSP has no data: source
+// (DESIGN-0004 § The UI); scripts/check-dist.ts fails the build if one
+// slips through. In development the BFF runs beside Vite (`bun run
+// dev:server`, port 3000) and Vite proxies its paths to it.
 export default defineConfig({
   root: "web",
   plugins: [react(), tailwindcss()],
@@ -28,5 +31,12 @@ export default defineConfig({
     emptyOutDir: true,
     assetsDir: "assets",
     assetsInlineLimit: 0,
+  },
+  server: {
+    proxy: {
+      "/api": "http://localhost:3000",
+      "/auth": "http://localhost:3000",
+      "/ui": "http://localhost:3000",
+    },
   },
 });

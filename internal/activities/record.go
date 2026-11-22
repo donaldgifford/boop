@@ -164,6 +164,8 @@ func recordedEvent(r *workflows.RecordedEvent) (store.Event, error) {
 			V: 1, App: d.App, StartedAt: d.StartedAt, FinishedAt: d.FinishedAt,
 			Seen: d.Seen, Onboarded: d.Onboarded, Failed: d.Failed, ProbeCost: d.ProbeCost,
 		}
+	case r.Installation != nil:
+		e.Data = &store.Installation{V: 1, App: r.Installation.App, AccountLogin: r.Installation.Account}
 	default:
 		return store.Event{}, fmt.Errorf("event %s (%s) has no payload", r.Key, r.Kind)
 	}

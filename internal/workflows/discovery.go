@@ -92,7 +92,11 @@ func DiscoveryWorkflow(ctx workflow.Context, in *DiscoveryInput) (*DiscoveryResu
 		reconcilePRs(ctx, in.App, discovered, out)
 	}
 	if in.Record && workflow.GetVersion(ctx, storeRecordChange, workflow.DefaultVersion, 1) >= 1 {
-		recordPass(ctx, out)
+		var seen []InstallationInfo
+		if workflow.GetVersion(ctx, installationRecordChange, workflow.DefaultVersion, 1) >= 1 {
+			seen = installs
+		}
+		recordPass(ctx, out, seen)
 	}
 	return out, nil
 }
@@ -121,14 +125,38 @@ func reconcilePRs(ctx workflow.Context, app string, installs []InstallationInfo,
 	}
 }
 
-// recordPass records the pass as discovery.finished (IMPL-0005 5.8). It
-// is the pass's last step, so it waits; the activity retries without
-// limit, and a pass that cannot record is still a pass.
-func recordPass(ctx workflow.Context, out *DiscoveryResult) {
+// installationRecordChange gates the installation.* events a recording
+// pass appends; passes recorded before it replay without them.
+const installationRecordChange = "record-installations"
+
+// recordPass records the pass as discovery.finished (IMPL-0005 5.8) and
+// each listed installation as installation.added, or .suspended, so the
+// store knows the owners without webhooks (DESIGN-0004 § Event
+// catalogue: discovery is a source). Every pass records them again; the
+// store keeps the newest. It is the pass's last step, so it waits; the
+// activity retries without limit, and a pass that cannot record is still
+// a pass.
+func recordPass(ctx workflow.Context, out *DiscoveryResult, installs []InstallationInfo) {
 	info := workflow.GetInfo(ctx)
 	now := workflow.Now(ctx)
+	key := func(seq int) string {
+		return fmt.Sprintf("wf:%s:%s:%d", info.WorkflowExecution.ID, info.WorkflowExecution.RunID, seq)
+	}
+	events := make([]RecordedEvent, 0, len(installs)+1)
+	for i := range installs {
+		in := &installs[i]
+		ev := RecordedEvent{
+			Key: key(i + 1), Kind: KindInstallationAdded, OccurredAt: now, InstallationID: in.ID,
+			Summary:      fmt.Sprintf("%s found on %s", out.App, in.Account),
+			Installation: &RecordInstallation{App: out.App, Account: in.Account},
+		}
+		if in.Suspended {
+			ev.Kind, ev.Summary = KindInstallationSuspended, fmt.Sprintf("%s suspended on %s", out.App, in.Account)
+		}
+		events = append(events, ev)
+	}
 	ev := RecordedEvent{
-		Key:        fmt.Sprintf("wf:%s:%s:0", info.WorkflowExecution.ID, info.WorkflowExecution.RunID),
+		Key:        key(0),
 		Kind:       KindDiscoveryFinished,
 		OccurredAt: now,
 		Summary:    fmt.Sprintf("discovery %s: %d seen, %d onboarded, %d failed", out.App, out.Seen, out.Onboarded, out.Failed),
@@ -137,7 +165,8 @@ func recordPass(ctx workflow.Context, out *DiscoveryResult) {
 			Seen: out.Seen, Onboarded: out.Onboarded, Failed: out.Failed, ProbeCost: out.ProbeCost,
 		},
 	}
-	err := workflow.ExecuteActivity(storeOptions(ctx, 0), RecordEventsActivity, &RecordEventsInput{Events: []RecordedEvent{ev}}).Get(ctx, nil)
+	events = append(events, ev)
+	err := workflow.ExecuteActivity(storeOptions(ctx, 0), RecordEventsActivity, &RecordEventsInput{Events: events}).Get(ctx, nil)
 	if err != nil {
 		workflow.GetLogger(ctx).Warn("discovery pass not recorded", "app", out.App, "error", err)
 	}

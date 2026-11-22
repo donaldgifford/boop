@@ -158,7 +158,11 @@ func TestRecordEvents_EveryWorkflowKind(t *testing.T) {
 		Key: "wf:discovery/main:exec:0", Kind: workflows.KindDiscoveryFinished, OccurredAt: at,
 		Discovery: &workflows.RecordDiscovery{App: "main", StartedAt: at.Add(-time.Minute), FinishedAt: at, Seen: 3, Onboarded: 1},
 	}
-	in := &workflows.RecordEventsInput{Events: []workflows.RecordedEvent{onboarded, scheduled, recheck, wait, refreshed, pass}}
+	found := workflows.RecordedEvent{
+		Key: "wf:discovery/main:exec:1", Kind: workflows.KindInstallationAdded, OccurredAt: at, InstallationID: 7,
+		Installation: &workflows.RecordInstallation{App: "main", Account: "acme"},
+	}
+	in := &workflows.RecordEventsInput{Events: []workflows.RecordedEvent{onboarded, scheduled, recheck, wait, refreshed, pass, found}}
 	for range 2 {
 		if err := a.RecordEvents(t.Context(), in); err != nil {
 			t.Fatalf("RecordEvents: %v", err)
@@ -174,6 +178,10 @@ func TestRecordEvents_EveryWorkflowKind(t *testing.T) {
 	}
 	if n := count(t, owner, `SELECT count(*) FROM discovery_passes WHERE app = 'main' AND seen = 3`); n != 1 {
 		t.Errorf("discovery_passes = %d, want 1", n)
+	}
+	if n := count(t, owner, `SELECT count(*) FROM installations WHERE id = 7 AND app = 'main' AND account_login = 'acme'
+		AND NOT suspended`); n != 1 {
+		t.Errorf("installations = %d, want 1", n)
 	}
 	if n := count(t, owner, `SELECT count(*) FROM events`); n != len(in.Events) {
 		t.Errorf("events = %d, want %d", n, len(in.Events))

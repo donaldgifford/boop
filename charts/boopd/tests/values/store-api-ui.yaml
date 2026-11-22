@@ -1,0 +1,38 @@
+---
+# The store, the API and the UI on, with ingest, for store_test.yaml,
+# api_test.yaml and ui_test.yaml (and `just helm-config-validate`).
+temporal:
+  address: temporal-frontend:7233
+boopd:
+  apps:
+    boop-bot:
+      appId: 123456
+      privateKeySecretRef: {name: boop-bot-app, key: private-key.pem}
+      webhook:
+        secretRef: {name: boop-bot-webhook, key: secret}
+  store:
+    retention: {events: 9600h}
+  api:
+    auth:
+      issuer: https://keycloak.example/realms/fartlab
+      audience: boopd-api
+    statusPublic: true
+ingest:
+  enabled: true
+store:
+  enabled: true
+  existingSecret: boopd-store
+api:
+  enabled: true
+  authz:
+    owners: {platform: ["*"], team-web: [acme-web]}
+    operators: [platform]
+ui:
+  enabled: true
+  publicURL: https://boop.example.com
+  existingSecret: boopd-ui
+  oidc:
+    issuer: https://keycloak.example/realms/fartlab
+    authorizationParams: {audience: boopd-api}
+  links:
+    - {label: Grafana, url: "https://grafana.example.com"}

@@ -17,6 +17,9 @@ project_name      := "boop"
 binary_name       := "boopd"
 stub_image        := "ghcr.io/donaldgifford/boopd-stub-renovate:dev"
 stub_github_image := "ghcr.io/donaldgifford/boopd-stub-github:dev"
+stub_oidc_image   := "ghcr.io/donaldgifford/boopd-stub-oidc:dev"
+# The store e2e's Postgres, pinned like internal/store/storetest's.
+e2e_postgres_image := "postgres:17.12-alpine"
 project_owner     := "donaldgifford"
 go_package        := "github.com/" + project_owner + "/" + project_name
 build_dir         := "build"
@@ -121,11 +124,23 @@ test-renovate:
 # GitHub images, and the boopd image the chart e2e installs
 [group('test')]
 e2e: k3d-up
-    @docker buildx bake --load boopd stub-renovate stub-github
-    @k3d image import {{ stub_image }} {{ stub_github_image }} ghcr.io/donaldgifford/boopd:dev \
-        --cluster {{ project_name }}
+    @docker buildx bake --load boopd stub-renovate stub-github stub-oidc
+    @docker pull --quiet {{ e2e_postgres_image }}
+    @# One image per import: a batch import has left stale images in the node.
+    @for image in {{ stub_image }} {{ stub_github_image }} {{ stub_oidc_image }} \
+        {{ e2e_postgres_image }} ghcr.io/donaldgifford/boopd:dev; do \
+        k3d image import "$image" --cluster {{ project_name }}; done
     @KUBECONFIG="$(k3d kubeconfig write {{ project_name }})" \
         go test -v -count=1 -timeout 15m -tags e2e ./test/e2e/...
+
+# TestUI_Playwright (IMPL-0005 14.3) after `just e2e` has imported the
+# rest; needs Bun and Playwright's Chromium (`bunx playwright install chromium`).
+# Run the UI's Playwright flows against the k3d stack with boopd-ui
+[group('test')]
+e2e-ui: k3d-up ui-docker-build
+    @k3d image import ghcr.io/donaldgifford/boopd-ui:dev --cluster {{ project_name }}
+    @KUBECONFIG="$(k3d kubeconfig write {{ project_name }})" BOOPD_E2E_UI=1 \
+        go test -v -count=1 -timeout 25m -tags e2e -run TestUI_Playwright ./test/e2e/...
 
 # Delete the k3d cluster the e2e suite runs in
 [group('test')]
