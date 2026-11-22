@@ -1315,6 +1315,9 @@ page stops using them.
   - a walk through every page against the real fleet (proxmox-go-sdk
     first).
 - [ ] 16.6 IMPL status → Completed, with the evidence.
+  `deferred - human required`: after #47, #48 and #49 merge (each
+  retargeted to main in turn, where CI runs), the releases are cut and
+  16.4–16.5 are done. #47's CI is green.
 
 #### Success Criteria
 
