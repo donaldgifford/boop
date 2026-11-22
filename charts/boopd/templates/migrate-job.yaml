@@ -1,0 +1,87 @@
+{{- if .Values.store.enabled -}}
+{{- $m := .Values.store.migrate -}}
+# The store's schema (DESIGN-0004 § Commands and roles): `boopd migrate`
+# as boopd_owner, the only DSN it mounts, before the roles roll. A hook
+# runs before the release's own ConfigMap exists on a first install, so
+# it carries its own copy of boopd.hcl.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "boopd.role.fullname" (list . "migrate") }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "boopd.role.labels" (list . "migrate") | nindent 4 }}
+  annotations:
+    {{- include "boopd.migrate.hook" (list . -10) | nindent 4 }}
+data:
+  boopd.hcl: |
+    {{- include "boopd.configFile" . | nindent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "boopd.role.fullname" (list . "migrate") }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "boopd.role.labels" (list . "migrate") | nindent 4 }}
+  annotations:
+    {{- include "boopd.migrate.hook" (list . 0) | nindent 4 }}
+spec:
+  backoffLimit: {{ $m.backoffLimit }}
+  activeDeadlineSeconds: {{ $m.activeDeadlineSeconds }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include "boopd.configFile" . | sha256sum }}
+      labels:
+        {{- include "boopd.role.labels" (list . "migrate") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migrate
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default (include "boopd.appVersion" .) }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - migrate
+            - --config
+            - /etc/boopd/boopd.hcl
+          env:
+            - name: LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/boopd/boopd.hcl
+              subPath: boopd.hcl
+              readOnly: true
+            {{- include "boopd.storeDSNMount" (list . .Values.store.keys.owner) | nindent 12 }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $m.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "boopd.role.fullname" (list . "migrate") }}
+        {{- include "boopd.storeDSNVolume" (list . .Values.store.keys.owner) | nindent 8 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

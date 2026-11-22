@@ -1089,7 +1089,7 @@ page stops using them.
   - `ui` (Deployment, PDB, Service, `existingSecret`, `publicURL`,
     `links` for the optional external links, `ingress` and `httpRoute`);
   - `boopd.store` and `boopd.api` rendered into `boopd.hcl`.
-- [ ] 13.2 `templates/migrate-job.yaml`, a hook Job with the owner DSN
+- [x] 13.2 `templates/migrate-job.yaml`, a hook Job with the owner DSN
   only, waiting before the roles start.
 - [ ] 13.3 `templates/api.yaml`, `api-authz-configmap.yaml` (checksum
   annotation), `ui.yaml`, and the routes for both.
