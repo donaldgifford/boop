@@ -201,8 +201,14 @@ func TestDiscoveryWorkflow_RecordsThePass(t *testing.T) {
 			}
 			return &DiscoverSummary{InstallationID: in.InstallationID, Seen: 5, Onboarded: 1, ProbeCost: 2}, nil
 		}, activity.RegisterOptions{Name: DiscoverInstallationActivity})
-		var reconciled []ReconcilePRsInput
+		// The pass reconciles installations in parallel.
+		var (
+			mu         sync.Mutex
+			reconciled []ReconcilePRsInput
+		)
 		env.RegisterActivityWithOptions(func(_ context.Context, in *ReconcilePRsInput) (*ReconcilePRsResult, error) {
+			mu.Lock()
+			defer mu.Unlock()
 			reconciled = append(reconciled, *in)
 			return &ReconcilePRsResult{Open: 2, Synced: 2}, nil
 		}, activity.RegisterOptions{Name: ReconcilePullRequestsActivity})
