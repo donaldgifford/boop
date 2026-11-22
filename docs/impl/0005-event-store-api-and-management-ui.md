@@ -683,6 +683,32 @@ boop's own components stay in `ui/`: `UpdateRow`/`UpdateSummary`,
   grant this repository read access (a package setting), and it runs
   with the first push of the branch.
 
+## Findings (Phase 15)
+
+- **CI jobs.**
+  - **UI:** typecheck, lint, test, `check:api`, `check:tokens` and
+    `check:dist`.
+  - **API Lint:** `just lint-api` and `just lint-sql`, with vacuum and
+    just from `mise.toml` through mise-action. sqlc and oapi-codegen are
+    Go tools from `go.mod`.
+  - **Integration:** pulls the pinned Postgres before the run.
+  - **UI E2E Tests:** came with 14.3.
+  - The UI jobs install the design system with the workflow's
+    `GITHUB_TOKEN` (`packages: read`). The package must grant this
+    repository read access.
+- **A dry run now builds both images.** The release's `dry_run` used to
+  skip the boopd bake. Both image jobs now bake with `output=cacheonly`
+  on a dry run, which is what "a dry-run release builds both images"
+  needs. A dry run still pushes, signs and attests nothing.
+- **`check-release-refs.sh` covers `image-ui-slsa`**, so a renamed UI
+  image fails the lint job, not the release.
+- **`docz update` rewrites every document** with markdownlint capture
+  markers in each TOC, with the installed docz newer than the one that
+  last ran. That churn is unrelated to this IMPL and was not committed.
+  The design README's row was updated by hand.
+- **Not yet observed:** CI green on the PR, and a dry-run release. Both
+  run once the branch is pushed (Phase 16).
+
 ## Implementation Phases
 
 Each phase ends with `just lint`, `just test` and its own checks green,

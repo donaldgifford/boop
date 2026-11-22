@@ -32,7 +32,9 @@ limitations under the License.
 // RepoWorkflow and DiscoveryWorkflow record runs and decisions to the
 // event store through the RecordRun and RecordEvents activities, behind
 // the store-record version gate and store.enabled (repo_record.go,
-// IMPL-0005 Phase 5). The store is never imported here.
+// IMPL-0005 Phase 5). A recording discovery pass also records each
+// listed installation (installation.added or .suspended), so the store
+// knows the owners without webhooks. The store is never imported here.
 // The package moves to donaldgifford/x in Phase 0 (ADR-0007).
 package workflows
 
