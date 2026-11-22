@@ -132,3 +132,14 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "publicURL"
+
+  - it: accepts an http public URL on localhost, as the BFF does
+    values: [values/store-api-ui.yaml]
+    template: templates/ui.yaml
+    documentSelector: {path: kind, value: Deployment}
+    set:
+      ui.publicURL: http://localhost:3300
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: PUBLIC_URL, value: "http://localhost:3300"}

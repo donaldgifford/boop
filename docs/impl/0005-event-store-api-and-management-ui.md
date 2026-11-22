@@ -1176,7 +1176,7 @@ page stops using them.
   - `TestAPI_Visibility`: an invisible owner gets 404;
   - `TestAPI_StatusAggregateOnly`;
   - `TestStore_Rebuild`: rebuilt projections equal the live ones.
-- [ ] 14.3 The UI's Playwright suite runs against the k3d stack in CI as
+- [x] 14.3 The UI's Playwright suite runs against the k3d stack in CI as
   its own job (OQ11).
 
 #### Success Criteria

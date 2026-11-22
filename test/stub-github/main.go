@@ -31,6 +31,7 @@ limitations under the License.
 // goes:
 //
 //	POST   /_stub/repos               JSON []Repo: replace the repositories
+//	POST   /_stub/installations       JSON []Installation: replace the installations
 //	DELETE /_stub/installations/{id}  the installation is deleted (mint 404)
 //	POST   /_stub/deliveries          JSON stubDelivery: list a delivery
 //
@@ -121,6 +122,15 @@ func run() error {
 			return
 		}
 		gh.SetRepos(repos...)
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /_stub/installations", func(w http.ResponseWriter, r *http.Request) {
+		var in []fakegithub.Installation
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		gh.SetInstallations(in...)
 		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("DELETE /_stub/installations/{id}", func(w http.ResponseWriter, r *http.Request) {

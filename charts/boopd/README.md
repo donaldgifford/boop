@@ -274,7 +274,7 @@ renders with an existing Secret are identical.
 | ui.oidc.tokenAuthMethod | string | `""` | `client_secret_post` or `client_secret_basic`; empty keeps the BFF's default. |
 | ui.pdb.enabled | bool | `true` | Render a PodDisruptionBudget for the UI pods. |
 | ui.pdb.maxUnavailable | int | `1` | PDB maxUnavailable. |
-| ui.publicURL | string | `""` | The UI's public origin (PUBLIC_URL): https, the redirect URI's base. Required. |
+| ui.publicURL | string | `""` | The UI's public origin (PUBLIC_URL): https, the redirect URI's base; http only on localhost (the e2e). Required. |
 | ui.replicaCount | int | `2` | UI replicas; sessions are sealed cookies, so any replica serves. |
 | ui.resources | object | See values.yaml | UI container resources. |
 | ui.service.port | int | `80` | UI Service port, to the BFF's 3000. |

@@ -319,9 +319,15 @@ func (h *ingestHarness) portForward(ctx context.Context, t *testing.T) string {
 	return fmt.Sprintf("http://127.0.0.1:%d", port)
 }
 
-// forward port-forwards a local port to port on the first running pod
-// matching selector, until the test ends, and returns the local port.
+// forward port-forwards a free local port to port on the first running
+// pod matching selector, until the test ends, and returns the local port.
 func forward(ctx context.Context, t *testing.T, env *Env, selector string, port int) int {
+	t.Helper()
+	return forwardFrom(ctx, t, env, selector, 0, port)
+}
+
+// forwardFrom is forward from a fixed local port; 0 picks a free one.
+func forwardFrom(ctx context.Context, t *testing.T, env *Env, selector string, local, port int) int {
 	t.Helper()
 	cs, ns := env.Clientset, env.Namespace
 	pods, err := cs.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{LabelSelector: selector, FieldSelector: "status.phase=Running"})
@@ -336,7 +342,15 @@ func forward(ctx context.Context, t *testing.T, env *Env, selector string, port 
 		Name(pods.Items[0].Name).SubResource("portforward").URL()
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, http.MethodPost, url)
 	stop, ready := make(chan struct{}), make(chan struct{})
-	fw, err := portforward.NewOnAddresses(dialer, []string{"127.0.0.1"}, []string{fmt.Sprintf("0:%d", port)}, stop, ready, io.Discard, io.Discard)
+	fw, err := portforward.NewOnAddresses(
+		dialer,
+		[]string{"127.0.0.1"},
+		[]string{fmt.Sprintf("%d:%d", local, port)},
+		stop,
+		ready,
+		io.Discard,
+		io.Discard,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

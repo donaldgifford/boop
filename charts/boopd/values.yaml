@@ -582,7 +582,7 @@ ui:
     # -- UI Service port, to the BFF's 3000.
     port: 80
   # -- The UI's public origin (PUBLIC_URL): https, the redirect URI's
-  # base. Required.
+  # base; http only on localhost (the e2e). Required.
   publicURL: ""
   # -- Secret with `client-secret` (the boopd-ui OIDC client) and
   # `session-keys` (comma-separated, 32+ bytes each, newest first).

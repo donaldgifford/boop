@@ -126,8 +126,9 @@ func TestStore(t *testing.T) {
 }
 
 // installStore deploys Postgres and the mock issuer, then the chart with
-// ingest, the store and the API on, and connects to Postgres.
-func installStore(ctx context.Context, t *testing.T) *storeHarness {
+// ingest, the store and the API on, and connects to Postgres. opts run
+// after its own values.
+func installStore(ctx context.Context, t *testing.T, opts ...chartOption) *storeHarness {
 	t.Helper()
 	sh := &storeHarness{}
 	sh.ingestHarness = installIngest(ctx, t, func(ctx context.Context, t *testing.T, h *chartHarness, values map[string]any) {
@@ -144,6 +145,9 @@ func installStore(ctx context.Context, t *testing.T) *storeHarness {
 		}
 		boopd := values["boopd"].(map[string]any)
 		boopd["api"] = map[string]any{"auth": map[string]any{"issuer": sh.issuer, "audience": apiAudience}}
+		for _, opt := range opts {
+			opt(ctx, t, h, values)
+		}
 	})
 	port := forward(ctx, t, sh.env, "app=postgres", 5432)
 	pool, err := pgxpool.New(ctx, fmt.Sprintf("postgres://%s:%s@127.0.0.1:%d/%s?sslmode=disable", pgSuperuser, pgSuperuser, port, pgDatabase))

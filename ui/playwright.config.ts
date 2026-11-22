@@ -16,6 +16,13 @@ export default defineConfig({
   use: {
     baseURL: process.env.BOOP_UI_URL ?? "http://localhost:3000",
     trace: "retain-on-failure",
+    // The k3d stack's issuer has an in-cluster name and a certificate
+    // from the e2e CA: BOOP_E2E_HOST_RULES maps the name to its
+    // port-forward, and BOOP_E2E_IGNORE_HTTPS accepts the certificate.
+    ignoreHTTPSErrors: process.env.BOOP_E2E_IGNORE_HTTPS === "1",
+    launchOptions: {
+      args: process.env.BOOP_E2E_HOST_RULES ? [`--host-resolver-rules=${process.env.BOOP_E2E_HOST_RULES}`] : [],
+    },
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] }, testIgnore: /visual\.spec\.ts/ },

@@ -1461,7 +1461,7 @@
         },
         "publicURL": {
           "type": "string",
-          "pattern": "^$|^https://"
+          "pattern": "^$|^https://|^http://(localhost|127\\.0\\.0\\.1)(:[0-9]+)?$"
         },
         "existingSecret": {
           "type": "string"
