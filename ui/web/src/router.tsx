@@ -46,7 +46,7 @@ const notFoundRoute = createRoute({ getParentRoute: () => shellRoute, path: "$",
 // session will be asked for (DESIGN-0004).
 const statusRoute = createRoute({ getParentRoute: () => rootRoute, path: "/status", component: StatusView });
 
-const routeTree = rootRoute.addChildren([shellRoute.addChildren([estateRoute, pullsRoute, waitingRoute, repositoriesRoute, repositoryRoute, packagesRoute, packageRoute, runsRoute, eventsRoute, deliveriesRoute, notFoundRoute]), statusRoute]);
+export const routeTree = rootRoute.addChildren([shellRoute.addChildren([estateRoute, pullsRoute, waitingRoute, repositoriesRoute, repositoryRoute, packagesRoute, packageRoute, runsRoute, eventsRoute, deliveriesRoute, notFoundRoute]), statusRoute]);
 
 export const router = createRouter({ routeTree, defaultErrorComponent: RouteError, defaultNotFoundComponent: NotFound });
 

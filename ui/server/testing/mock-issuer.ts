@@ -7,6 +7,11 @@
 // An `audience` authorize parameter, or the apiAudience option, makes the
 // access token an RS256 JWT for it (what boopd's API verifies); otherwise
 // the access token is opaque.
+//
+// The `users` option lets a browser pick who signs in: /authorize reads
+// the issuer's own `mock_user` cookie and signs that user's subject, name
+// and groups instead of the defaults (the Playwright suite's operator and
+// viewer).
 import { createHash, randomBytes } from "node:crypto";
 
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
@@ -23,6 +28,13 @@ export interface MockIssuerOptions {
   name?: string;
   apiAudience?: string;
   groups?: string[];
+  users?: Record<string, MockUser>;
+}
+
+export interface MockUser {
+  sub: string;
+  name: string;
+  groups: string[];
 }
 
 export interface MockIssuer {
@@ -45,27 +57,31 @@ interface Grant {
   nonce: string;
   challenge: string;
   audience: string | undefined;
+  user: MockUser;
 }
 
 export async function startMockIssuer(opts: MockIssuerOptions = {}): Promise<MockIssuer> {
   const clientId = opts.clientId ?? "boopd-ui";
   const clientSecret = opts.clientSecret ?? "client-secret";
   const ttl = opts.accessTokenTtl ?? 300;
-  const sub = opts.sub ?? "user-1";
-  const name = opts.name ?? "Grace Hopper";
+  const fallback: MockUser = { sub: opts.sub ?? "user-1", name: opts.name ?? "Grace Hopper", groups: opts.groups ?? [] };
+  const userFrom = (req: Request): MockUser => {
+    const picked = /(?:^|;\s*)mock_user=([^;]+)/.exec(req.headers.get("cookie") ?? "")?.[1];
+    return (picked && opts.users?.[decodeURIComponent(picked)]) || fallback;
+  };
 
   const { privateKey, publicKey } = await generateKeyPair("RS256");
   const jwk = { ...(await exportJWK(publicKey)), kid: "k1", alg: "RS256", use: "sig" };
 
   const codes = new Map<string, Grant>();
   // refreshTokens maps a live refresh token to its grant's audience.
-  const refreshTokens = new Map<string, string | undefined>();
+  const refreshTokens = new Map<string, { audience: string | undefined; user: MockUser }>();
   const revoked: string[] = [];
   const authMethods: ClientAuthMethod[] = [];
   let refreshes = 0;
   let base = "";
 
-  const sign = (claims: Record<string, unknown>, typ: string | undefined, aud: string | string[], exp: string) =>
+  const sign = (sub: string, claims: Record<string, unknown>, typ: string | undefined, aud: string | string[], exp: string) =>
     new SignJWT(claims)
       .setProtectedHeader({ alg: "RS256", kid: "k1", ...(typ ? { typ } : {}) })
       .setIssuer(base)
@@ -75,23 +91,23 @@ export async function startMockIssuer(opts: MockIssuerOptions = {}): Promise<Moc
       .setExpirationTime(exp)
       .sign(privateKey);
 
-  const accessToken = (audience: string | undefined): Promise<string> => {
+  const accessToken = (audience: string | undefined, user: MockUser): Promise<string> => {
     const aud = [opts.apiAudience, audience].filter((a): a is string => Boolean(a));
     if (aud.length === 0) {
       return Promise.resolve(`at-${randomBytes(8).toString("hex")}`);
     }
-    return sign({ azp: clientId, groups: opts.groups ?? [], name, preferred_username: "grace" }, "at+jwt", aud, `${ttl}s`);
+    return sign(user.sub, { azp: clientId, groups: user.groups, name: user.name, preferred_username: "grace" }, "at+jwt", aud, `${ttl}s`);
   };
 
-  const issue = async (nonce: string | undefined, audience: string | undefined) => {
+  const issue = async (nonce: string | undefined, audience: string | undefined, user: MockUser) => {
     const refresh = randomBytes(16).toString("hex");
-    refreshTokens.set(refresh, audience);
+    refreshTokens.set(refresh, { audience, user });
     return {
-      access_token: await accessToken(audience),
+      access_token: await accessToken(audience, user),
       token_type: "Bearer",
       expires_in: ttl,
       refresh_token: refresh,
-      id_token: await sign({ nonce, name, preferred_username: "grace" }, undefined, clientId, "5m"),
+      id_token: await sign(user.sub, { nonce, name: user.name, preferred_username: "grace" }, undefined, clientId, "5m"),
     };
   };
 
@@ -126,17 +142,17 @@ export async function startMockIssuer(opts: MockIssuerOptions = {}): Promise<Moc
         if (!grant || grant.challenge !== challenge || grant.redirectUri !== form.get("redirect_uri")) {
           return Response.json({ error: "invalid_grant" }, { status: 400 });
         }
-        return Response.json(await issue(grant.nonce, grant.audience));
+        return Response.json(await issue(grant.nonce, grant.audience, grant.user));
       }
       case "refresh_token": {
         const rt = form.get("refresh_token") ?? "";
         if (!refreshTokens.has(rt)) {
           return Response.json({ error: "invalid_grant" }, { status: 400 });
         }
-        const audience = refreshTokens.get(rt);
+        const prior = refreshTokens.get(rt);
         refreshTokens.delete(rt);
         refreshes++;
-        return Response.json(await issue(undefined, audience));
+        return Response.json(await issue(undefined, prior?.audience, prior?.user ?? fallback));
       }
       default:
         return Response.json({ error: "unsupported_grant_type" }, { status: 400 });
@@ -171,6 +187,7 @@ export async function startMockIssuer(opts: MockIssuerOptions = {}): Promise<Moc
             nonce: p.get("nonce") ?? "",
             challenge: p.get("code_challenge") ?? "",
             audience: p.get("audience") ?? undefined,
+            user: userFrom(req),
           });
           const back = new URL(p.get("redirect_uri") ?? "");
           back.searchParams.set("code", code);

@@ -576,6 +576,19 @@ because it is outward-facing. Workarounds stay in `ui/` until then.
 | Repositories, Events | No debounced search input. | `Input` with `onChange` straight into the URL. |
 | Repositories (state) | `SegmentedControl` overflows with seven options on a narrow screen; there is no select fallback. | It wraps. |
 
+- **The page tests fail any unseeded request.** `views/pages.test.tsx`
+  mounts the real route tree (`appRouter`) over a seeded cache and
+  stubs `fetch` to reject, so a page that reads a key the test did not
+  seed fails instead of reaching the network.
+- **The mock issuer picks its user from a cookie.** The Playwright
+  suite signs in as an operator or a viewer by setting `mock_user` on
+  the issuer's origin. The issuer's `users` option maps the name to a
+  subject, a name and groups. The e2e stack (14.1) has to run the issuer
+  with `operator` (all owners, operator group) and `viewer` (one owner)
+  users. It also has to seed a repository both can see
+  (`BOOP_E2E_REPO_ID`), one only the operator can see
+  (`BOOP_E2E_HIDDEN_REPO_ID`) and a package (`BOOP_E2E_PURL`).
+
 boop's own components stay in `ui/`: `UpdateRow`/`UpdateSummary`,
 `WaitingSections`, `ListCard`, the run and pull request columns, and
 `eventItem`.
@@ -1048,12 +1061,16 @@ page stops using them.
 
   A missing prop or variant is an issue on the design system. boop's own
   components (the update row, dashboard-item sections) stay in `ui/`.
-- [ ] 12.8 Tests:
+- [x] 12.8 Tests:
   - component tests per page;
   - Playwright flows (login, each page, the recheck as operator and as
     viewer, an invisible owner gets 404);
   - axe on every page;
   - screenshots in the pinned Playwright image.
+
+  The component tests run in `just ui-test`. The Playwright specs
+  (`ui/e2e`) need the deployed stack, so they first run, and their
+  screenshots are first committed, in 14.3.
 
 #### Success Criteria
 

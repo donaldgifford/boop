@@ -7,6 +7,7 @@ import type { UIConfig } from "../src/api/queries";
 import { NotFound, RouteError } from "../src/shell/errors";
 import { NAV } from "../src/shell/nav";
 import { Shell } from "../src/shell/Shell";
+import { routeTree } from "../src/router";
 
 // Test doubles for the shell: the query cache is seeded, so no request
 // leaves a test, and the router is in memory.
@@ -51,6 +52,22 @@ export function ShellHarness({ seed, router }: { seed?: Seed; router: ReturnType
     <QueryClientProvider client={seededClient(seed)}>
       <TimeZoneProvider storageKey="boop.zone.test">
         <RouterProvider router={router} />
+      </TimeZoneProvider>
+    </QueryClientProvider>
+  );
+}
+
+// appRouter is the app's real route tree in memory, for page tests over
+// a seeded cache.
+export function appRouter(initial: string) {
+  return createRouter({ routeTree, history: createMemoryHistory({ initialEntries: [initial] }), defaultErrorComponent: RouteError, defaultNotFoundComponent: NotFound });
+}
+
+export function AppHarness({ client, router }: { client: QueryClient; router: ReturnType<typeof appRouter> }) {
+  return (
+    <QueryClientProvider client={client}>
+      <TimeZoneProvider storageKey="boop.zone.test">
+        <RouterProvider router={router as never} />
       </TimeZoneProvider>
     </QueryClientProvider>
   );
