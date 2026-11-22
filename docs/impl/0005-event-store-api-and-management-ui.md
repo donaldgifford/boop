@@ -1295,11 +1295,12 @@ page stops using them.
 
 #### Tasks
 
-- [ ] 16.1 PR A, the store and writers (phases 1–8 and their chart
-  pieces), `minor`.
-- [ ] 16.2 PR B, the API (phases 9–10 and its chart pieces), `minor`.
-- [ ] 16.3 PR C, the UI (phases 11–12, the remaining chart, e2e, CI,
-  docs), `minor`.
+- [x] 16.1 PR A, the store and writers (phases 1–8 and their chart
+  pieces), `minor`: #47.
+- [x] 16.2 PR B, the API (phases 9–10 and its chart pieces), `minor`:
+  #48, stacked on #47.
+- [x] 16.3 PR C, the UI (phases 11–12, the remaining chart, e2e, CI,
+  docs), `minor`: #49, stacked on #48.
 - [ ] 16.4 **Deferred, human required.** Homelab database setup:
   - a CNPG `Cluster` for boopd with managed roles `boopd_owner`,
     `boopd_worker`, `boopd_ingest`, `boopd_ro`;
