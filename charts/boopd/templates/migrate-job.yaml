@@ -1,3 +1,4 @@
+{{- include "boopd.roles.validate" . -}}
 {{- if .Values.store.enabled -}}
 {{- $m := .Values.store.migrate -}}
 # The store's schema (DESIGN-0004 § Commands and roles): `boopd migrate`

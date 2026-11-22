@@ -1100,7 +1100,7 @@ page stops using them.
   - migrate → `-rw`;
   - ui → IdP;
   - api → IdP (JWKS).
-- [ ] 13.5 Guards: `ui.enabled` requires `api.enabled` and auth; the
+- [x] 13.5 Guards: `ui.enabled` requires `api.enabled` and auth; the
   roles with `store.enabled` require `store.existingSecret`; a UI route
   without auth fails.
 - [ ] 13.6 helm-unittest suites `store_test.yaml`, `api_test.yaml`,

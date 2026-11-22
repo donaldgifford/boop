@@ -671,3 +671,37 @@ worker's, with api.temporalOidc's client when set.
 {{- end -}}
 {{- toJson $v -}}
 {{- end }}
+
+{{/*
+Render guards for the store, API and UI roles (IMPL-0005 13.5): each
+combination that would start a role the binary refuses, or expose the
+UI without sign-in, fails here instead.
+*/}}
+{{- define "boopd.roles.validate" -}}
+{{- $ui := .Values.ui -}}
+{{- $auth := (.Values.boopd.api | default dict).auth | default dict -}}
+{{- if and .Values.store.enabled (not .Values.store.existingSecret) -}}
+{{- fail "store.enabled needs store.existingSecret: the Secret with the owner, worker, ingest and ro DSNs" -}}
+{{- end -}}
+{{- if or $ui.ingress.enabled $ui.httpRoute.enabled -}}
+{{- if not (and $ui.enabled $ui.oidc.issuer $ui.existingSecret) -}}
+{{- fail "ui.ingress and ui.httpRoute need the UI with sign-in: ui.enabled, ui.oidc.issuer and ui.existingSecret" -}}
+{{- end -}}
+{{- end -}}
+{{- if $ui.enabled -}}
+{{- if not .Values.api.enabled -}}
+{{- fail "ui.enabled needs api.enabled: the UI is a client of the API" -}}
+{{- end -}}
+{{- if not (and $ui.oidc.issuer $ui.oidc.clientId $ui.existingSecret $ui.publicURL) -}}
+{{- fail "ui.enabled needs ui.oidc.issuer, ui.oidc.clientId, ui.existingSecret (client-secret, session-keys) and ui.publicURL" -}}
+{{- end -}}
+{{- end -}}
+{{- if .Values.api.enabled -}}
+{{- if not .Values.store.enabled -}}
+{{- fail "api.enabled needs store.enabled: the API reads the store" -}}
+{{- end -}}
+{{- if not (and $auth.issuer $auth.audience) -}}
+{{- fail "api.enabled needs boopd.api.auth.issuer and boopd.api.auth.audience: the API never serves unauthenticated" -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
