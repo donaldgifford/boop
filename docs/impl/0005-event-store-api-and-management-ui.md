@@ -1093,7 +1093,7 @@ page stops using them.
   only, waiting before the roles start.
 - [x] 13.3 `templates/api.yaml`, `api-authz-configmap.yaml` (checksum
   annotation), `ui.yaml`, and the routes for both.
-- [ ] 13.4 NetworkPolicies:
+- [x] 13.4 NetworkPolicies:
   - ui → api;
   - api → Postgres `-ro` and Temporal;
   - worker and ingest → Postgres `-rw`;

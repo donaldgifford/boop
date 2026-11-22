@@ -85,5 +85,124 @@ spec:
     {{- with $np.temporal }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
+    {{- if .Values.store.enabled }}
+    {{- with .Values.store.networkPolicy.rw }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- end }}
+{{- end }}
+{{- if .Values.api.enabled }}
+{{- $np := .Values.api.networkPolicy }}
+---
+# The API pods (DESIGN-0004): the listen port from the UI pods and
+# api.networkPolicy.from, metrics from Prometheus; egress to DNS,
+# Postgres's read-only service, Temporal and the IdP's JWKS only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "boopd.role.fullname" (list . "api") }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "boopd.role.labels" (list . "api") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "boopd.role.selectorLabels" (list . "api") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "boopd.role.selectorLabels" (list . "ui") | nindent 14 }}
+        {{- with $np.from }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      ports:
+        - {port: http, protocol: TCP}
+    {{- with $np.metricsFrom }}
+    - from:
+        {{- toYaml . | nindent 8 }}
+      ports:
+        - {port: metrics, protocol: TCP}
+    {{- end }}
+  egress:
+    - ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+    {{- with .Values.store.networkPolicy.ro }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- with $np.temporal }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- with $np.idp }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}
+{{- if .Values.ui.enabled }}
+{{- $np := .Values.ui.networkPolicy }}
+---
+# The UI pods (DESIGN-0004 § The UI): the BFF port from the ingress
+# controller or gateway; egress to DNS, the API pods and the IdP only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "boopd.role.fullname" (list . "ui") }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "boopd.role.labels" (list . "ui") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "boopd.role.selectorLabels" (list . "ui") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  {{- with $np.from }}
+  ingress:
+    - from:
+        {{- toYaml . | nindent 8 }}
+      ports:
+        - {port: http, protocol: TCP}
+  {{- else }}
+  ingress: []
+  {{- end }}
+  egress:
+    - ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "boopd.role.selectorLabels" (list . "api") | nindent 14 }}
+      ports:
+        - {port: {{ .Values.config.port }}, protocol: TCP}
+    {{- with $np.idp }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}
+{{- if .Values.store.enabled }}
+---
+# The migrate hook's pod: no ingress; egress to DNS and Postgres's
+# read-write service only. The worker has no policy of its own, so its
+# path to Postgres needs none.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "boopd.role.fullname" (list . "migrate") }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "boopd.role.labels" (list . "migrate") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "boopd.role.selectorLabels" (list . "migrate") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+    {{- with .Values.store.networkPolicy.rw }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 {{- end }}
 {{- end }}
