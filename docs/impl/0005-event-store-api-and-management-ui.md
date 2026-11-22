@@ -972,7 +972,7 @@ page stops using them.
 - [x] 12.4 Repository (`/repositories/$id`): a header with the live
   phase and Recheck (operators); tabs for Timeline (with causes), Runs,
   Pull requests, Waiting, Dependencies and Config.
-- [ ] 12.5 Repositories, Packages (+ `$purl`), Runs, Events (15 s
+- [x] 12.5 Repositories, Packages (+ `$purl`), Runs, Events (15 s
   polling), Deliveries, and Status (public, outside the shell, 30 s
   refetch).
 - [ ] 12.6 Polling (DESIGN-0004 OQ10): 30 s for lists, and 5 s on a
