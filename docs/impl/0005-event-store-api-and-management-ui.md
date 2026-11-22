@@ -1091,7 +1091,7 @@ page stops using them.
   - `boopd.store` and `boopd.api` rendered into `boopd.hcl`.
 - [x] 13.2 `templates/migrate-job.yaml`, a hook Job with the owner DSN
   only, waiting before the roles start.
-- [ ] 13.3 `templates/api.yaml`, `api-authz-configmap.yaml` (checksum
+- [x] 13.3 `templates/api.yaml`, `api-authz-configmap.yaml` (checksum
   annotation), `ui.yaml`, and the routes for both.
 - [ ] 13.4 NetworkPolicies:
   - ui → api;

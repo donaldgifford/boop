@@ -656,3 +656,18 @@ helm.sh/hook-weight: {{ index . 1 | quote }}
 helm.sh/hook-delete-policy: before-hook-creation
 {{- end -}}
 {{- end }}
+
+{{/*
+A root context for the API's Temporal env and credentials: the
+worker's, with api.temporalOidc's client when set.
+*/}}
+{{- define "boopd.api.temporalValues" -}}
+{{- $v := deepCopy .Values -}}
+{{- with .Values.api.temporalOidc.clientId -}}
+{{- $_ := set $v.temporal.auth.oidc "clientId" . -}}
+{{- end -}}
+{{- with .Values.api.temporalOidc.existingSecret -}}
+{{- $_ := set $v.temporal.auth.oidc "existingSecret" . -}}
+{{- end -}}
+{{- toJson $v -}}
+{{- end }}
