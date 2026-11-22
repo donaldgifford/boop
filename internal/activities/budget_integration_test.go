@@ -105,7 +105,17 @@ func TestAcquireBudget_DevServer(t *testing.T) {
 		return s
 	}
 
-	if s := state(); s.Resources[workflows.ResourceCore].Limit != 5000 || s.Resources[workflows.ResourceCore].Remaining != 4000 {
+	// The entity reads /rate_limit through its own activity, which can
+	// land after the first grant: poll for the readings.
+	read := func(s workflows.BudgetState) bool {
+		core, ok := s.Resources[workflows.ResourceCore]
+		return ok && core.Limit == 5000 && core.Remaining == 4000
+	}
+	s := state()
+	for deadline := time.Now().Add(10 * time.Second); !read(s) && time.Now().Before(deadline); s = state() {
+		time.Sleep(100 * time.Millisecond)
+	}
+	if !read(s) {
 		t.Errorf("state = %+v, want the readings from the ReadRateLimit activity", s)
 	}
 

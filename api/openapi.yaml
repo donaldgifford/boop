@@ -1,0 +1,1975 @@
+openapi: 3.1.0
+info:
+  title: boopd API
+  version: 1.0.0
+  summary: Read API and recheck action for boop's Renovate fleet.
+  description: |
+    The API behind the boop UI and status page (DESIGN-0004 § The API).
+    Every endpoint but one is a GET; the exception,
+    `POST /repositories/{id}/recheck`, asks a repository's workflow for
+    a run. Responses are JSON with snake_case fields, times are RFC 3339
+    UTC, and errors are RFC 9457 problem details carrying `request_id`.
+
+    Results are scoped to the owners (GitHub installation account logins)
+    the caller may see. A repository whose owner the caller cannot see
+    answers 404, the same as an unknown one. Actions also need an
+    operator group; otherwise they answer 403.
+
+    Lists are keyset-paged: `?cursor=&limit=` (default 50, at most 200),
+    answering `{items, next_cursor}`. A cursor is bound to the filters it
+    was issued for; reusing it with others is 400.
+
+    Enums documented as open may gain values within `/api/v1`. Clients
+    must treat an unknown value as opaque rather than fail.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: identity
+    description: Who the caller is.
+  - name: estate
+    description: Fleet-wide numbers and series.
+  - name: repositories
+    description: Repositories, their history and the recheck action.
+  - name: pull-requests
+    description: Renovate's pull requests and what they update.
+  - name: packages
+    description: Dependencies, proposed updates and packages by purl.
+  - name: activity
+    description: Runs, events and webhook deliveries.
+  - name: meta
+    description: The service and its contract.
+paths:
+  /me:
+    get:
+      operationId: getMe
+      summary: The caller's identity, visible owners and operator flag.
+      description: Answers even when the caller can see no owner, so the UI can show an "ask for access" page.
+      tags: [identity]
+      responses:
+        "200":
+          description: The caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        default:
+          $ref: "#/components/responses/Error"
+  /estate:
+    get:
+      operationId: getEstate
+      summary: KPI numbers over the visible owners, or one of them.
+      description: Computed on read and cached for 60 s per owner and range.
+      tags: [estate]
+      parameters:
+        - $ref: "#/components/parameters/Owner"
+        - $ref: "#/components/parameters/Range"
+      responses:
+        "200":
+          description: The numbers.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Estate"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+  /estate/series:
+    get:
+      operationId: getEstateSeries
+      summary: One metric over time, in daily or hourly buckets.
+      description: |
+        `1d` is hourly; longer ranges are daily. `runs` carries the count
+        per outcome in `by`; the other metrics carry only `value`.
+      tags: [estate]
+      parameters:
+        - name: metric
+          in: query
+          required: true
+          description: "Open enum: open_prs, runs, waiting, merged."
+          schema:
+            type: string
+            examples: [open_prs]
+        - $ref: "#/components/parameters/Owner"
+        - $ref: "#/components/parameters/Range"
+      responses:
+        "200":
+          description: The series.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EstateSeries"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+  /installations:
+    get:
+      operationId: listInstallations
+      summary: The visible installations, with budget readings from their latest runs.
+      tags: [estate]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: The installations.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstallationList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        default:
+          $ref: "#/components/responses/Error"
+  /repositories:
+    get:
+      operationId: listRepositories
+      summary: Onboarded and offboarded repositories, by slug.
+      tags: [repositories]
+      parameters:
+        - $ref: "#/components/parameters/Owner"
+        - name: q
+          in: query
+          description: A slug prefix, case-insensitive.
+          schema:
+            type: string
+            maxLength: 200
+        - name: state
+          in: query
+          description: Only repositories in this state.
+          schema:
+            $ref: "#/components/schemas/RepoState"
+        - name: profile
+          in: query
+          description: Only repositories on this profile.
+          schema:
+            type: string
+        - name: has_open_prs
+          in: query
+          description: Only repositories with (true) or without (false) open pull requests.
+          schema:
+            type: boolean
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: The repositories.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepositoryList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+  /repositories/{id}:
+    get:
+      operationId: getRepository
+      summary: One repository, with its live state from Temporal when reachable.
+      description: |
+        `live` is false, and `phase` absent, when the workflow could not
+        be queried within 2 s; the stored state stands.
+      tags: [repositories]
+      parameters:
+        - $ref: "#/components/parameters/RepositoryID"
+      responses:
+        "200":
+          description: The repository.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepositoryDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+  /repositories/{id}/events:
+    get:
+      operationId: listRepositoryEvents
+      summary: The repository's timeline, newest first.
+      tags: [repositories]
+      parameters:
+        - $ref: "#/components/parameters/RepositoryID"
+        - $ref: "#/components/parameters/Kind"
+        - $ref: "#/components/parameters/Since"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: The events.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+  /repositories/{id}/runs:
+    get:
+      operationId: listRepositoryRuns
+      summary: The repository's runs, newest first.
+      tags: [repositories]
+      parameters:
+        - $ref: "#/components/parameters/RepositoryID"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: The runs.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+  /repositories/{id}/dependencies:
+    get:
+      operationId: listRepositoryDependencies
+      summary: The repository's current dependencies, from its latest run with a report.
+      tags: [repositories]
+      parameters:
+        - $ref: "#/components/parameters/RepositoryID"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: The dependencies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DependencyList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+  /repositories/{id}/recheck:
+    post:
+      operationId: recheckRepository
+      summary: Ask the repository's workflow for a run now.
+      description: |
+        Operators only. Signals `recheck` with the caller as actor and
+        the request ID; the run and its `action.recheck` event follow
+        asynchronously. A second request for the same repository within
+        a minute is answered 202 again without a second signal.
+      tags: [repositories]
+      parameters:
+        - $ref: "#/components/parameters/RepositoryID"
+      responses:
+        "202":
+          description: The recheck was signalled, or one was already within the last minute.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecheckAccepted"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The repository has no running workflow (`type` ends in `workflow_missing`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Temporal is unreachable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        default:
+          $ref: "#/components/responses/Error"
+  /pull-requests:
+    get:
+      operationId: listPullRequests
+      summary: Renovate's pull requests, oldest opened first.
+      tags: [pull-requests]
+      parameters:
+        - name: state
+          in: query
+          description: Only pull requests in this state.
+          schema:
+            $ref: "#/components/schemas/PRState"
+        - $ref: "#/components/parameters/Owner"
+        - $ref: "#/components/parameters/Repo"
+        - name: manager
+          in: query
+          description: Only pull requests updating a dependency of this Renovate manager.
+          schema:
+            type: string
+        - name: update_type
+          in: query
+          description: Only pull requests with an update of this type.
+          schema:
+            $ref: "#/components/schemas/UpdateType"
+        - name: older_than
+          in: query
+          description: Only pull requests opened longer ago than this many days.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 3650
+        - name: automerge
+          in: query
+          description: Only pull requests with (true) or without (false) automerge.
+          schema:
+            type: boolean
+        - name: label
+          in: query
+          description: Only pull requests carrying this label.
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Purl"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: The pull requests.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PullRequestList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+  /pull-requests/{repo_id}/{number}:
+    get:
+      operationId: getPullRequest
+      summary: One pull request with its updates and timeline.
+      tags: [pull-requests]
+      parameters:
+        - name: repo_id
+          in: path
+          required: true
+          description: The repository id.
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: number
+          in: path
+          required: true
+          description: The pull request number.
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+      responses:
+        "200":
+          description: The pull request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PullRequestDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+  /dashboard-items:
+    get:
+      operationId: listDashboardItems
+      summary: Dependency Dashboard items waiting on a human or a schedule, oldest first.
+      tags: [pull-requests]
+      parameters:
+        - name: section
+          in: query
+          description: "Only this section. Open enum: awaiting-schedule, rate-limited, pending-approval, pending-status-checks, errored, open, ignored, other."
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Owner"
+        - $ref: "#/components/parameters/Repo"
+        - name: waiting_longer_than
+          in: query
+          description: Only items first seen longer ago than this many days.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 3650
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: The items.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardItemList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+  /packages:
+    get:
+      operationId: listPackages
+      summary: Pending updates grouped by package (purl without version), most repositories first.
+      tags: [packages]
+      parameters:
+        - $ref: "#/components/parameters/Owner"
+        - name: manager
+          in: query
+          description: Only updates from this Renovate manager.
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: The packages.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PackageList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+  /dependencies:
+    get:
+      operationId: listDependencies
+      summary: Dependencies across the visible repositories.
+      tags: [packages]
+      parameters:
+        - $ref: "#/components/parameters/Purl"
+        - name: manager
+          in: query
+          description: Only dependencies of this Renovate manager.
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Owner"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: The dependencies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DependencyList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+  /updates:
+    get:
+      operationId: listUpdates
+      summary: Proposed updates from the latest runs; the correlator's entry point.
+      tags: [packages]
+      parameters:
+        - name: purl
+          in: query
+          description: A package URL, matched against the update's from purl; with a version it matches exactly, without one every version.
+          schema:
+            type: string
+            maxLength: 500
+        - name: from
+          in: query
+          description: Only updates from this version.
+          schema:
+            type: string
+        - name: to
+          in: query
+          description: Only updates to this version.
+          schema:
+            type: string
+        - name: update_type
+          in: query
+          description: Only updates of this type.
+          schema:
+            $ref: "#/components/schemas/UpdateType"
+        - $ref: "#/components/parameters/Owner"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: The updates.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+  /runs:
+    get:
+      operationId: listRuns
+      summary: Runs across the visible repositories, newest first.
+      tags: [activity]
+      parameters:
+        - name: outcome
+          in: query
+          description: Only runs with this outcome.
+          schema:
+            $ref: "#/components/schemas/RunOutcome"
+        - $ref: "#/components/parameters/Owner"
+        - name: cause
+          in: query
+          description: Only runs with this cause.
+          schema:
+            $ref: "#/components/schemas/RunCause"
+        - $ref: "#/components/parameters/Since"
+        - $ref: "#/components/parameters/Until"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: The runs.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+  /events:
+    get:
+      operationId: listEvents
+      summary: The audit log, newest first.
+      description: |
+        Events about a repository are filtered to the visible owners;
+        events about no repository (discovery passes, deliveries before
+        routing) need an owner-wide view, `"*"`.
+      tags: [activity]
+      parameters:
+        - $ref: "#/components/parameters/Kind"
+        - name: source
+          in: query
+          description: Only events from this source.
+          schema:
+            $ref: "#/components/schemas/EventSource"
+        - name: actor
+          in: query
+          description: Only events by this actor login.
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Owner"
+        - $ref: "#/components/parameters/Repo"
+        - name: cause_key
+          in: query
+          description: Only events caused by the event with this key.
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Since"
+        - $ref: "#/components/parameters/Until"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: The events.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+  /deliveries:
+    get:
+      operationId: listDeliveries
+      summary: Webhook deliveries, newest first, with GitHub's status from the audit.
+      description: Needs an owner-wide view (`"*"`); others get 403.
+      tags: [activity]
+      parameters:
+        - name: event
+          in: query
+          description: Only deliveries of this GitHub event.
+          schema:
+            type: string
+        - name: outcome
+          in: query
+          description: "Only deliveries with this ingest outcome. Open enum: routed, ignored, own, rejected, failed."
+          schema:
+            type: string
+        - name: github_status
+          in: query
+          description: Only deliveries GitHub recorded with this HTTP status.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 599
+        - name: missed
+          in: query
+          description: Only missed (true) or not missed (false) deliveries.
+          schema:
+            type: boolean
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: The deliveries.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeliveryList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        default:
+          $ref: "#/components/responses/Error"
+  /status:
+    get:
+      operationId: getStatus
+      summary: Public service status.
+      description: |
+        Served from a cache refreshed every 30 s. It is aggregate-only: it
+        never names an owner, repository, package or installation, and
+        carries no error text.
+      tags: [meta]
+      security: []
+      responses:
+        "200":
+          description: The status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Status"
+        default:
+          $ref: "#/components/responses/Error"
+  /openapi.yaml:
+    get:
+      operationId: getOpenAPI
+      summary: This contract.
+      tags: [meta]
+      security: []
+      responses:
+        "200":
+          description: The OpenAPI document.
+          content:
+            application/yaml: {}
+        default:
+          $ref: "#/components/responses/Error"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: An OIDC access token issued for the API's audience. ID tokens are refused.
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      description: The next_cursor of the previous page.
+      schema:
+        $ref: "#/components/schemas/Cursor"
+    Limit:
+      name: limit
+      in: query
+      description: Page size.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    Owner:
+      name: owner
+      in: query
+      description: Only this owner (installation account login), case-insensitive. An owner the caller cannot see is 404.
+      schema:
+        type: string
+        maxLength: 100
+    Repo:
+      name: repo
+      in: query
+      description: Only this repository, by id.
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    Purl:
+      name: purl
+      in: query
+      description: A package URL; with a version it matches exactly, without one every version.
+      schema:
+        type: string
+        maxLength: 500
+    Kind:
+      name: kind
+      in: query
+      description: An event kind, or a prefix ending in "." (`pr.` matches every pr.* kind).
+      schema:
+        type: string
+        maxLength: 100
+    Since:
+      name: since
+      in: query
+      description: Only from this time on.
+      schema:
+        type: string
+        format: date-time
+    Until:
+      name: until
+      in: query
+      description: Only before this time.
+      schema:
+        type: string
+        format: date-time
+    Range:
+      name: range
+      in: query
+      description: "How far back. Open enum: 1d, 7d, 30d, 90d."
+      schema:
+        type: string
+        default: 30d
+        examples: [30d]
+    RepositoryID:
+      name: id
+      in: path
+      description: A repository id (GitHub's).
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+  responses:
+    BadRequest:
+      description: The request is malformed, or a cursor does not match its filters.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Unauthorized:
+      description: The bearer token is missing or invalid.
+      headers:
+        WWW-Authenticate:
+          description: Bearer challenge, per RFC 6750.
+          schema:
+            type: string
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Forbidden:
+      description: The caller may not do this.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFound:
+      description: No such resource, or one whose owner the caller cannot see.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Error:
+      description: An unexpected error.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    Problem:
+      description: RFC 9457 problem details.
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          description: A URI reference identifying the problem type; "about:blank" when only the status applies.
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+        instance:
+          type: string
+        request_id:
+          type: string
+          description: The request ID, for matching server logs.
+    Cursor:
+      description: |
+        An opaque keyset cursor. Pass it back unchanged as `?cursor=` to
+        fetch the next page; a cursor from different filters is refused.
+      type: string
+    NextCursor:
+      description: The cursor of the next page; null on the last.
+      type: [string, "null"]
+    RepoState:
+      description: "Open enum: idle, running, waiting, rate-limited, stalled, errored."
+      type: string
+      examples: [idle]
+    PRState:
+      description: "Open enum: open, merged, closed."
+      type: string
+      examples: [open]
+    UpdateType:
+      description: "Open enum: major, minor, patch, pin, digest, pinDigest, lockFileMaintenance, rollback, bump, replacement."
+      type: string
+      examples: [minor]
+    RunOutcome:
+      description: "Open enum: Succeeded, Skipped, Failed, TimedOut."
+      type: string
+      examples: [Succeeded]
+    RunCause:
+      description: "Open enum: schedule, webhook, recheck, unknown. Derived from the run's cause_key."
+      type: string
+      examples: [schedule]
+    EventSource:
+      description: "Open enum: webhook, worker, audit, api."
+      type: string
+      examples: [worker]
+    EventKind:
+      description: |
+        Open enum. Each kind's `data` follows the schema named for it:
+
+        - delivery.received: DeliveryReceivedData
+        - delivery.failed, delivery.missed, delivery.redelivered: DeliveryAuditedData
+        - pr.opened, pr.edited, pr.closed, pr.merged, pr.reopened, pr.synchronized, pr.synced: PullRequestData
+        - pr.checkbox: PRCheckboxData
+        - dashboard.updated: DashboardUpdatedData
+        - dashboard.ticked: DashboardTickedData
+        - repo.onboarded, repo.offboarded, repo.refreshed: RepositoryData
+        - repo.run-scheduled: RunScheduledData
+        - run.started: RunStartedData
+        - run.finished: RunFinishedData
+        - run.stalled, run.capacity-denied, run.budget-wait: RepoStateData
+        - installation.added, installation.removed, installation.suspended, installation.unsuspended: InstallationData
+        - discovery.finished: DiscoveryFinishedData
+        - action.recheck: RecheckData
+      type: string
+      examples: [run.finished]
+    ComponentState:
+      description: "Open enum: operational, degraded, down, unknown."
+      type: string
+      examples: [operational]
+    Me:
+      description: The caller, the owners it may see, and whether it may act.
+      type: object
+      required: [subject, name, groups, all_owners, owners, operator]
+      properties:
+        subject:
+          type: string
+          description: The token's `sub`.
+        name:
+          type: string
+          description: The configured name claim, else the subject.
+        groups:
+          type: array
+          items:
+            type: string
+        all_owners:
+          type: boolean
+          description: True when a group grants `"*"`.
+        owners:
+          type: array
+          description: The visible owners known to the store, sorted; every owner when all_owners.
+          items:
+            type: string
+        operator:
+          type: boolean
+          description: Whether the caller may POST actions.
+    Estate:
+      description: KPI numbers for a scope and range.
+      type: object
+      required:
+        - range
+        - computed_at
+        - repositories
+        - open_prs
+        - waiting
+        - oldest_open_pr_opened_at
+        - runs_24h
+        - run_success_rate_24h
+        - lost_deliveries_24h
+        - age_buckets
+        - top_packages
+        - ecosystems
+      properties:
+        owner:
+          type: [string, "null"]
+          description: The owner scope; null for every visible owner.
+        range:
+          type: string
+        computed_at:
+          type: string
+          format: date-time
+        repositories:
+          type: integer
+          description: Onboarded repositories.
+        open_prs:
+          type: integer
+        waiting:
+          type: integer
+          description: Unticked Dependency Dashboard items.
+        oldest_open_pr_opened_at:
+          type: [string, "null"]
+          format: date-time
+        runs_24h:
+          type: integer
+        run_success_rate_24h:
+          type: [number, "null"]
+          description: Succeeded over finished runs in the last 24 h, as a percentage floored to one decimal; null with none.
+        lost_deliveries_24h:
+          type: integer
+          description: Deliveries failed or missed in the last 24 h.
+        merged_in_range:
+          type: integer
+          description: Pull requests merged within the range.
+        age_buckets:
+          type: array
+          description: Open pull requests by age, youngest bucket first.
+          items:
+            $ref: "#/components/schemas/Bucket"
+        top_packages:
+          type: array
+          description: The packages with the most repositories behind, at most 10.
+          items:
+            $ref: "#/components/schemas/Package"
+        ecosystems:
+          type: array
+          description: Open pull requests by Renovate manager, most first.
+          items:
+            $ref: "#/components/schemas/Bucket"
+    Bucket:
+      description: A labelled count.
+      type: object
+      required: [label, count]
+      properties:
+        label:
+          type: string
+        count:
+          type: integer
+    EstateSeries:
+      description: One metric over time.
+      type: object
+      required: [metric, range, bucket, points]
+      properties:
+        metric:
+          type: string
+        range:
+          type: string
+        bucket:
+          description: "Open enum: hour, day."
+          type: string
+        points:
+          type: array
+          items:
+            $ref: "#/components/schemas/SeriesPoint"
+    SeriesPoint:
+      description: One bucket's value; `by` splits it (runs by outcome).
+      type: object
+      required: [at, value]
+      properties:
+        at:
+          type: string
+          format: date-time
+          description: The bucket's start.
+        value:
+          type: integer
+        by:
+          type: object
+          additionalProperties:
+            type: integer
+    Budget:
+      description: One resource's reading after the installation's latest run.
+      type: object
+      required: [remaining, observed_at]
+      properties:
+        remaining:
+          type: integer
+        used_since_run_start:
+          type: integer
+        observed_at:
+          type: string
+          format: date-time
+    Installation:
+      description: A GitHub App installation.
+      type: object
+      required: [id, app, owner, suspended, repositories]
+      properties:
+        id:
+          type: integer
+          format: int64
+        app:
+          type: string
+        owner:
+          type: string
+          description: The account login.
+        account_type:
+          type: string
+          description: "Open enum: User, Organization."
+        suspended:
+          type: boolean
+        removed_at:
+          type: [string, "null"]
+          format: date-time
+        repositories:
+          type: integer
+          description: Onboarded repositories.
+        core:
+          $ref: "#/components/schemas/Budget"
+        graphql:
+          $ref: "#/components/schemas/Budget"
+    InstallationList:
+      description: A page of installation items.
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Installation"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+    Repository:
+      description: A repository as the store last recorded it.
+      type: object
+      required: [id, installation_id, owner, slug, state, profile, open_prs, waiting]
+      properties:
+        id:
+          type: integer
+          format: int64
+        installation_id:
+          type: integer
+          format: int64
+        owner:
+          type: string
+        slug:
+          type: string
+          description: owner/name.
+        state:
+          $ref: "#/components/schemas/RepoState"
+        profile:
+          type: string
+        onboarded_at:
+          type: [string, "null"]
+          format: date-time
+        offboarded_at:
+          type: [string, "null"]
+          format: date-time
+        next_due:
+          type: [string, "null"]
+          format: date-time
+        last_run_id:
+          type: [string, "null"]
+        last_run_at:
+          type: [string, "null"]
+          format: date-time
+        last_outcome:
+          type: [string, "null"]
+          description: A RunOutcome.
+        open_prs:
+          type: integer
+        waiting:
+          type: integer
+          description: Unticked Dependency Dashboard items.
+    RepositoryDetail:
+      description: A repository with its live state.
+      allOf:
+        - $ref: "#/components/schemas/Repository"
+        - type: object
+          required: [live]
+          properties:
+            live:
+              type: boolean
+              description: Whether Temporal answered the state Query.
+            phase:
+              type: string
+              description: "The workflow's phase when live. Open enum: idle, waiting-budget, waiting-capacity, running, stalled."
+            running_since:
+              type: [string, "null"]
+              format: date-time
+            budget_wait_until:
+              type: [string, "null"]
+              format: date-time
+    RepositoryList:
+      description: A page of repository items.
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Repository"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+    RecheckAccepted:
+      description: The recheck was accepted.
+      type: object
+      required: [repo_id, request_id, deduplicated]
+      properties:
+        repo_id:
+          type: integer
+          format: int64
+        request_id:
+          type: string
+          description: Carried into the action.recheck event.
+        deduplicated:
+          type: boolean
+          description: True when a recheck was already signalled within the last minute.
+    Spend:
+      description: One resource's remaining budget before and after a run.
+      type: object
+      required: [before, after]
+      properties:
+        before:
+          type: integer
+        after:
+          type: integer
+    Run:
+      description: One Renovate run.
+      type: object
+      required: [id, repo_id, owner, slug, cause, outcome, started_at, updates]
+      properties:
+        id:
+          type: string
+          description: The workflow run ID and the attempt.
+        repo_id:
+          type: integer
+          format: int64
+        owner:
+          type: string
+        slug:
+          type: string
+        cause:
+          $ref: "#/components/schemas/RunCause"
+        cause_key:
+          type: [string, "null"]
+          description: The key of the event that caused the run.
+        outcome:
+          $ref: "#/components/schemas/RunOutcome"
+        repository_result:
+          type: string
+          description: Renovate's own result for the repository.
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: [string, "null"]
+          format: date-time
+        queued_ms:
+          type: [integer, "null"]
+          format: int64
+        duration_ms:
+          type: [integer, "null"]
+          format: int64
+        renovate_version:
+          type: string
+        spend:
+          type: object
+          description: Budget by resource (core, graphql).
+          additionalProperties:
+            $ref: "#/components/schemas/Spend"
+        problems:
+          type: array
+          items:
+            type: string
+        updates:
+          type: integer
+          description: Proposed updates the run reported.
+    RunList:
+      description: A page of run items.
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Run"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+    Dependency:
+      description: One dependency a run's report found.
+      type: object
+      required: [repo_id, owner, slug, manager, package_file, package_name, datasource, current_value, current_version]
+      properties:
+        repo_id:
+          type: integer
+          format: int64
+        owner:
+          type: string
+        slug:
+          type: string
+        manager:
+          type: string
+        package_file:
+          type: string
+        package_name:
+          type: string
+        dep_name:
+          type: string
+        datasource:
+          type: string
+        current_value:
+          type: string
+        current_version:
+          type: string
+        purl:
+          type: [string, "null"]
+          description: Null when the datasource has no purl type.
+    DependencyList:
+      description: A page of dependency items.
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Dependency"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+    Update:
+      description: One proposed update on a Renovate branch.
+      type: object
+      required: [repo_id, owner, slug, branch, package_file, package_name, manager, datasource, update_type, from_version, to_version]
+      properties:
+        repo_id:
+          type: integer
+          format: int64
+        owner:
+          type: string
+        slug:
+          type: string
+        branch:
+          type: string
+        pr_number:
+          type: [integer, "null"]
+        package_file:
+          type: string
+        package_name:
+          type: string
+        dep_name:
+          type: string
+        manager:
+          type: string
+        datasource:
+          type: string
+        update_type:
+          $ref: "#/components/schemas/UpdateType"
+        from_version:
+          type: string
+        to_version:
+          type: string
+        purl_from:
+          type: [string, "null"]
+        purl_to:
+          type: [string, "null"]
+        run_id:
+          type: string
+    UpdateList:
+      description: A page of update items.
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Update"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+    PullRequest:
+      description: A Renovate pull request.
+      type: object
+      required: [repo_id, owner, slug, number, branch, state, title, labels, automerge, url, updated_at, updates]
+      properties:
+        repo_id:
+          type: integer
+          format: int64
+        owner:
+          type: string
+        slug:
+          type: string
+        number:
+          type: integer
+        branch:
+          type: string
+        state:
+          $ref: "#/components/schemas/PRState"
+        title:
+          type: string
+        labels:
+          type: array
+          items:
+            type: string
+        automerge:
+          type: boolean
+        url:
+          type: string
+        opened_at:
+          type: [string, "null"]
+          format: date-time
+        merged_at:
+          type: [string, "null"]
+          format: date-time
+        closed_at:
+          type: [string, "null"]
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+          description: GitHub's updated_at.
+        updates:
+          type: array
+          description: The updates on the pull request's branch.
+          items:
+            $ref: "#/components/schemas/Update"
+    PullRequestDetail:
+      description: A pull request with its timeline.
+      allOf:
+        - $ref: "#/components/schemas/PullRequest"
+        - type: object
+          required: [timeline]
+          properties:
+            timeline:
+              type: array
+              description: The pull request's events, oldest first.
+              items:
+                $ref: "#/components/schemas/Event"
+    PullRequestList:
+      description: A page of pull request items.
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PullRequest"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+    DashboardItem:
+      description: One Dependency Dashboard checkbox.
+      type: object
+      required: [repo_id, owner, slug, marker, branch, section, title, deps, first_seen_at, last_seen_at]
+      properties:
+        repo_id:
+          type: integer
+          format: int64
+        owner:
+          type: string
+        slug:
+          type: string
+        marker:
+          type: string
+          description: Renovate's checkbox marker, e.g. approve-branch.
+        branch:
+          type: string
+          description: The branch the box acts on; empty for a dashboard-wide box.
+        section:
+          type: string
+          description: "Open enum: awaiting-schedule, rate-limited, pending-approval, pending-status-checks, errored, open, ignored, other."
+        title:
+          type: string
+        deps:
+          type: array
+          items:
+            type: string
+        first_seen_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+        ticked_at:
+          type: [string, "null"]
+          format: date-time
+        ticked_by:
+          type: [string, "null"]
+    DashboardItemList:
+      description: A page of dashboard item items.
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardItem"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+    Package:
+      description: Pending updates of one package, across repositories.
+      type: object
+      required: [purl, repositories, updates, from_versions, to_versions, managers]
+      properties:
+        purl:
+          type: string
+          description: The package URL without a version.
+        repositories:
+          type: integer
+          description: Repositories with a pending update of it.
+        updates:
+          type: integer
+        from_versions:
+          type: array
+          description: The current versions, sorted.
+          items:
+            type: string
+        to_versions:
+          type: array
+          description: The proposed versions, sorted.
+          items:
+            type: string
+        managers:
+          type: array
+          items:
+            type: string
+    PackageList:
+      description: A page of package items.
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Package"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+    Event:
+      description: One entry of the audit log.
+      type: object
+      required: [id, key, occurred_at, recorded_at, kind, source, summary, data]
+      properties:
+        id:
+          type: integer
+          format: int64
+        key:
+          type: string
+          description: The idempotency key.
+        occurred_at:
+          type: string
+          format: date-time
+        recorded_at:
+          type: string
+          format: date-time
+        kind:
+          $ref: "#/components/schemas/EventKind"
+        source:
+          $ref: "#/components/schemas/EventSource"
+        installation_id:
+          type: [integer, "null"]
+          format: int64
+        repo_id:
+          type: [integer, "null"]
+          format: int64
+        pr_number:
+          type: [integer, "null"]
+        actor_login:
+          type: [string, "null"]
+        actor_type:
+          type: [string, "null"]
+          description: "Open enum: user, bot, boopd, oidc, github."
+        cause_key:
+          type: [string, "null"]
+          description: The key of the event that caused this one.
+        summary:
+          type: string
+        data:
+          type: object
+          description: The kind's payload; EventKind names its schema. Every payload carries `v`, its version.
+          additionalProperties: true
+    EventList:
+      description: A page of event items.
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Event"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+    Delivery:
+      description: One webhook delivery, as ingest recorded it and the audit read it from GitHub.
+      type: object
+      required: [delivery_id, attempt, app, event, action, outcome, missed]
+      properties:
+        delivery_id:
+          type: string
+          format: uuid
+        attempt:
+          type: integer
+        app:
+          type: string
+        event:
+          type: string
+        action:
+          type: string
+        outcome:
+          type: string
+          description: "Ingest's outcome; empty when ingest has no record. Open enum: routed, ignored, own, rejected, failed."
+        github_status:
+          type: [integer, "null"]
+          description: GitHub's recorded status; null until the audit reads it, 0 when GitHub got no answer.
+        missed:
+          type: boolean
+        installation_id:
+          type: [integer, "null"]
+          format: int64
+        repo_id:
+          type: [integer, "null"]
+          format: int64
+        received_at:
+          type: [string, "null"]
+          format: date-time
+        audited_at:
+          type: [string, "null"]
+          format: date-time
+    DeliveryList:
+      description: A page of delivery items.
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Delivery"
+        next_cursor:
+          $ref: "#/components/schemas/NextCursor"
+    Status:
+      description: The public status. Aggregate numbers only.
+      type: object
+      required: [state, updated_at, version, components, fleet]
+      properties:
+        state:
+          $ref: "#/components/schemas/ComponentState"
+        updated_at:
+          type: string
+          format: date-time
+        version:
+          type: string
+          description: The deployment's boopd version.
+        components:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatusComponent"
+        fleet:
+          $ref: "#/components/schemas/StatusFleet"
+    StatusComponent:
+      description: One component's state and its numbers; the numbers present depend on the component.
+      type: object
+      required: [name, state]
+      properties:
+        name:
+          description: "Open enum: api, ingest, workers, temporal, postgres, discovery, deliveries, github_budget."
+          type: string
+        state:
+          $ref: "#/components/schemas/ComponentState"
+        age_seconds:
+          type: [integer, "null"]
+          description: Since the component's last activity (a delivery, a discovery pass).
+        latency_ms:
+          type: [integer, "null"]
+        pollers:
+          type: [integer, "null"]
+        failed:
+          type: [integer, "null"]
+        missed:
+          type: [integer, "null"]
+        total:
+          type: [integer, "null"]
+    StatusFleet:
+      description: Fleet totals.
+      type: object
+      required: [repositories, open_prs, runs_24h]
+      properties:
+        repositories:
+          type: integer
+        open_prs:
+          type: integer
+        runs_24h:
+          type: integer
+    DeliveryReceivedData:
+      description: delivery.received.
+      type: object
+      required: [v, delivery_id, attempt, app, event, outcome]
+      properties:
+        v:
+          type: integer
+        delivery_id:
+          type: string
+        attempt:
+          type: integer
+        app:
+          type: string
+        event:
+          type: string
+        action:
+          type: string
+        outcome:
+          type: string
+        payload:
+          type: object
+          description: The decoded payload subset, kept for store.retention.delivery_payloads.
+    DeliveryAuditedData:
+      description: delivery.failed, delivery.missed and delivery.redelivered.
+      type: object
+      required: [v, delivery_id, attempt, app, event, github_status]
+      properties:
+        v:
+          type: integer
+        delivery_id:
+          type: string
+        attempt:
+          type: integer
+        app:
+          type: string
+        event:
+          type: string
+        action:
+          type: string
+        github_status:
+          type: integer
+        missed:
+          type: boolean
+    PullRequestData:
+      description: Every pr.* kind but pr.checkbox.
+      type: object
+      required: [v, number, branch, state, title, updated_at]
+      properties:
+        v:
+          type: integer
+        number:
+          type: integer
+        branch:
+          type: string
+        state:
+          $ref: "#/components/schemas/PRState"
+        title:
+          type: string
+        labels:
+          type: array
+          items:
+            type: string
+        automerge:
+          type: boolean
+        url:
+          type: string
+        opened_at:
+          type: string
+          format: date-time
+        merged_at:
+          type: string
+          format: date-time
+        closed_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    PRCheckboxData:
+      description: pr.checkbox.
+      type: object
+      required: [v, number, box]
+      properties:
+        v:
+          type: integer
+        number:
+          type: integer
+        box:
+          type: string
+    DashboardItemData:
+      description: One item of dashboard.updated.
+      type: object
+      required: [marker, branch, section, title]
+      properties:
+        marker:
+          type: string
+        branch:
+          type: string
+        section:
+          type: string
+        title:
+          type: string
+        deps:
+          type: array
+          items:
+            type: string
+    DashboardUpdatedData:
+      description: dashboard.updated.
+      type: object
+      required: [v, items]
+      properties:
+        v:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardItemData"
+    DashboardTickedData:
+      description: dashboard.ticked.
+      type: object
+      required: [v, marker, branch]
+      properties:
+        v:
+          type: integer
+        marker:
+          type: string
+        branch:
+          type: string
+    RepositoryData:
+      description: repo.onboarded, repo.offboarded and repo.refreshed.
+      type: object
+      required: [v, owner, slug]
+      properties:
+        v:
+          type: integer
+        owner:
+          type: string
+        slug:
+          type: string
+        profile:
+          type: string
+        via:
+          type: string
+          description: "Open enum: discovery, webhook."
+        reason:
+          type: string
+    RunScheduledData:
+      description: repo.run-scheduled.
+      type: object
+      required: [v, next_due]
+      properties:
+        v:
+          type: integer
+        next_due:
+          type: string
+          format: date-time
+        priority:
+          type: string
+        reason:
+          type: string
+    RunStartedData:
+      description: run.started.
+      type: object
+      required: [v, run_id, owner, slug]
+      properties:
+        v:
+          type: integer
+        run_id:
+          type: string
+        owner:
+          type: string
+        slug:
+          type: string
+        queued_ms:
+          type: integer
+          format: int64
+    BranchUpdateData:
+      description: One update of run.finished.
+      type: object
+      required: [branch, package_file, package_name, manager, datasource, from_version, to_version]
+      properties:
+        branch:
+          type: string
+        pr_number:
+          type: integer
+        package_file:
+          type: string
+        package_name:
+          type: string
+        dep_name:
+          type: string
+        manager:
+          type: string
+        datasource:
+          type: string
+        update_type:
+          type: string
+        from_version:
+          type: string
+        to_version:
+          type: string
+    DependencyData:
+      description: One dependency of run.finished.
+      type: object
+      required: [manager, package_file, package_name, datasource]
+      properties:
+        manager:
+          type: string
+        package_file:
+          type: string
+        package_name:
+          type: string
+        dep_name:
+          type: string
+        datasource:
+          type: string
+        current_value:
+          type: string
+        current_version:
+          type: string
+    RunFinishedData:
+      description: run.finished.
+      type: object
+      required: [v, run_id, owner, slug, started_at, finished_at, outcome]
+      properties:
+        v:
+          type: integer
+        run_id:
+          type: string
+        owner:
+          type: string
+        slug:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+        outcome:
+          $ref: "#/components/schemas/RunOutcome"
+        repository_result:
+          type: string
+        renovate_version:
+          type: string
+        spend:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/Spend"
+        problems:
+          type: array
+          items:
+            type: string
+        report_missing:
+          type: boolean
+        updates:
+          type: array
+          items:
+            $ref: "#/components/schemas/BranchUpdateData"
+        dependencies:
+          type: array
+          items:
+            $ref: "#/components/schemas/DependencyData"
+    RepoStateData:
+      description: run.stalled, run.capacity-denied and run.budget-wait.
+      type: object
+      required: [v]
+      properties:
+        v:
+          type: integer
+        reason:
+          type: string
+        until:
+          type: string
+          format: date-time
+    InstallationData:
+      description: Every installation.* kind.
+      type: object
+      required: [v, app, account_login]
+      properties:
+        v:
+          type: integer
+        app:
+          type: string
+        account_login:
+          type: string
+        account_type:
+          type: string
+    DiscoveryFinishedData:
+      description: discovery.finished.
+      type: object
+      required: [v, app, started_at, finished_at, seen, onboarded, failed, probe_cost]
+      properties:
+        v:
+          type: integer
+        app:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+        seen:
+          type: integer
+        onboarded:
+          type: integer
+        failed:
+          type: integer
+        probe_cost:
+          type: integer
+    RecheckData:
+      description: action.recheck.
+      type: object
+      required: [v]
+      properties:
+        v:
+          type: integer
+        request_id:
+          type: string

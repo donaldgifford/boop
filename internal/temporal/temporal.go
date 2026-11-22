@@ -208,6 +208,9 @@ type DialOptions struct {
 	// MeterProvider receives the SDK's metrics, so they land on the
 	// existing /metrics registry. nil disables SDK metrics.
 	MeterProvider metric.MeterProvider
+	// Lazy connects on first use instead of at Dial, so a role that only
+	// sometimes calls Temporal (the API's recheck) starts without it.
+	Lazy bool
 }
 
 // Dial connects to the frontend. The caller must Close the client.
@@ -257,6 +260,14 @@ func Dial(ctx context.Context, cfg *Config, opts DialOptions) (client.Client, er
 			// fault must never take a worker down.
 			OnError: func(err error) { logger.Warn("temporal: SDK metric error", "error", err) },
 		})
+	}
+
+	if opts.Lazy {
+		c, err := client.NewLazyClient(co)
+		if err != nil {
+			return nil, fmt.Errorf("temporal: client for %s: %w", cfg.Address, err)
+		}
+		return c, nil
 	}
 
 	c, err := client.DialContext(ctx, co)

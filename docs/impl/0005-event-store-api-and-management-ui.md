@@ -399,6 +399,86 @@ open:
 - A retention of `0` keeps everything for that rule. Partitions are
   still created.
 
+## Findings (Phase 9)
+
+- **The scope is a store type.** `store.Scope{All, Owners}` is what every
+  API read takes. `api.Scope` resolves it from the authz file and hands
+  it over with `Store()`, which always sends an owners array (never
+  NULL) for `@owners::text[]`.
+- **The operator gate is by method.** A strict middleware refuses any
+  non-GET operation to a caller without an operator group, with 403. It
+  runs after the visibility gate, so a caller who sees nothing hears
+  that first. The authz-disabled anonymous principal is no operator.
+- **Public routes carry no principal.** `/openapi.yaml` and a public
+  `/status` skip authn and authz entirely, so a handler there cannot
+  read a scope by mistake.
+- **The issuer may be http on loopback only**, for local and test
+  issuers. Anywhere else it must be https.
+- **Temporal is dialled lazily.** The API starts and serves reads while
+  Temporal is away, and Temporal is not a readiness check. Recheck
+  answers 503 when the call fails (Phase 10). Readiness is the store's
+  schema version plus OIDC discovery.
+- **The read-only pool enforces itself.** Each connection starts with
+  `default_transaction_read_only = on` and `statement_timeout = 5s`, so
+  even a DSN for a role with more grants cannot write through it
+  (TestOpenReadOnly).
+- **`/me` found a nil-slice bug.** With no installations the store
+  returns nil, which marshals to `null` against a required array. The
+  handler sends `[]`; Phase 10's lists need the same care.
+- **Refused requests are labelled `unmatched`.** Authentication runs
+  before the inner mux matches, so a 401 or 503 carries
+  `route="unmatched"` on `boopd_api_requests_total`. This keeps the
+  label set bounded under scans, and the auth-failure counter carries
+  the reason.
+- **Cursor binding is unit-tested for now** (`cursor_test.go`). The
+  HTTP-level replay test lands with the first list handler in Phase 10.
+- Every operation not yet implemented answers a typed 501
+  (`not_implemented`), which the spec's `default` response admits.
+
+## Findings (Phase 10)
+
+- **Migration 0005 bumps the schema to 5.** It adds the `run_cause()`
+  SQL function and an `events(key)` index; 0001 already indexes
+  `cause_key`. The worker and ingest refuse to start below the version
+  they expect, so a deploy runs `boopd migrate` first, as with every
+  migration.
+- **A run's cause is derived, not stored.** `run_cause(cause_key)` looks
+  up the event the key names:
+  - `action.recheck` gives recheck;
+  - `repo.run-scheduled` with a reason, a `delivery:` key or a webhook
+    source gives webhook;
+  - `repo.run-scheduled` without a reason gives schedule;
+  - anything else, including no key, gives unknown.
+- **The live view needs no new workflow commands.** The `state` Query
+  returns `RepoView`: `RepoState` plus phase, running-since and the
+  budget wait. It is replay-safe, and `waiting-budget` exists only in the
+  Query, never as a search attribute.
+- **Lists read limit+1 rows.** The extra row decides `next_cursor`, and
+  the cursor's filter hash covers every query parameter except `cursor`
+  and `limit`, plus the path id for per-repository lists. Replaying a
+  cursor under another filter answers 400. The integration test now
+  covers this over HTTP.
+- **sqlc constraints shaped the queries.** Two-argument `unnest`, a
+  VALUES column alias and `FILTER` with casts all fail sqlc's rewrite.
+  The batch lookups use one `unnest` per column, and the estate counts
+  use `sum(CASE …)`. Nullable `min`/`max` arrive as `interface{}` and are
+  unwrapped by `timeOrNil`.
+- **The estate reads in one snapshot.** Its queries share a
+  RepeatableRead read-only transaction, so the numbers agree with each
+  other. Timings feed the p95 that is logged per query, for the rollup
+  decision.
+- **`/deliveries` is for callers who see all owners.** A delivery may
+  carry no repository, so scoping it would leak or hide arbitrarily; a
+  narrower caller gets 403.
+- **Status is aggregate-only.** The 30 s page holds:
+  - component states;
+  - fleet counts;
+  - the latest per-installation budget spend;
+  - the version.
+
+  `TestStatus_PrivacyGuard` walks the JSON and refuses any string field
+  outside the allowlist.
+
 ## Implementation Phases
 
 Each phase ends with `just lint`, `just test` and its own checks green,
@@ -657,7 +737,7 @@ with one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 9.1 `api/openapi.yaml` (OpenAPI 3.1), written by hand:
+- [x] 9.1 `api/openapi.yaml` (OpenAPI 3.1), written by hand:
   - every DESIGN-0004 endpoint, with snake_case fields;
   - open-enum descriptions;
   - the `Problem` schema with `request_id`;
@@ -665,10 +745,10 @@ with one commit per numbered task. The PR split is in OQ1.
     `/openapi.yaml`;
   - event kinds as a documented open enum, with per-kind `data` schemas
     (OQ5).
-- [ ] 9.2 `api/vacuum.yaml` (camel-case rule off) and `just lint-api`.
-- [ ] 9.3 `api/oapi-codegen.yaml` (std-http, strict server, models,
+- [x] 9.2 `api/vacuum.yaml` (camel-case rule off) and `just lint-api`.
+- [x] 9.3 `api/oapi-codegen.yaml` (std-http, strict server, models,
   embedded spec) → `internal/api/gen`, committed and drift-gated.
-- [ ] 9.4 Copy into `internal/api`, with provenance headers (OQ6):
+- [x] 9.4 Copy into `internal/api`, with provenance headers (OQ6):
   - `problem.go`, `cursor.go`, `middleware.go` (request ID, access log,
     recover);
   - `authn.go` (go-oidc, ID tokens refused, background discovery,
@@ -676,14 +756,14 @@ with one commit per numbered task. The PR split is in OQ1.
   - the contract-test helper `apitest`.
 
   Adapt names to boop, and keep no import of repo-guardian.
-- [ ] 9.5 `internal/api/authz.go`: the authz file
+- [x] 9.5 `internal/api/authz.go`: the authz file
   (`owners`/`operators`/`clients`), visibility resolved per request, and
   SQL filtering helpers. A missing owner returns 404; a non-operator
   action returns 403.
-- [ ] 9.6 `boopd api --config <file>`: the read-only pool, Temporal
+- [x] 9.6 `boopd api --config <file>`: the read-only pool, Temporal
   client, OIDC verifier, health and readiness (store version, issuer
   discovered), metrics, and graceful stop.
-- [ ] 9.7 Contract tests: every handler's response is validated against
+- [x] 9.7 Contract tests: every handler's response is validated against
   the embedded spec, with a cursor-binding test and the authn and authz
   matrix.
 
@@ -697,7 +777,7 @@ with one commit per numbered task. The PR split is in OQ1.
 
 #### Tasks
 
-- [ ] 10.1 Read endpoints over sqlc queries:
+- [x] 10.1 Read endpoints over sqlc queries:
   - `/me`, `/installations`, `/repositories` (+ `/{id}`, `/events`,
     `/runs`, `/dependencies`);
   - `/pull-requests` (+ detail), `/dashboard-items`, `/packages`,
@@ -705,20 +785,20 @@ with one commit per numbered task. The PR split is in OQ1.
   - `/runs`, `/events`, `/deliveries`.
 
   Each runs in a read-only transaction with a 5 s statement timeout.
-- [ ] 10.2 `/repositories/{id}` adds the Temporal `state` Query (a 2 s
+- [x] 10.2 `/repositories/{id}` adds the Temporal `state` Query (a 2 s
   deadline, falling back to stored state with `live: false`).
-- [ ] 10.3 `POST /repositories/{id}/recheck` (operators):
+- [x] 10.3 `POST /repositories/{id}/recheck` (operators):
   - it signals `recheck{actor, request_id}` and answers 202;
   - 409 `workflow_missing` when there is no workflow;
   - 503 when Temporal is unreachable;
   - a per-replica dedupe of one per repository per minute.
-- [ ] 10.4 `/estate` and `/estate/series`, computed on read and cached
+- [x] 10.4 `/estate` and `/estate/series`, computed on read and cached
   60 s per (scope, range, metric). The p95 is logged per query for the
   rollup decision.
-- [ ] 10.5 `/status`: computed every 30 s into a cache (components,
+- [x] 10.5 `/status`: computed every 30 s into a cache (components,
   fleet numbers, version), with `TestStatus_PrivacyGuard` (no free-text
   fields outside an allowlist).
-- [ ] 10.6 Tests (integration):
+- [x] 10.6 Tests (integration):
   - each endpoint over seeded data;
   - visibility filtering;
   - recheck's responses against the dev server;

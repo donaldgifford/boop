@@ -68,6 +68,13 @@ const (
 	DefaultRetainOffboarded       = 90 * 24 * time.Hour
 )
 
+// API defaults (DESIGN-0004 § boopd.hcl).
+const (
+	DefaultAuthzFile   = "/etc/boopd/authz.yaml"
+	DefaultNameClaim   = "preferred_username"
+	DefaultGroupsClaim = "groups"
+)
+
 // Ingest defaults and bounds (DESIGN-0003 § boopd.hcl).
 const (
 	DefaultIngestPath  = "/webhooks/github"
@@ -111,7 +118,10 @@ type Config struct {
 	Ingest Ingest
 	// Store is the store block, defaulted (and disabled) when absent.
 	Store Store
-	Apps  []*App
+	// API is the api block, defaulted when absent; API.Auth is nil then,
+	// and `boopd api` refuses to start.
+	API  API
+	Apps []*App
 }
 
 // Store is the store block: the Postgres product store (DESIGN-0004).
@@ -129,6 +139,24 @@ type Store struct {
 	// RODSNSecretRef is the API's read-only DSN.
 	RODSNSecretRef *SecretRef
 	Retention      Retention
+}
+
+// API is the api block: the API role (DESIGN-0004 § The API).
+type API struct {
+	// Auth is api.auth; nil when the file has none.
+	Auth *APIAuth
+	// AuthzFile is the YAML mapping groups to owners and operators.
+	AuthzFile string
+	// StatusPublic serves /status without a token.
+	StatusPublic bool
+}
+
+// APIAuth is api.auth: the OIDC issuer and the access-token audience.
+type APIAuth struct {
+	Issuer      string
+	Audience    string
+	NameClaim   string
+	GroupsClaim string
 }
 
 // Retention is store.retention.
@@ -407,6 +435,7 @@ func (b *builder) build(raw *fileSchema) *Config {
 	cfg.SecretsDir = derefOr(raw.SecretsDir, DefaultSecretsDir)
 	cfg.Ingest = b.ingest(raw.Ingest)
 	cfg.Store = b.store(raw.Store)
+	cfg.API = buildAPI(raw.API)
 	cfg.Sandbox = b.sandbox(raw.Sandbox, &cfg.Runs)
 	cfg.Profiles = b.profiles(raw.Profiles)
 	for i := range raw.ProfileRules {
@@ -535,6 +564,25 @@ func (b *builder) store(in *storeBlock) Store {
 			Offboarded:       b.duration(r.Offboarded, DefaultRetainOffboarded),
 		},
 	}
+}
+
+func buildAPI(in *apiBlock) API {
+	if in == nil {
+		in = &apiBlock{}
+	}
+	out := API{
+		AuthzFile:    derefOr(in.AuthzFile, DefaultAuthzFile),
+		StatusPublic: derefOr(in.StatusPublic, true),
+	}
+	if a := in.Auth; a != nil {
+		out.Auth = &APIAuth{
+			Issuer:      a.Issuer,
+			Audience:    a.Audience,
+			NameClaim:   derefOr(a.NameClaim, DefaultNameClaim),
+			GroupsClaim: derefOr(a.GroupsClaim, DefaultGroupsClaim),
+		}
+	}
+	return out
 }
 
 // secretRef converts an optional ref block; nil stays nil.

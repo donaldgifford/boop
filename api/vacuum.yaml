@@ -1,0 +1,12 @@
+# vacuum ruleset for api/openapi.yaml (IMPL-0005 9.2), as repo-guardian's
+# (a72faf9 api/vacuum.yaml): the recommended OpenAPI rules, less those
+# that fight the design.
+extends: [[vacuum:oas, recommended]]
+rules:
+  # The API's JSON is snake_case throughout (DESIGN-0004 § The API).
+  camel-case-properties: off
+  # Examples are optional; the contract tests exercise real responses.
+  oas3-missing-example: off
+  # The per-kind event data schemas are documentation: EventKind names
+  # them, and Event.data stays an open object.
+  oas3-unused-component: off

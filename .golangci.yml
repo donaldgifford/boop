@@ -137,6 +137,12 @@ linters:
               desc: ingest never calls GitHub (DESIGN-0003 § The ingest role)
             - pkg: github.com/donaldgifford/boop/internal/kube
               desc: ingest has no ServiceAccount token
+        api-tests:
+          files:
+            - "**/internal/api/*_test.go"
+          deny:
+            - pkg: net/http/httptest
+              desc: API tests reach the server through apitest, which validates every exchange against the spec
 
     errorlint:
       errorf: true

@@ -19,6 +19,8 @@ package store
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -27,9 +29,30 @@ import (
 // SchemaVersion, so a role never runs against a store it does not
 // understand. The caller closes the pool.
 func Open(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
+	return open(ctx, dsn, nil)
+}
+
+// ReadOnlyStatementTimeout bounds every statement on the API's pool, so
+// one slow query cannot hold a connection the rest are waiting for.
+const ReadOnlyStatementTimeout = 5 * time.Second
+
+// OpenReadOnly is Open for the API role: every connection starts with
+// default_transaction_read_only on and a ReadOnlyStatementTimeout
+// statement_timeout, on top of boopd_ro's grants.
+func OpenReadOnly(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
+	return open(ctx, dsn, map[string]string{
+		"default_transaction_read_only": "on",
+		"statement_timeout":             strconv.FormatInt(ReadOnlyStatementTimeout.Milliseconds(), 10),
+	})
+}
+
+func open(ctx context.Context, dsn string, params map[string]string) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("parse store DSN: %w", err)
+	}
+	for k, v := range params {
+		cfg.ConnConfig.RuntimeParams[k] = v
 	}
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {

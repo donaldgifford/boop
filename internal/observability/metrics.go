@@ -61,6 +61,10 @@ const (
 	StoreAppendSeconds = "boopd_store_append_seconds"
 	// The dependency dashboard parser's (IMPL-0005 4.5).
 	DashboardParseTotal = "boopd_dashboard_parse_total"
+	// The API role's (DESIGN-0004 § Observability).
+	APIRequestsTotal     = "boopd_api_requests_total"
+	APIRequestSeconds    = "boopd_api_request_seconds"
+	APIAuthFailuresTotal = "boopd_api_auth_failures_total"
 )
 
 // runBuckets span a pod start of seconds to a run of the full hour.
@@ -70,8 +74,8 @@ var runBuckets = []float64{1, 5, 10, 30, 60, 120, 300, 600, 1200, 1800, 2700, 36
 var temporalBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5}
 
 // Metrics records the boopd metric set. It implements
-// activities.Metrics, kube.RequestRecorder, ingest.Metrics and
-// store.Metrics. The budget gauges and
+// activities.Metrics, kube.RequestRecorder, ingest.Metrics,
+// store.Metrics and api.Metrics. The budget gauges and
 // the repository counters come from workflow code through the
 // Temporal SDK's metrics handler (internal/workflows).
 type Metrics struct {
@@ -97,6 +101,9 @@ type Metrics struct {
 	appends     metric.Int64Counter
 	appendTime  metric.Float64Histogram
 	dashParse   metric.Int64Counter
+	apiReqs     metric.Int64Counter
+	apiTime     metric.Float64Histogram
+	apiAuth     metric.Int64Counter
 }
 
 // NewMetrics creates the instruments on mp's boopd meter. Call it once
@@ -154,6 +161,12 @@ func NewMetrics(mp metric.MeterProvider) (*Metrics, error) {
 	add(err)
 	out.appendTime = appendTime
 	out.dashParse = counter(DashboardParseTotal, "Dependency dashboard bodies parsed, by outcome (parsed, unknown-marker, not-dashboard).")
+	out.apiReqs = counter(APIRequestsTotal, "API requests by route pattern and status code.")
+	apiTime, err := m.Float64Histogram(APIRequestSeconds, metric.WithDescription("API request latency by route pattern."),
+		metric.WithExplicitBucketBoundaries(temporalBuckets...))
+	add(err)
+	out.apiTime = apiTime
+	out.apiAuth = counter(APIAuthFailuresTotal, "API bearer tokens refused, by reason.")
 	if err := errors.Join(errs...); err != nil {
 		return nil, err
 	}
@@ -279,4 +292,16 @@ func (m *Metrics) StoreAppendSeconds(role string, d time.Duration) {
 // dashboard.Outcome.
 func (m *Metrics) DashboardParse(outcome string) {
 	m.dashParse.Add(context.Background(), 1, metric.WithAttributes(attribute.String("outcome", outcome)))
+}
+
+// APIRequest implements api.Metrics: one request by route pattern and
+// status code.
+func (m *Metrics) APIRequest(route, code string, d time.Duration) {
+	m.apiReqs.Add(context.Background(), 1, metric.WithAttributes(attribute.String("route", route), attribute.String("code", code)))
+	m.apiTime.Record(context.Background(), d.Seconds(), metric.WithAttributes(attribute.String("route", route)))
+}
+
+// APIAuthFailure implements api.Metrics: one refused token by reason.
+func (m *Metrics) APIAuthFailure(reason string) {
+	m.apiAuth.Add(context.Background(), 1, metric.WithAttributes(attribute.String("reason", reason)))
 }

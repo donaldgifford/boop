@@ -3,6 +3,32 @@
 All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
+## [unreleased]
+
+### Features
+
+- *(api)* The v1 contract, api/openapi.yaml (IMPL-0005 9.1)
+- *(api)* Strict std-http server generated into internal/api/gen (IMPL-0005 9.3)
+- *(api)* Problem, cursor, middleware, authn and the contract harness from repo-guardian (IMPL-0005 9.4)
+- *(api)* Authz visibility, operator gate and owner narrowing (IMPL-0005 9.5)
+- *(api)* Boopd api role with read-only pool, lazy Temporal, OIDC readiness (IMPL-0005 9.6)
+- *(api)* Read endpoints, live state, recheck, estate and status (IMPL-0005 10.1-10.5)
+
+### Documentation
+
+- Phase 9 findings, the API package and layout (IMPL-0005 Phase 9)
+- Phase 10 findings, the API package doc and layout (IMPL-0005 Phase 10)
+
+### Testing
+
+- *(api)* Contract tests with the authn and authz matrix (IMPL-0005 9.7)
+- *(api)* Endpoints, visibility, recheck and estate over a seeded store (IMPL-0005 10.6)
+- *(activities)* Poll for the budget entity's rate-limit readings
+
+### Miscellaneous Tasks
+
+- *(api)* Vacuum ruleset for the contract (IMPL-0005 9.2)
+
 ## [0.8.0] - 2026-11-22
 
 ### Features

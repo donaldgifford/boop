@@ -93,6 +93,8 @@ ingest { … } # optional: webhook ingest timings
 
 store { … } # optional: the Postgres product store (DESIGN-0004)
 
+api { … } # optional: the API role's authentication and authorisation
+
 app "boop-bot" { … } # one or more; webhook { … } inside enables ingest for it
 ```
 
@@ -510,6 +512,40 @@ name stops at start.
 With `enabled`, the worker starts a daily `store-maintenance` Schedule
 that applies these rules. It also keeps the `events` partitions two
 months ahead. A duration of `0` keeps everything for that rule.
+
+## api
+
+The `api` block configures the API role, `boopd api` (DESIGN-0004 §
+The API). The file may omit the block; `boopd api` then refuses to
+start, since it needs `auth`.
+
+```hcl
+api {
+  auth {
+    issuer       = "https://keycloak.example/realms/fartlab"
+    audience     = "boopd-api"
+    name_claim   = "preferred_username"
+    groups_claim = "groups"
+  }
+  authz_file    = "/etc/boopd/authz.yaml"
+  status_public = true
+}
+```
+
+| Setting | Type | Default | Description |
+| - | - | - | - |
+| `auth` | block | none | OIDC access-token verification. Required by `boopd api`. |
+| `authz_file` | string | `/etc/boopd/authz.yaml` | The YAML mapping groups to visible owners (`owners`), groups allowed to POST actions (`operators`) and machine clients' `azp` to groups (`clients`). Read once at start. An absolute path. |
+| `status_public` | bool | `true` | Serves `/api/v1/status` without a token. With `false` it needs a valid token, though no visible owner. |
+
+### auth
+
+| Setting | Type | Default | Description |
+| - | - | - | - |
+| `issuer` | string | required | The OIDC issuer; an https URL (http only on a loopback host, for local work). Discovery runs in the background and `/readyz` fails until it succeeds. |
+| `audience` | string | required | The `aud` an access token must carry. ID tokens are refused. |
+| `name_claim` | string | `preferred_username` | The claim `/me` shows as the caller's name; the subject when absent. |
+| `groups_claim` | string | `groups` | The claim holding the caller's groups, matched against the authz file. |
 
 ## Secrets
 

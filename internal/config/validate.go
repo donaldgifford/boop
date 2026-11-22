@@ -18,6 +18,7 @@ package config
 
 import (
 	"fmt"
+	"net/netip"
 	"net/url"
 	"path"
 	"regexp"
@@ -81,7 +82,51 @@ func (b *builder) validate(cfg *Config, raw *fileSchema) {
 	}
 	b.validateSandbox(cfg, raw)
 	b.validateStore(raw.Store)
+	b.validateAPI(raw.API)
 	b.validateApps(raw.Apps)
+}
+
+// issuerURL reports whether s is an https URL, or an http one on a
+// loopback host (a local issuer in tests and development).
+func issuerURL(s string) bool {
+	u, err := url.Parse(s)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	switch u.Scheme {
+	case "https":
+		return true
+	case "http":
+		h := u.Hostname()
+		if h == "localhost" {
+			return true
+		}
+		ip, err := netip.ParseAddr(h)
+		return err == nil && ip.IsLoopback()
+	default:
+		return false
+	}
+}
+
+// validateAPI checks the api block: an https issuer (OIDC discovery
+// needs one), an audience, and an absolute authz_file.
+func (b *builder) validateAPI(in *apiBlock) {
+	if in == nil {
+		return
+	}
+	if in.AuthzFile != nil && !path.IsAbs(*in.AuthzFile) {
+		b.errorf(in.AuthzFileRange, "Invalid authz_file", "api.authz_file %q must be an absolute path.", *in.AuthzFile)
+	}
+	a := in.Auth
+	if a == nil {
+		return
+	}
+	if !issuerURL(a.Issuer) {
+		b.errorf(a.IssuerRange, "Invalid issuer", "api.auth.issuer %q must be an https URL (http only on loopback).", a.Issuer)
+	}
+	if strings.TrimSpace(a.Audience) == "" {
+		b.errorf(a.AudienceRange, "Invalid audience", "api.auth.audience must not be empty.")
+	}
 }
 
 // validateStore checks the store block's secret refs. An enabled store

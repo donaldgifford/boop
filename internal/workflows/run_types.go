@@ -258,6 +258,20 @@ type RepoState struct {
 	CauseKey string
 }
 
+// RepoView is RepoWorkflow's state Query answer: the state plus what the
+// workflow is doing now, for the API's live view (DESIGN-0004
+// § Repository).
+type RepoView struct {
+	RepoState
+	// Phase is the current phase (the Phase values), or PhaseWaitingBudget
+	// while an acquire waits on the installation's budget.
+	Phase string
+	// RunningSince is the running attempt's start; zero unless running.
+	RunningSince time.Time
+	// BudgetWaitUntil is when the budget wait ends; zero unless waiting.
+	BudgetWaitUntil time.Time
+}
+
 // ListInstallationsInput is the ListInstallations activity input.
 type ListInstallationsInput struct {
 	App string

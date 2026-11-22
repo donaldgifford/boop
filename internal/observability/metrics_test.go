@@ -63,6 +63,8 @@ func TestMetrics_Names(t *testing.T) {
 	m.StoreAppend("boopd_worker", "run.finished", "applied")
 	m.StoreAppendSeconds("boopd_worker", 3*time.Millisecond)
 	m.DashboardParse("parsed")
+	m.APIRequest("GET /api/v1/me", "200", 4*time.Millisecond)
+	m.APIAuthFailure("expired")
 
 	got := collect(t, reader)
 	names := make([]string, 0, len(got))
@@ -71,6 +73,9 @@ func TestMetrics_Names(t *testing.T) {
 	}
 	slices.Sort(names)
 	want := []string{
+		"boopd_api_auth_failures_total",
+		"boopd_api_request_seconds",
+		"boopd_api_requests_total",
 		"boopd_dashboard_parse_total",
 		"boopd_discovery_probe_cost",
 		"boopd_discovery_probe_fallbacks_total",
