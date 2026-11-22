@@ -93,7 +93,8 @@ function parsePrId(id: string | undefined): { repoId: number; number: number } |
 }
 
 const helper = dataTableColumns<Schemas["PullRequest"]>();
-const columns = helper.columns([
+// pullColumns are the pull request list's, shared with a repository's tab.
+export const pullColumns = helper.columns([
   helper.accessor("slug", {
     header: "Repository",
     cell: ({ row }) => (
@@ -144,7 +145,7 @@ export function PullsView() {
       <div className={cn("grid items-start gap-4", selected && inline && "grid-cols-[minmax(0,1fr)_minmax(0,28rem)]")}>
         <ListCard
           list={list}
-          columns={columns}
+          columns={pullColumns}
           label="Pull requests, oldest first"
           noun="pull requests"
           getRowId={prId}

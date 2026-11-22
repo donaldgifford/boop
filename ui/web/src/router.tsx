@@ -6,7 +6,7 @@ import { Shell } from "./shell/Shell";
 import { EstateView } from "./views/estate";
 import { PlaceholderView } from "./views/placeholder";
 import { parsePullsSearch, PullsView } from "./views/pulls";
-import { RepositoryView } from "./views/repository";
+import { parseRepositorySearch, RepositoryView } from "./views/repository";
 import { StatusView } from "./views/status";
 import { parseWaitingSearch, WaitingView } from "./views/waiting";
 
@@ -26,9 +26,9 @@ const shellRoute = createRoute({
 
 const estateRoute = createRoute({ getParentRoute: () => shellRoute, path: "/", component: EstateView });
 const pullsRoute = createRoute({ getParentRoute: () => shellRoute, path: "/pulls", validateSearch: parsePullsSearch, component: PullsView });
-const repositoryRoute = createRoute({ getParentRoute: () => shellRoute, path: "/repositories/$id", component: RepositoryView });
+const repositoryRoute = createRoute({ getParentRoute: () => shellRoute, path: "/repositories/$id", validateSearch: parseRepositorySearch, component: RepositoryView });
 const waitingRoute = createRoute({ getParentRoute: () => shellRoute, path: "/waiting", validateSearch: parseWaitingSearch, component: WaitingView });
-const placeholders = (["/packages", "/repositories", "/runs", "/events", "/deliveries"] as const).map((path) =>
+const placeholders = (["/packages/$purl", "/packages", "/repositories", "/runs", "/events", "/deliveries"] as const).map((path) =>
   createRoute({ getParentRoute: () => shellRoute, path, component: PlaceholderView }),
 );
 

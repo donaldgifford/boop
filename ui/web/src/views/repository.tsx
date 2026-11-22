@@ -1,97 +1,253 @@
-import { DataTable, dataTableColumns } from "@donaldgifford/design-system/blocks/data-table";
+import { DetailsGrid } from "@donaldgifford/design-system/blocks/details-grid";
+import { dataTableColumns } from "@donaldgifford/design-system/blocks/data-table";
+import { ErrorState } from "@donaldgifford/design-system/blocks/error-state";
+import { InlineEmpty, InlineLoading } from "@donaldgifford/design-system/blocks/inline-state";
+import { LoadMore } from "@donaldgifford/design-system/blocks/load-more";
 import { PageHeader } from "@donaldgifford/design-system/blocks/page-header";
 import { StatStrip } from "@donaldgifford/design-system/blocks/stat-strip";
+import { Time } from "@donaldgifford/design-system/blocks/time";
 import { Timeline } from "@donaldgifford/design-system/blocks/timeline";
 import { Button } from "@donaldgifford/design-system/components/button";
 import { Card, CardContent } from "@donaldgifford/design-system/components/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@donaldgifford/design-system/components/tabs";
 import { IconRefresh } from "@tabler/icons-react";
+import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 
-import { InlineEmpty, InlineLoading } from "@donaldgifford/design-system/blocks/inline-state";
+import type { Schemas } from "../api/client";
+import {
+  inProgress,
+  useDashboardItems,
+  useMe,
+  usePullRequests,
+  useRecheck,
+  useRepository,
+  useRepositoryDependencies,
+  useRepositoryEvents,
+  useRepositoryRuns,
+} from "../api/queries";
 import { StateBadge } from "../components/badges";
-import { Endpoint } from "../components/PageControls";
-import { type Run, repository, repositoryRuns, repositoryTimeline } from "../fixtures";
-import { when } from "../lib/when";
+import { eventItem } from "../components/events";
+import { ListCard } from "../components/ListCard";
+import { Endpoint, parseScopeSearch, type ScopeSearch } from "../components/PageControls";
+import { repositoryRunColumns } from "../components/runs";
+import { WaitingSections } from "../components/waiting";
+import { prId, pullColumns } from "./pulls";
 
-const helper = dataTableColumns<Run>();
-const runColumns = helper.columns([
-  helper.accessor("id", { header: "Run", cell: ({ getValue }) => <span className="font-mono text-xs">{getValue()}</span> }),
-  helper.accessor("startedAt", { header: "Started", cell: ({ getValue }) => <span className="font-mono text-xs">{when(getValue())}</span> }),
-  helper.accessor("outcome", { header: "Outcome", cell: ({ getValue }) => <StateBadge state={getValue()} />, enableSorting: false }),
-  helper.accessor("cause", { header: "Cause", cell: ({ getValue }) => <span className="font-mono text-xs">{getValue()}</span> }),
-  helper.accessor("durationSeconds", { header: "Duration", cell: ({ getValue }) => `${Math.floor(getValue() / 60)}m ${String(getValue() % 60).padStart(2, "0")}s`, meta: { numeric: true } }),
-  helper.accessor("updates", { header: "Updates", meta: { numeric: true } }),
-  helper.accessor("coreSpent", { header: "REST spent", meta: { numeric: true, hideBelow: "lg" } }),
-]);
+const TABS = ["timeline", "runs", "pulls", "waiting", "dependencies", "config"] as const;
+type Tab = (typeof TABS)[number];
+
+export interface RepositorySearch extends ScopeSearch {
+  tab?: Tab | undefined;
+}
+
+export function parseRepositorySearch(search: Record<string, unknown>): RepositorySearch {
+  const out: RepositorySearch = parseScopeSearch(search);
+  const tab = search.tab;
+  if (typeof tab === "string" && (TABS as readonly string[]).includes(tab) && tab !== "timeline") out.tab = tab as Tab;
+  return out;
+}
 
 export function RepositoryView() {
+  const { id: raw } = useParams({ strict: false }) as { id: string };
+  const id = Number(raw);
+  const repo = useRepository(id);
+  if (repo.isError) return <ErrorState error={repo.error} onRetry={() => void repo.refetch()} />;
+  if (!repo.data) return <InlineLoading />;
+  return <Repository repo={repo.data} />;
+}
+
+function Repository({ repo }: { repo: Schemas["RepositoryDetail"] }) {
+  const search = useSearch({ strict: false }) as RepositorySearch;
+  const navigate = useNavigate();
+  const live = inProgress(repo);
+  const tab = search.tab ?? "timeline";
   return (
     <>
       <PageHeader
         title={
           <span className="flex items-center gap-2">
-            <span className="font-mono">{repository.slug}</span>
-            <StateBadge state={repository.state} />
+            <span className="font-mono">{repo.slug}</span>
+            <StateBadge state={repo.state} />
           </span>
         }
-        description={<Endpoint path={`/api/v1/repositories/${repository.id}`} />}
-        actions={
-          <Button variant="outline" size="sm">
-            <IconRefresh aria-hidden="true" className="size-3.5" />
-            Recheck
-          </Button>
-        }
+        description={<Endpoint path={`/api/v1/repositories/${repo.id}`} />}
+        actions={<RecheckButton id={repo.id} />}
       />
       <Card className="py-0">
         <StatStrip
           items={[
-            { label: "Profile", value: repository.profile },
-            { label: "Cadence", value: repository.cadence },
-            { label: "Live phase", value: repository.phase },
-            { label: "Next due", value: "in 11h", sub: when(repository.nextDue) },
-            { label: "Open pull requests", value: repository.openPulls },
-            { label: "Waiting", value: repository.waiting },
+            { label: "Live phase", value: repo.live ? (repo.phase ?? "—") : "unknown", sub: phaseSub(repo) },
+            { label: "Profile", value: repo.profile },
+            { label: "Last run", value: repo.last_outcome ?? "—", sub: repo.last_run_at ? <Time iso={repo.last_run_at} /> : undefined },
+            { label: "Next due", value: repo.next_due ? <Time iso={repo.next_due} /> : "—" },
+            { label: "Open pull requests", value: repo.open_prs },
+            { label: "Waiting", value: repo.waiting },
           ]}
         />
       </Card>
-      <Tabs defaultValue="timeline">
+      <Tabs value={tab} onValueChange={(next) => void navigate({ to: ".", search: (prev: RepositorySearch) => ({ ...prev, tab: next === "timeline" ? undefined : (next as Tab) }) })}>
         <TabsList variant="line">
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
           <TabsTrigger value="runs">Runs</TabsTrigger>
           <TabsTrigger value="pulls">Pull requests</TabsTrigger>
           <TabsTrigger value="waiting">Waiting</TabsTrigger>
           <TabsTrigger value="dependencies">Dependencies</TabsTrigger>
+          <TabsTrigger value="config">Config</TabsTrigger>
         </TabsList>
         <TabsContent value="timeline">
-          <Card>
-            <CardContent>
-              <Timeline
-                items={repositoryTimeline.map((e) => ({ id: e.id, actor: e.actor, verb: e.verb, object: e.object, detail: e.detail, when: when(e.at), tone: e.tone, tags: [{ label: e.kind, variant: "outline" as const }] }))}
-              />
-            </CardContent>
-          </Card>
+          <TimelineTab id={repo.id} live={live} />
         </TabsContent>
         <TabsContent value="runs">
-          <Card className="py-0">
-            <DataTable columns={runColumns} data={repositoryRuns} label="Runs" bare getRowId={(row) => row.id} />
-          </Card>
+          <RunsTab id={repo.id} live={live} />
         </TabsContent>
         <TabsContent value="pulls">
-          <Card className="py-0">
-            <InlineLoading />
-          </Card>
+          <PullsTab id={repo.id} />
         </TabsContent>
         <TabsContent value="waiting">
-          <Card className="py-0">
-            <InlineEmpty>Nothing is waiting on this dashboard.</InlineEmpty>
-          </Card>
+          <WaitingTab id={repo.id} />
         </TabsContent>
         <TabsContent value="dependencies">
-          <Card className="py-0">
-            <InlineEmpty>Not in the mockup yet.</InlineEmpty>
-          </Card>
+          <DependenciesTab id={repo.id} />
+        </TabsContent>
+        <TabsContent value="config">
+          <ConfigTab repo={repo} />
         </TabsContent>
       </Tabs>
     </>
+  );
+}
+
+function phaseSub(repo: Schemas["RepositoryDetail"]) {
+  if (!repo.live) return "Temporal did not answer";
+  if (repo.running_since) return <>since <Time iso={repo.running_since} /></>;
+  if (repo.budget_wait_until) return <>until <Time iso={repo.budget_wait_until} /></>;
+  return undefined;
+}
+
+// RecheckButton is for operators only; a viewer never sees it (the API
+// would answer 403 anyway).
+function RecheckButton({ id }: { id: number }) {
+  const me = useMe();
+  const recheck = useRecheck(id);
+  if (!me.data?.operator) return null;
+  return (
+    <span className="flex items-center gap-2">
+      <span role="status" className="text-xs text-muted-foreground">
+        {recheck.isSuccess ? (recheck.data.deduplicated ? "Already requested in the last minute" : "Recheck requested") : null}
+        {recheck.isError ? "Recheck failed" : null}
+      </span>
+      <Button variant="outline" size="sm" disabled={recheck.isPending} onClick={() => recheck.mutate()}>
+        <IconRefresh aria-hidden="true" className="size-3.5" />
+        Recheck
+      </Button>
+    </span>
+  );
+}
+
+function TimelineTab({ id, live }: { id: number; live: boolean }) {
+  const list = useRepositoryEvents(id, live);
+  if (list.isError) return <ErrorState error={list.error} onRetry={() => void list.refetch()} />;
+  return (
+    <Card>
+      <CardContent>
+        {list.isPending ? (
+          <InlineLoading />
+        ) : list.items.length === 0 ? (
+          <InlineEmpty>No events yet.</InlineEmpty>
+        ) : (
+          <>
+            <Timeline items={list.items.map(eventItem)} />
+            <LoadMore loaded={list.items.length} hasMore={list.hasNextPage} loading={list.isFetchingNextPage} onMore={() => void list.fetchNextPage()} noun="events" />
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RunsTab({ id, live }: { id: number; live: boolean }) {
+  const list = useRepositoryRuns(id, live);
+  return <ListCard list={list} columns={repositoryRunColumns} label="Runs, newest first" noun="runs" getRowId={(r) => r.id} empty={<InlineEmpty>No runs yet.</InlineEmpty>} />;
+}
+
+function PullsTab({ id }: { id: number }) {
+  const list = usePullRequests({ repo: id, state: "open" });
+  const navigate = useNavigate();
+  return (
+    <ListCard
+      list={list}
+      columns={pullColumns}
+      label="Open pull requests, oldest first"
+      noun="pull requests"
+      getRowId={prId}
+      onRowClick={(pr) => void navigate({ to: "/pulls", search: { open: prId(pr) } })}
+      empty={<InlineEmpty>No open pull requests.</InlineEmpty>}
+    />
+  );
+}
+
+function WaitingTab({ id }: { id: number }) {
+  return <WaitingSections list={useDashboardItems({ repo: id })} showRepo={false} />;
+}
+
+const depHelper = dataTableColumns<Schemas["Dependency"]>();
+const dependencyColumns = depHelper.columns([
+  depHelper.accessor("package_name", { header: "Package", cell: ({ getValue }) => <span className="font-mono text-xs">{getValue()}</span> }),
+  depHelper.accessor("current_version", {
+    header: "Version",
+    cell: ({ row }) => <span className="font-mono text-xs">{row.original.current_version || row.original.current_value}</span>,
+  }),
+  depHelper.accessor("manager", { header: "Manager", cell: ({ getValue }) => <span className="font-mono text-xs">{getValue()}</span> }),
+  depHelper.accessor("package_file", { header: "File", cell: ({ getValue }) => <span className="font-mono text-xs">{getValue()}</span>, meta: { hideBelow: "lg" } }),
+  depHelper.accessor("purl", {
+    header: "Package URL",
+    cell: ({ getValue }) => {
+      const purl = getValue();
+      return purl ? (
+        <Link to="/packages/$purl" params={{ purl }} className="font-mono text-xs underline-offset-2 hover:underline">
+          {purl}
+        </Link>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      );
+    },
+    meta: { hideBelow: "compact" },
+  }),
+]);
+
+function DependenciesTab({ id }: { id: number }) {
+  const list = useRepositoryDependencies(id);
+  return (
+    <ListCard
+      list={list}
+      columns={dependencyColumns}
+      label="Dependencies from the last report"
+      noun="dependencies"
+      getRowId={(d) => `${d.package_file}:${d.manager}:${d.package_name}`}
+      empty={<InlineEmpty>No report yet.</InlineEmpty>}
+    />
+  );
+}
+
+function ConfigTab({ repo }: { repo: Schemas["RepositoryDetail"] }) {
+  const at = (iso: string | null | undefined) => (iso ? <Time iso={iso} /> : "—");
+  return (
+    <Card>
+      <CardContent>
+        <DetailsGrid
+          columns={2}
+          items={[
+            { label: "Profile", value: repo.profile },
+            { label: "State", value: <StateBadge state={repo.state} /> },
+            { label: "Repository ID", value: <span className="font-mono text-xs">{repo.id}</span> },
+            { label: "Installation", value: <span className="font-mono text-xs">{repo.installation_id}</span> },
+            { label: "Onboarded", value: at(repo.onboarded_at) },
+            { label: "Offboarded", value: at(repo.offboarded_at) },
+            { label: "Last run", value: repo.last_run_id ? <span className="font-mono text-xs">{repo.last_run_id}</span> : "—" },
+            { label: "Workflow", value: <span className="font-mono text-xs">repo/github/{repo.id}</span> },
+          ]}
+        />
+      </CardContent>
+    </Card>
   );
 }

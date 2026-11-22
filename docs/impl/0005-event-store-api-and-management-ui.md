@@ -969,7 +969,7 @@ page stops using them.
   the timeline and a GitHub link.
 - [x] 12.3 Waiting (`/waiting`): items grouped by section, with waiting
   since, ticked by and a dashboard link.
-- [ ] 12.4 Repository (`/repositories/$id`): a header with the live
+- [x] 12.4 Repository (`/repositories/$id`): a header with the live
   phase and Recheck (operators); tabs for Timeline (with causes), Runs,
   Pull requests, Waiting, Dependencies and Config.
 - [ ] 12.5 Repositories, Packages (+ `$purl`), Runs, Events (15 s
