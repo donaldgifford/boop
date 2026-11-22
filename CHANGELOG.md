@@ -9,11 +9,81 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 - *(ui)* Mockup of the boop UI on the design system
 - *(ui)* Move the mockup to design-system 0.4.0 and add the status page
+- *(store)* Events table, partitions and idempotency keys (IMPL-0005 2.1)
+- *(store)* Projection tables and store_meta (IMPL-0005 2.2)
+- *(store)* Grants for the worker, ingest and read-only roles (IMPL-0005 2.3)
+- *(store)* Migrate over the embedded schema and RequireVersion (IMPL-0005 2.4)
+- Boopd migrate and the store config block (IMPL-0005 2.5)
+- *(store)* Order-guard columns for repositories, deliveries and dashboards
+- *(store)* Event type, kind catalogue and typed payloads (IMPL-0005 3.1)
+- *(store)* Append with key-first idempotency and append metrics (IMPL-0005 3.2)
+- *(store)* Sqlc queries for the applies and rebuild (IMPL-0005 3.3)
+- *(store)* Per-kind applies with order guards (IMPL-0005 3.4)
+- *(store)* Boopd store rebuild replays the log into fresh projections (IMPL-0005 3.5)
+- *(purl)* Package URLs from Renovate datasources, stored on updates and dependencies (IMPL-0005 4.1)
+- *(renovate)* Report dependencies on RunResult, capped at 2,000 (IMPL-0005 4.2)
+- *(renovate)* Dependency dashboard parser keyed on markers, with Diff (IMPL-0005 4.3)
+- *(observability)* Boopd_dashboard_parse_total by parse outcome (IMPL-0005 4.5)
+- *(config)* An enabled store requires the worker DSN (IMPL-0005 5.1)
+- *(worker)* Open the worker's store pool when enabled, checking the schema (IMPL-0005 5.2)
+- *(activities)* RecordRun maps a run's result to run.started and run.finished (IMPL-0005 5.3)
+- *(activities)* RecordEvents appends workflow decisions (IMPL-0005 5.4)
+- *(workflows)* StoreOptions, unlimited retry at low priority (IMPL-0005 5.5)
+- *(workflows)* RepoWorkflow records runs and decisions; recheck carries its actor (IMPL-0005 5.6, 5.7)
+- *(workflows)* DiscoveryWorkflow records discovery.finished when the store is enabled (IMPL-0005 5.8)
+- *(ingest)* StoreSink records deliveries and derived events (IMPL-0005 6.1, 6.2)
+- *(ingest)* Boopd ingest records to the store when enabled (IMPL-0005 6.3)
+- *(activities)* Delivery audit records failed, missed and redelivered (IMPL-0005 6.4)
+- *(github)* Open bot PR search and single PR read, with the fake's (IMPL-0005 7.1, 7.3)
+- *(workflows)* ReconcilePullRequests after each recording discovery pass (IMPL-0005 7.2)
+- *(store)* StoreMaintenanceWorkflow applies retention (IMPL-0005 8.1)
+- *(worker)* Daily store-maintenance Schedule when the store is enabled (IMPL-0005 8.2)
+- *(api)* The v1 contract, api/openapi.yaml (IMPL-0005 9.1)
+- *(api)* Strict std-http server generated into internal/api/gen (IMPL-0005 9.3)
+- *(api)* Problem, cursor, middleware, authn and the contract harness from repo-guardian (IMPL-0005 9.4)
+- *(api)* Authz visibility, operator gate and owner narrowing (IMPL-0005 9.5)
+- *(api)* Boopd api role with read-only pool, lazy Temporal, OIDC readiness (IMPL-0005 9.6)
+- *(api)* Read endpoints, live state, recheck, estate and status (IMPL-0005 10.1-10.5)
 
 ### Documentation
 
 - INV-0005, boop UI on the design system; amend DESIGN-0004 and IMPL-0005
 - *(impl-0005)* Record the mockup and what the UI can start on
+- Approve DESIGN-0004 and accept ADR-0006 (IMPL-0005 1.1)
+- *(impl-0005)* Record the Phase 2 schema choices
+- *(store)* Phase 3 package doc, layout and findings (IMPL-0005)
+- Phase 4 layout and findings (IMPL-0005)
+- Phase 5 package docs and findings (IMPL-0005 5.10)
+- Phase 6 findings, ingest package doc and the missed metric (IMPL-0005 6.5)
+- Phase 7 findings and package docs (IMPL-0005 Phase 7)
+- Phase 8 findings, retention Schedule in the config reference (IMPL-0005 Phase 8)
+- Phase 9 findings, the API package and layout (IMPL-0005 Phase 9)
+- Phase 10 findings, the API package doc and layout (IMPL-0005 Phase 10)
+
+### Styling
+
+- *(store)* Wrap a long line in the migrate integration test
+- *(store)* Golines formatting in the migrate integration test
+
+### Testing
+
+- *(store)* Storetest runs a pinned postgres:17 container for integration tests (IMPL-0005 1.4)
+- *(store)* Check the close error in storetest's readiness probe
+- *(store)* Migrate, grants and partition integration tests (IMPL-0005 2.6)
+- *(store)* Per-kind apply tests and rebuild-equals-incremental over a recorded log (IMPL-0005 3.6)
+- *(renovate)* Proxmox-go-sdk#34 dashboard revisions and an every-section body (IMPL-0005 4.4)
+- *(workflows)* Replay histories with store recording, and the pre-store ones kept (IMPL-0005 5.9)
+- *(activities)* PR reconcile against fakegithub and the store (IMPL-0005 7.4)
+- *(store)* Each retention rule against fixtures placed by a clock override (IMPL-0005 8.3)
+- *(api)* Contract tests with the authn and authz matrix (IMPL-0005 9.7)
+- *(api)* Endpoints, visibility, recheck and estate over a seeded store (IMPL-0005 10.6)
+
+### Miscellaneous Tasks
+
+- Add pgx, goose, go-oidc, kin-openapi and the oapi-codegen and sqlc tools (IMPL-0005 1.2)
+- Pin vacuum in mise (IMPL-0005 1.3)
+- Add the generate, lint-api, lint-sql and ui test/e2e/visual recipes (IMPL-0005 1.5)
+- *(api)* Vacuum ruleset for the contract (IMPL-0005 9.2)
 
 ## [0.7.0] - 2026-11-12
 
