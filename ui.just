@@ -50,3 +50,9 @@ generate-ui-api:
 [group('ui')]
 ui-check-api:
     cd ui && bun run check:api
+
+# Build the boopd-ui image into the local Docker daemon (bake ui-dev). The
+# registry token is passed as a build secret and never lands in a layer.
+[group('ui')]
+ui-docker-build:
+    @NPM_TOKEN="${NPM_TOKEN:-$(gh auth token)}" docker buildx bake ui-dev
