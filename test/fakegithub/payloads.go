@@ -73,8 +73,9 @@ func Ping(appID int64) map[string]any {
 // ticked box, as on a Dependency Dashboard.
 func IssuesEdited(repo *Repo, installationID int64, author, sender string) map[string]any {
 	p := base("edited", repo, installationID, sender)
-	p["issue"] = map[string]any{"number": 1, "title": "Dependency Dashboard", "user": user(author), "body": "- [x] <!-- approve-all -->"}
-	p["changes"] = map[string]any{"body": map[string]any{keyFrom: "- [ ] <!-- approve-all -->"}}
+	const box = "<!-- approve-branch=renovate/x -->"
+	p["issue"] = map[string]any{"number": 1, "title": "Dependency Dashboard", "user": user(author), "body": "- [x] " + box}
+	p["changes"] = map[string]any{"body": map[string]any{keyFrom: "- [ ] " + box}}
 	return p
 }
 

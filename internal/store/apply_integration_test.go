@@ -470,3 +470,25 @@ func TestApply_ScheduleBeforeOnboarding(t *testing.T) {
 		t.Fatalf("after a rebuild: %d repositories with next_due, want %d", got, 1+n)
 	}
 }
+
+// TestApply_DashboardSkipsGlobalBoxes: the boxes that act on the whole
+// repository are not items, and a rewrite drops any recorded before.
+func TestApply_DashboardSkipsGlobalBoxes(t *testing.T) {
+	srv := migrated(t)
+	owner := pool(t, srv.OwnerDSN())
+	s := store.New(pool(t, srv.RoleDSN(storetest.RoleIngest)), storetest.RoleIngest, nil)
+	limited := store.DashboardItem{Marker: "unlimit-branch", Branch: "renovate/yaml-v4", Section: "rate-limited", Title: "yaml v4"}
+	global := store.DashboardItem{Marker: "create-all-rate-limited-prs", Section: "rate-limited", Title: "Create all rate-limited PRs at once"}
+	if _, err := owner.Exec(t.Context(),
+		"INSERT INTO dashboard_items (repo_id, marker, branch, section, title, first_seen_at, last_seen_at) VALUES (1, $1, '', $2, $3, $4, $4)",
+		global.Marker, global.Section, global.Title, setupAt); err != nil {
+		t.Fatal(err)
+	}
+	updated := ev(store.KindDashboardUpdated, "du/global", base, 1, &store.DashboardUpdated{V: 1, Items: []store.DashboardItem{limited, global}})
+	if err := s.Append(t.Context(), updated); err != nil {
+		t.Fatal(err)
+	}
+	if got := snapshot(t, owner, "dashboard_items", "repo_id = 1"); strings.Contains(got, global.Marker) || !strings.Contains(got, limited.Branch) {
+		t.Errorf("dashboard_items = %s, want only %s", got, limited.Branch)
+	}
+}

@@ -117,7 +117,7 @@ func TestStoreSink_EachDerivedKind(t *testing.T) {
 			"issues",
 			"issues-edited-own",
 			[]store.Kind{store.KindDashboardUpdated},
-			"SELECT count(*) FROM dashboard_items WHERE marker = 'approve-all'",
+			"SELECT count(*) FROM dashboard_items WHERE marker = 'approve-branch' AND branch = 'renovate/x'",
 		},
 		{
 			"issues", "issues-edited-dashboard",
