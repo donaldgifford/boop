@@ -28,6 +28,10 @@ import (
 // them.
 const storeRecordChange = "store-record"
 
+// storeBackfillChange gates backfill: executions started before it
+// replay without the onboarding it records.
+const storeBackfillChange = "store-backfill"
+
 // Recording (DESIGN-0004 § Workflow and activity changes). Every store
 // call is an activity the workflow does not wait for: recording never
 // holds up a run. Futures still in flight are waited for before the
@@ -93,8 +97,25 @@ func (r *repo) repository(via, reason string) *RecordRepository {
 	return &RecordRepository{Slug: r.s.Slug, Profile: r.s.Profile, Via: via, Reason: reason}
 }
 
+// backfill records a repository the store has not seen: an execution
+// that continued as new from one that predates recording (an upgrade
+// that enabled the store) records its onboarding and schedule once, so
+// its projections exist before its next run.
+func (r *repo) backfill(ctx workflow.Context) {
+	if r.backfillV < 1 || !r.recording() || r.s.Recorded {
+		return
+	}
+	r.noteOnboarded(ctx, ViaDiscovery, "")
+	if !r.s.NextDue.IsZero() {
+		r.noteScheduled(ctx, r.s.NextDue, PriorityNormal, "")
+	}
+}
+
 // noteOnboarded records repo.onboarded.
 func (r *repo) noteOnboarded(ctx workflow.Context, via, cause string) {
+	if r.recording() {
+		r.s.Recorded = true
+	}
 	r.note(ctx, RecordedEvent{
 		Kind: KindRepoOnboarded, CauseKey: cause, Summary: r.s.Slug + " onboarded via " + via, Repository: r.repository(via, ""),
 	})

@@ -165,6 +165,11 @@ type Discovered struct {
 	InstallationID    int64
 	DiscoveryInterval time.Duration
 	Extends           []string
+	// Record is set when the store is on. An execution that predates
+	// the store-record gate continues as new on it, so the new execution
+	// records (an upgrade adopts running workflows; signals in older
+	// histories lack it, so replay is unchanged).
+	Record bool
 }
 
 // Event is the event signal: something on GitHub wants a run
@@ -253,6 +258,9 @@ type RepoState struct {
 	// RecordSeq numbers this repository's recorded decisions; with the
 	// run id it makes each event's key (IMPL-0005 5.4).
 	RecordSeq int
+	// Recorded is set once the store has this repository's onboarding,
+	// so an execution adopted after an upgrade records it only once.
+	Recorded bool
 	// CauseKey is the key of the last run-scheduled or recheck event, the
 	// cause of the next run.
 	CauseKey string
