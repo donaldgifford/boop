@@ -202,6 +202,7 @@ type Server struct {
 	treeReads     int
 	treeStatus    int
 	pulls         []PR
+	issues        []Issue
 	searchQueries []string
 	pullReads     int
 }

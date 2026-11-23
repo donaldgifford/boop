@@ -21,6 +21,7 @@ package store_test
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -408,5 +409,64 @@ func TestApply_EveryKind(t *testing.T) {
 		if !covered[k] {
 			t.Errorf("kind %s has no apply test", k)
 		}
+	}
+}
+
+// TestApply_ScheduleBeforeOnboarding: a workflow records without
+// waiting, so a repository's repo.run-scheduled can land before or
+// beside the repo.onboarded that creates its row. The schedule is kept
+// either way, and a rebuild, which replays them as they landed, keeps it
+// too.
+func TestApply_ScheduleBeforeOnboarding(t *testing.T) {
+	srv := migrated(t)
+	owner := pool(t, srv.OwnerDSN())
+	s := store.New(pool(t, srv.RoleDSN(storetest.RoleWorker)), storetest.RoleWorker, nil)
+	due := time.Date(2026, 11, 23, 18, 46, 0, 0, time.UTC)
+	pair := func(id int64) (onboarded, scheduled store.Event) {
+		repo := &store.Repository{V: 1, Owner: "acme", Slug: fmt.Sprintf("acme/r%d", id)}
+		return ev(store.KindRepoOnboarded, fmt.Sprintf("on/%d", id), base, id, repo),
+			ev(store.KindRepoRunScheduled, fmt.Sprintf("rs/%d", id), base, id, &store.RunScheduled{V: 1, NextDue: due})
+	}
+	scheduled := func() int {
+		return count(t, owner, "SELECT count(*) FROM repositories WHERE next_due = $1", due)
+	}
+
+	onboarded, sched := pair(1)
+	if err := s.Append(t.Context(), sched); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Append(t.Context(), onboarded); err != nil {
+		t.Fatal(err)
+	}
+	if got := scheduled(); got != 1 {
+		t.Fatalf("schedule before onboarding: %d repositories with next_due, want 1", got)
+	}
+
+	// Side by side, as a workflow's two record activities run.
+	const n = 30
+	errs := make(chan error, 2*n)
+	var wg sync.WaitGroup
+	for id := int64(100); id < 100+n; id++ {
+		onboarded, sched := pair(id)
+		for _, e := range []store.Event{sched, onboarded} {
+			wg.Go(func() { errs <- s.Append(t.Context(), e) })
+		}
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := scheduled(); got != 1+n {
+		t.Fatalf("side by side: %d repositories with next_due, want %d", got, 1+n)
+	}
+
+	if _, err := store.Rebuild(t.Context(), owner, 4, quiet); err != nil {
+		t.Fatalf("Rebuild: %v", err)
+	}
+	if got := scheduled(); got != 1+n {
+		t.Fatalf("after a rebuild: %d repositories with next_due, want %d", got, 1+n)
 	}
 }

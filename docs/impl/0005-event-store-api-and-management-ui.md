@@ -1301,13 +1301,13 @@ page stops using them.
   #48, stacked on #47.
 - [x] 16.3 PR C, the UI (phases 11–12, the remaining chart, e2e, CI,
   docs), `minor`: #49, stacked on #48.
-- [ ] 16.4 **Deferred, human required.** Homelab database setup:
+- [x] 16.4 Homelab database setup (done by a human on fartlab, 0.11.0):
   - a CNPG `Cluster` for boopd with managed roles `boopd_owner`,
     `boopd_worker`, `boopd_ingest`, `boopd_ro`;
   - the DSN Secret;
   - `store.enabled`;
   - the migrate hook runs under Argo CD.
-- [ ] 16.5 **Deferred, human required.** Homelab API and UI:
+- [x] 16.5 Homelab API and UI (done by a human on fartlab, 0.12.0):
   - Keycloak clients `boopd-api` (audience) and `boopd-ui` (confidential,
     code + PKCE);
   - the authz file;
@@ -1315,9 +1315,41 @@ page stops using them.
   - a walk through every page against the real fleet (proxmox-go-sdk
     first).
 - [ ] 16.6 IMPL status → Completed, with the evidence.
-  `deferred - human required`: after #47, #48 and #49 merge (each
-  retargeted to main in turn, where CI runs), the releases are cut and
-  16.4–16.5 are done. #47's CI is green.
+  `deferred - human required`: the fixes below are released and
+  deployed, and proxmox-go-sdk's waiting items match its dashboard.
+
+#### Evidence and problems (fartlab, 2026-11-23)
+
+On 0.12.0:
+
+- 45 repositories, 45 `repo.onboarded`, 1 installation, 213 pull
+  requests.
+- proxmox-go-sdk's open PRs match GitHub (#35–#46).
+- A recheck from the UI ran end to end, and the timeline names the actor.
+
+Problems found:
+
+- **Workflows that predate the store never recorded.** A `RepoWorkflow`
+  reads the `store-record` version once, at start. Fixed in 0.12.0
+  (#53): discovery's signal carries `Record`, and an execution that has
+  not recorded continues as new and backfills its onboarding.
+- **`next_due` lost for 44 of 45.** The backfill's `repo.onboarded` and
+  `repo.run-scheduled` are concurrent activities, and the schedule's
+  update found no row. Fixed: onboarding adopts the newest schedule
+  from its time on, and `Append` locks per repository.
+  `boopd store rebuild` repairs a store recorded by 0.12.0.
+- **Waiting items missing.** Renovate edits its dashboard only when it
+  changes, so a dashboard last edited before the store existed was never
+  seen (6 of 45 recorded). Fixed: the discovery pass's reconcile reads
+  the App's open issues and records each dashboard (schema version 6).
+- **Deliveries degraded.** Five `delivery.missed` from before the store
+  was enabled. Working as designed: misses are dated by GitHub's
+  `delivered_at` and leave the 24 h window on their own.
+- **Not yet addressed:** a draining worker losing its Temporal token on
+  SIGTERM (seen in the 0.11.0 rollout); no ServiceMonitor for the API,
+  and the runs quota not counting the API, UI and migrate pods; chart
+  0.10.0 not published; `docs/config.md`'s `-ro` DSN has no endpoints on
+  a single-instance CNPG cluster.
 
 #### Success Criteria
 

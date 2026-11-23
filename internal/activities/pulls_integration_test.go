@@ -168,3 +168,87 @@ func TestReconcilePullRequests_MatchesGitHub(t *testing.T) {
 		t.Errorf("pr.synced events after a second pass = %d, want still 4", n)
 	}
 }
+
+// TestReconcilePullRequests_SyncsDashboards: a dashboard Renovate last
+// edited before the store existed, so no webhook carried it, reaches
+// the store from the issue search; a bot issue that is not a dashboard
+// does not. An unchanged dashboard is a duplicate on the next pass, and
+// a rewrite replaces the items.
+func TestReconcilePullRequests_SyncsDashboards(t *testing.T) {
+	srv := storetest.Start(t)
+	if _, err := store.Migrate(t.Context(), srv.OwnerDSN(), slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	owner, err := store.Open(t.Context(), srv.OwnerDSN())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(owner.Close)
+	worker, err := store.Open(t.Context(), srv.RoleDSN(storetest.RoleWorker))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(worker.Close)
+
+	t1 := time.Date(2026, 11, 20, 9, 0, 0, 0, time.UTC)
+	if _, err := owner.Exec(t.Context(),
+		"INSERT INTO repositories (id, installation_id, owner, slug, updated_at) VALUES (1, 1, 'acme', 'acme/api', $1)", t1); err != nil {
+		t.Fatal(err)
+	}
+	gh := fakegithub.New(t)
+	gh.SetRepos(fakegithub.Repo{ID: 1, NodeID: "R_1", Slug: "acme/api", DefaultBranch: "main"})
+	const bot = "boop-bot[bot]"
+	body := func(items ...string) string {
+		b := "This issue lists Renovate updates and detected dependencies.\n\n## Rate-Limited\n\n"
+		for _, it := range items {
+			b += " - [ ] <!-- unlimit-branch=" + it + " -->chore(deps): update " + it + "\n"
+		}
+		return b
+	}
+	gh.SetIssues(
+		fakegithub.Issue{
+			RepoID: 1, Number: 34, Author: bot, Title: "Dependency Dashboard", UpdatedAt: t1,
+			Body: body("renovate/yaml-v4", "renovate/go-vcr-v4"),
+		},
+		fakegithub.Issue{RepoID: 1, Number: 40, Author: bot, Title: "Action required", UpdatedAt: t1, Body: "Renovate needs a config fix."},
+	)
+	cfg := &config.Config{Apps: []*config.App{{Name: "boop-bot", AppID: 1, Endpoint: gh.BaseURL(), PrivateKey: config.NewSecret(gh.PEM)}}}
+	env := (&testsuite.WorkflowTestSuite{}).NewTestActivityEnvironment()
+	activities.New(&activities.Deps{Config: cfg, Store: store.New(worker, storetest.RoleWorker, nil)}).Register(env)
+	reconcile := func() *workflows.ReconcilePRsResult {
+		t.Helper()
+		val, err := env.ExecuteActivity(workflows.ReconcilePullRequestsActivity,
+			&workflows.ReconcilePRsInput{App: "boop-bot", InstallationID: 1, Account: "acme"})
+		if err != nil {
+			t.Fatalf("ReconcilePullRequests: %v", err)
+		}
+		var out workflows.ReconcilePRsResult
+		if err := val.Get(&out); err != nil {
+			t.Fatal(err)
+		}
+		return &out
+	}
+	items := func() int {
+		return count(t, owner, "SELECT count(*) FROM dashboard_items WHERE repo_id = 1 AND section = 'rate-limited'")
+	}
+
+	if got := reconcile(); got.Dashboards != 1 {
+		t.Errorf("first pass = %+v, want 1 dashboard", *got)
+	}
+	if n := items(); n != 2 {
+		t.Errorf("rate-limited items = %d, want 2", n)
+	}
+	reconcile()
+	if n := count(t, owner, "SELECT count(*) FROM events WHERE kind = 'dashboard.updated'"); n != 1 {
+		t.Errorf("dashboard.updated events after an unchanged pass = %d, want 1", n)
+	}
+
+	gh.SetIssues(fakegithub.Issue{
+		RepoID: 1, Number: 34, Author: bot, Title: "Dependency Dashboard", UpdatedAt: t1.Add(time.Hour),
+		Body: body("renovate/go-vcr-v4"),
+	})
+	reconcile()
+	if n := items(); n != 1 {
+		t.Errorf("rate-limited items after a rewrite = %d, want 1", n)
+	}
+}

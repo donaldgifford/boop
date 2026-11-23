@@ -230,7 +230,7 @@ renders with an existing Secret are identical.
 | store.migrate.backoffLimit | int | `2` | Retries of the migrate Job. |
 | store.migrate.hook | string | `"helm"` | `helm` (pre-install/pre-upgrade hooks) or `argocd` (PreSync). Either way the migration finishes before the roles roll. |
 | store.migrate.resources | object | `{}` | Migrate container resources. |
-| store.networkPolicy.ro | list | TCP 5432 to anywhere | Egress rules to the read-only service (CNPG's `-ro`): the API. |
+| store.networkPolicy.ro | list | TCP 5432 to anywhere | Egress rules to the API's database service: CNPG's `-ro` with replicas, `-r` or `-rw` on a single instance (`-ro` has no endpoints there). |
 | store.networkPolicy.rw | list | TCP 5432 to anywhere | Egress rules (NetworkPolicyEgressRule list) to the read-write service (CNPG's `-rw`): ingest and migrate. The worker has no policy of its own. |
 | temporal.address | string | `""` | Frontend `host:port`. Required. |
 | temporal.auth.oidc | object | `{"audience":"","clientId":"","existingSecret":"","scopes":[],"tokenUrl":""}` | Authenticate with a bearer token from an OAuth2 client-credentials grant (Keycloak and the like) instead of mTLS. The token is cached and renewed a minute before it expires. |

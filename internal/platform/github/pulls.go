@@ -102,6 +102,7 @@ type searchNode struct {
 	Number           int        `json:"number"`
 	Title            string     `json:"title"`
 	URL              string     `json:"url"`
+	Body             string     `json:"body"`
 	State            string     `json:"state"`
 	HeadRefName      string     `json:"headRefName"`
 	CreatedAt        time.Time  `json:"createdAt"`
@@ -139,37 +140,105 @@ func (c *Client) SearchOpenBotPRs(ctx context.Context, appSlug, account string) 
 		return nil, errors.New("github: app slug required")
 	}
 	out := &PRSearch{}
-	vars := map[string]any{"q": OpenBotPRQuery(appSlug, account), "first": searchPageSize}
+	err := c.search(ctx, searchQuery, OpenBotPRQuery(appSlug, account), &out.Queries, &out.Cost, func(n *searchNode) {
+		out.PRs = append(out.PRs, n.pullRequest())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Issue is one bot issue as GitHub describes it: the App's Dependency
+// Dashboard, in practice.
+type Issue struct {
+	RepoID    int64
+	Number    int
+	Title     string
+	Body      string
+	UpdatedAt time.Time
+}
+
+// IssueSearch is SearchOpenBotIssues' answer.
+type IssueSearch struct {
+	Issues        []Issue
+	Queries, Cost int
+}
+
+// issueSearchQuery is one page of the open bot issue search.
+const issueSearchQuery = `query($q: String!, $first: Int!, $after: String) {
+  rateLimit { cost remaining resetAt }
+  search(query: $q, type: ISSUE, first: $first, after: $after) {
+    pageInfo { hasNextPage endCursor }
+    nodes {
+      ... on Issue {
+        number title body updatedAt
+        repository { databaseId }
+      }
+    }
+  }
+}`
+
+// OpenBotIssueQuery is the search for the App's open issues on one
+// account: is:issue is:open author:app/<slug> user:<account>.
+func OpenBotIssueQuery(appSlug, account string) string {
+	return strings.Replace(OpenBotPRQuery(appSlug, account), "is:pr", "is:issue", 1)
+}
+
+// SearchOpenBotIssues lists the App's open issues on account with one
+// GraphQL search, 100 per page, bodies included: the dashboards a
+// webhook has not shown the store (DESIGN-0004 § Sources of PR,
+// dashboard and dependency data).
+func (c *Client) SearchOpenBotIssues(ctx context.Context, appSlug, account string) (*IssueSearch, error) {
+	if appSlug == "" {
+		return nil, errors.New("github: app slug required")
+	}
+	out := &IssueSearch{}
+	err := c.search(ctx, issueSearchQuery, OpenBotIssueQuery(appSlug, account), &out.Queries, &out.Cost, func(n *searchNode) {
+		out.Issues = append(out.Issues, Issue{
+			RepoID: n.Repository.DatabaseID, Number: n.Number, Title: n.Title, Body: n.Body, UpdatedAt: n.UpdatedAt,
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// search pages one GraphQL search, calling fn for each node with a
+// number, and counts the pages and their rateLimit.cost.
+func (c *Client) search(ctx context.Context, query, q string, queries, cost *int, fn func(*searchNode)) error {
+	vars := map[string]any{"q": q, "first": searchPageSize}
 	for {
 		if err := c.wait(ctx); err != nil {
-			return nil, err
+			return err
 		}
-		req, err := c.gh.NewRequest(http.MethodPost, c.graphqlURL(), &graphqlRequest{Query: searchQuery, Variables: vars})
+		req, err := c.gh.NewRequest(http.MethodPost, c.graphqlURL(), &graphqlRequest{Query: query, Variables: vars})
 		if err != nil {
-			return nil, fmt.Errorf("github: build search request: %w", err)
+			return fmt.Errorf("github: build search request: %w", err)
 		}
 		var page searchResponse
 		resp, err := c.gh.Do(ctx, req, &page)
-		out.Queries++
+		*queries++
 		if err != nil {
-			return nil, classifyErr(resp, err)
+			return classifyErr(resp, err)
 		}
 		if page.Data == nil {
 			msgs := make([]string, 0, len(page.Errors))
 			for _, e := range page.Errors {
 				msgs = append(msgs, e.Message)
 			}
-			return nil, fmt.Errorf("%w: github: search returned no data: %s", platform.ErrTransient, strings.Join(msgs, "; "))
+			return fmt.Errorf("%w: github: search returned no data: %s", platform.ErrTransient, strings.Join(msgs, "; "))
 		}
-		out.Cost += page.Data.RateLimit.Cost
+		*cost += page.Data.RateLimit.Cost
 		for i := range page.Data.Search.Nodes {
 			if n := &page.Data.Search.Nodes[i]; n.Number > 0 {
-				out.PRs = append(out.PRs, n.pullRequest())
+				fn(n)
 			}
 		}
 		info := page.Data.Search.PageInfo
 		if !info.HasNextPage || info.EndCursor == "" {
-			return out, nil
+			return nil
 		}
 		vars["after"] = info.EndCursor
 	}

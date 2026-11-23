@@ -619,6 +619,12 @@ What the chart adds:
   - ingest: `ingest-dsn`;
   - the API: `ro-dsn`;
   - the hook: `owner-dsn`.
+
+  The API's `ro-dsn` connects as `boopd_ro`, which is read-only at the
+  role, so any instance serves it. With CNPG, point it at the `-ro`
+  Service only when the cluster has replicas: `-ro` selects replicas and
+  has no endpoints on a single instance. Use `-r` (any instance) or
+  `-rw` there.
 - **The API role:** the top-level `api.*` values run `boopd api`, and
   `api.authz` becomes the authz file. It fails the render without
   `store.enabled` and `boopd.api.auth`. [api.md](api.md) walks through

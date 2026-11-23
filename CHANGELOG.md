@@ -3,6 +3,17 @@
 All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
+## [unreleased]
+
+### Bug Fixes
+
+- *(store)* Keep a schedule recorded before or beside its onboarding
+- *(activities)* Reconcile Dependency Dashboards from GitHub
+
+### Documentation
+
+- Record the fartlab findings; the API's DSN on a single CNPG instance
+
 ## [0.12.0] - 2026-11-23
 
 ### Bug Fixes
