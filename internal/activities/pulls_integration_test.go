@@ -242,9 +242,9 @@ func TestReconcilePullRequests_SyncsDashboards(t *testing.T) {
 			{Marker: "create-all-rate-limited-prs", Section: "rate-limited"},
 		}},
 	}
-	if _, err := owner.Exec(t.Context(),
-		"INSERT INTO dashboard_items (repo_id, marker, branch, section, title, first_seen_at, last_seen_at) VALUES (1, 'create-all-rate-limited-prs', '', 'rate-limited', '', $1, $1)",
-		t1); err != nil {
+	if _, err := owner.Exec(t.Context(), `INSERT INTO dashboard_items
+		(repo_id, marker, branch, section, title, first_seen_at, last_seen_at)
+		VALUES (1, 'create-all-rate-limited-prs', '', 'rate-limited', '', $1, $1)`, t1); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.New(worker, storetest.RoleWorker, nil).Append(t.Context(), recorded); err != nil {
