@@ -36,7 +36,7 @@ func applyDashboardUpdated(ctx context.Context, q *db.Queries, e *Event) error {
 	if err != nil {
 		return err
 	}
-	_, err = q.AdvanceDashboard(ctx, db.AdvanceDashboardParams{RepoID: e.RepoID, UpdatedAt: e.OccurredAt})
+	_, err = q.AdvanceDashboard(ctx, db.AdvanceDashboardParams{RepoID: e.RepoID, UpdatedAt: e.OccurredAt, IssueUrl: nullText(d.URL)})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}

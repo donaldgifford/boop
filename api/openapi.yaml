@@ -1139,6 +1139,12 @@ components:
         waiting:
           type: integer
           description: Unticked Dependency Dashboard items.
+        dashboard_url:
+          type: [string, "null"]
+          format: uri
+          description: >-
+            The repository's Dependency Dashboard issue on GitHub; null
+            until boop has recorded the dashboard with its URL.
     RepositoryDetail:
       description: A repository with its live state.
       allOf:

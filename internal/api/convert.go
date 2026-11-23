@@ -50,7 +50,7 @@ func repository(r *db.ListRepositoriesRow) gen.Repository {
 		Id: r.ID, InstallationId: r.InstallationID, Owner: r.Owner, Slug: r.Slug, State: r.State, Profile: r.Profile,
 		OnboardedAt: r.OnboardedAt, OffboardedAt: r.OffboardedAt, NextDue: r.NextDue,
 		LastRunId: r.LastRunID, LastRunAt: r.LastRunAt, LastOutcome: r.LastOutcome,
-		OpenPrs: int(r.OpenPrs), Waiting: int(r.Waiting),
+		OpenPrs: int(r.OpenPrs), Waiting: int(r.Waiting), DashboardUrl: r.DashboardUrl,
 	}
 }
 

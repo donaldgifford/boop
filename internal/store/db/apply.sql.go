@@ -38,9 +38,11 @@ func (q *Queries) AdoptRepositorySchedule(ctx context.Context, arg AdoptReposito
 }
 
 const advanceDashboard = `-- name: AdvanceDashboard :one
-INSERT INTO dashboards (repo_id, updated_at)
-VALUES ($1, $2)
-ON CONFLICT (repo_id) DO UPDATE SET updated_at = excluded.updated_at
+INSERT INTO dashboards (repo_id, updated_at, issue_url)
+VALUES ($1, $2, $3)
+ON CONFLICT (repo_id) DO UPDATE SET
+    updated_at = excluded.updated_at,
+    issue_url = coalesce(excluded.issue_url, dashboards.issue_url)
 WHERE dashboards.updated_at <= excluded.updated_at
 RETURNING repo_id
 `
@@ -48,12 +50,14 @@ RETURNING repo_id
 type AdvanceDashboardParams struct {
 	RepoID    int64
 	UpdatedAt time.Time
+	IssueUrl  *string
 }
 
-// AdvanceDashboard moves the dashboard's guard forward. No row means the
+// AdvanceDashboard moves the dashboard's guard forward and keeps its
+// issue URL (an update without one keeps the last). No row means the
 // update is older than the one already applied.
 func (q *Queries) AdvanceDashboard(ctx context.Context, arg AdvanceDashboardParams) (int64, error) {
-	row := q.db.QueryRow(ctx, advanceDashboard, arg.RepoID, arg.UpdatedAt)
+	row := q.db.QueryRow(ctx, advanceDashboard, arg.RepoID, arg.UpdatedAt, arg.IssueUrl)
 	var repo_id int64
 	err := row.Scan(&repo_id)
 	return repo_id, err

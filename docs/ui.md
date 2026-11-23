@@ -161,7 +161,7 @@ repository with a run in progress every 5 s.
 | Pull requests | `/pulls` | Renovate's open PRs, oldest first, with filters as chips; a drawer shows a PR's updates and timeline. |
 | Waiting | `/waiting` | Dependency Dashboard items waiting on a human, by section, with links to each dashboard. |
 | Packages | `/packages`, `/packages/<purl>` | Packages by purl; a package shows who depends on it and the proposed updates. |
-| Repositories | `/repositories`, `/repositories/<id>` | Repositories by slug; a repository has tabs for its timeline, runs, PRs, waiting items, dependencies and config, and operators get **Recheck**. |
+| Repositories | `/repositories`, `/repositories/<id>` | Repositories by slug; a repository has tabs for its timeline, runs, PRs, waiting items, dependencies and config. **Dashboard** opens its Dependency Dashboard on GitHub, and operators get **Recheck**. |
 | Runs | `/runs` | Runs across the fleet with outcome, duration and rate-limit spend. |
 | Events | `/events` | The event log. |
 | Deliveries | `/deliveries` | Webhook deliveries and GitHub's view of them (owners `"*"` only; others see why). |

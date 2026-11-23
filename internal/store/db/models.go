@@ -29,6 +29,7 @@ type BranchUpdate struct {
 type Dashboard struct {
 	RepoID    int64
 	UpdatedAt time.Time
+	IssueUrl  *string
 }
 
 type DashboardItem struct {

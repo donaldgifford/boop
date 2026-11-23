@@ -181,7 +181,7 @@ func dashboardEvent(installationID int64, is *github.Issue, snap *dashboard.Snap
 		InstallationID: installationID,
 		RepoID:         is.RepoID,
 		Summary:        fmt.Sprintf("dashboard #%d synced: %d items", is.Number, len(items)),
-		Data:           &store.DashboardUpdated{V: 1, Items: items},
+		Data:           &store.DashboardUpdated{V: 1, Items: items, URL: is.URL},
 	}
 }
 
