@@ -78,9 +78,11 @@ ON CONFLICT (repo_id, marker, branch) DO UPDATE SET
 
 -- name: DeleteStaleDashboardItems :exec
 -- DeleteStaleDashboardItems drops the items the latest rewrite no longer
--- lists: every one it lists was just seen at seen_at.
+-- lists: every one it lists was just seen at seen_at. It also drops
+-- whole-repository boxes (no branch), which are no longer items: a
+-- re-record of the same GitHub edit shares their seen_at.
 DELETE FROM dashboard_items
-WHERE repo_id = @repo_id AND last_seen_at < @seen_at;
+WHERE repo_id = @repo_id AND (last_seen_at < @seen_at OR branch = '');
 
 -- name: TickDashboardItem :exec
 UPDATE dashboard_items
