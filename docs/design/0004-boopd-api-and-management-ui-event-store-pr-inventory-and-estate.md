@@ -401,8 +401,12 @@ None of these need new GitHub calls during a run:
   report's set, when the report is present (`ReportMissing` keeps the
   previous set). `pull_requests` joins on `(repo_id, branch)`, so a PR
   keeps its identity across rebases (ADR-0006's requirement).
-- **Waiting updates: the dashboard body.** Each run rewrites the
-  dashboard, and the `issues.edited` delivery carries the full body.
+- **Waiting updates: the dashboard body.** The `issues.edited` delivery
+  carries the full body. Renovate edits the dashboard only when its
+  content changes, so each discovery pass also reads the App's open
+  issues with one GraphQL search and records each dashboard as
+  `dashboard.updated` at GitHub's `updated_at` (amended 2026-11-23:
+  a dashboard last edited before the store existed was never seen).
   Renovate marks every checkbox with a machine marker, for example
   `<!-- approve-branch=… -->`, `<!-- unschedule-branch=… -->`,
   `<!-- unlimit-branch=… -->`, `<!-- retry-branch=… -->` and

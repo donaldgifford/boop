@@ -467,7 +467,9 @@ store:
     rw:
       - ports:
           - {port: 5432, protocol: TCP}
-    # -- Egress rules to the read-only service (CNPG's `-ro`): the API.
+    # -- Egress rules to the API's database service: CNPG's `-ro` with
+    # replicas, `-r` or `-rw` on a single instance (`-ro` has no endpoints
+    # there).
     # @default -- TCP 5432 to anywhere
     ro:
       - ports:
