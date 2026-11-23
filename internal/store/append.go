@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -143,6 +144,9 @@ func (s *Store) Append(ctx context.Context, events ...Event) (err error) {
 		}
 	}()
 
+	if err := lockRepositories(ctx, tx, events); err != nil {
+		return err
+	}
 	for i := range events {
 		appended, err := appendOne(ctx, tx, &events[i])
 		if err != nil {
@@ -155,6 +159,32 @@ func (s *Store) Append(ctx context.Context, events ...Event) (err error) {
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit append: %w", err)
+	}
+	return nil
+}
+
+// repoLockSpace is the first key of the per-repository advisory locks
+// ("boop"), so they cannot meet another user's single-key locks.
+const repoLockSpace = 0x626f6f70
+
+// lockRepositories serializes appends per repository for the rest of
+// the transaction. A workflow records without waiting, so two of its
+// appends can run at once; without the lock neither would see the
+// other's rows (repo.run-scheduled landing beside the repo.onboarded
+// that creates the row). The locks are taken in repository order, so
+// appends spanning several repositories cannot deadlock.
+func lockRepositories(ctx context.Context, tx pgx.Tx, events []Event) error {
+	ids := make([]int64, 0, len(events))
+	for i := range events {
+		if events[i].RepoID != 0 {
+			ids = append(ids, events[i].RepoID)
+		}
+	}
+	slices.Sort(ids)
+	for _, id := range slices.Compact(ids) {
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1::int, hashtext($2::bigint::text))`, repoLockSpace, id); err != nil {
+			return fmt.Errorf("lock repository %d: %w", id, err)
+		}
 	}
 	return nil
 }

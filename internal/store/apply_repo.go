@@ -51,7 +51,13 @@ func applyRepository(ctx context.Context, q *db.Queries, e *Event) error {
 		arg.OffboardedAt = &at
 	default:
 	}
-	return q.UpsertRepositoryLifecycle(ctx, arg)
+	if err := q.UpsertRepositoryLifecycle(ctx, arg); err != nil {
+		return err
+	}
+	if e.Kind != KindRepoOnboarded {
+		return nil
+	}
+	return q.AdoptRepositorySchedule(ctx, db.AdoptRepositoryScheduleParams{ID: e.RepoID, OnboardedAt: at})
 }
 
 // applyRunScheduled sets next_due; a newer schedule wins.

@@ -11,6 +11,32 @@ import (
 	"time"
 )
 
+const adoptRepositorySchedule = `-- name: AdoptRepositorySchedule :exec
+UPDATE repositories r
+SET next_due = (e.data->>'next_due')::timestamptz, scheduled_at = e.occurred_at
+FROM (
+    SELECT data, occurred_at FROM events
+    WHERE repo_id = $1 AND kind = 'repo.run-scheduled' AND occurred_at >= $2::timestamptz
+    ORDER BY occurred_at DESC, id DESC
+    LIMIT 1
+) e
+WHERE r.id = $1 AND (r.scheduled_at IS NULL OR r.scheduled_at <= e.occurred_at)
+`
+
+type AdoptRepositoryScheduleParams struct {
+	ID          int64
+	OnboardedAt time.Time
+}
+
+// AdoptRepositorySchedule applies the newest repo.run-scheduled from the
+// onboarding on, for a schedule recorded before the onboarding created
+// the row (a workflow's records are not ordered, and a rebuild replays
+// them as they landed).
+func (q *Queries) AdoptRepositorySchedule(ctx context.Context, arg AdoptRepositoryScheduleParams) error {
+	_, err := q.db.Exec(ctx, adoptRepositorySchedule, arg.ID, arg.OnboardedAt)
+	return err
+}
+
 const advanceDashboard = `-- name: AdvanceDashboard :one
 INSERT INTO dashboards (repo_id, updated_at)
 VALUES ($1, $2)

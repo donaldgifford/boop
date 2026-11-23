@@ -119,6 +119,21 @@ UPDATE repositories
 SET next_due = @next_due::timestamptz, scheduled_at = @scheduled_at::timestamptz
 WHERE id = @id AND (scheduled_at IS NULL OR scheduled_at <= @scheduled_at);
 
+-- name: AdoptRepositorySchedule :exec
+-- AdoptRepositorySchedule applies the newest repo.run-scheduled from the
+-- onboarding on, for a schedule recorded before the onboarding created
+-- the row (a workflow's records are not ordered, and a rebuild replays
+-- them as they landed).
+UPDATE repositories r
+SET next_due = (e.data->>'next_due')::timestamptz, scheduled_at = e.occurred_at
+FROM (
+    SELECT data, occurred_at FROM events
+    WHERE repo_id = @id AND kind = 'repo.run-scheduled' AND occurred_at >= @onboarded_at::timestamptz
+    ORDER BY occurred_at DESC, id DESC
+    LIMIT 1
+) e
+WHERE r.id = @id AND (r.scheduled_at IS NULL OR r.scheduled_at <= e.occurred_at);
+
 -- name: SetRepositoryState :exec
 UPDATE repositories
 SET state = @state, state_at = @state_at::timestamptz
