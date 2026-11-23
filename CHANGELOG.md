@@ -9,6 +9,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 - *(activities)* Re-record every dashboard once after 0.14.0
 
+### Testing
+
+- *(activities)* Wrap the seeded dashboard row
+
 ## [0.14.0] - 2026-11-23
 
 ### Features
