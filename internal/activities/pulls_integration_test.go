@@ -238,6 +238,9 @@ func TestReconcilePullRequests_SyncsDashboards(t *testing.T) {
 	if n := items(); n != 2 {
 		t.Errorf("rate-limited items = %d, want 2", n)
 	}
+	if n := count(t, owner, "SELECT count(*) FROM dashboards WHERE repo_id = 1 AND issue_url = 'https://github.com/acme/api/issues/34'"); n != 1 {
+		t.Errorf("dashboards with the issue URL = %d, want 1", n)
+	}
 	reconcile()
 	if n := count(t, owner, "SELECT count(*) FROM events WHERE kind = 'dashboard.updated'"); n != 1 {
 		t.Errorf("dashboard.updated events after an unchanged pass = %d, want 1", n)

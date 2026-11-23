@@ -592,6 +592,11 @@ export interface components {
             open_prs: number;
             /** @description Unticked Dependency Dashboard items. */
             waiting: number;
+            /**
+             * Format: uri
+             * @description The repository's Dependency Dashboard issue on GitHub; null until boop has recorded the dashboard with its URL.
+             */
+            dashboard_url?: string | null;
         };
         /** @description A repository with its live state. */
         RepositoryDetail: components["schemas"]["Repository"] & {

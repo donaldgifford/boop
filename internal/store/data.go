@@ -97,6 +97,9 @@ type DashboardItem struct {
 type DashboardUpdated struct {
 	V     int             `json:"v"`
 	Items []DashboardItem `json:"items"`
+	// URL is the dashboard issue's page; empty in events recorded before
+	// it was kept.
+	URL string `json:"url,omitempty"`
 }
 
 // DashboardTicked is dashboard.ticked: a human ticked one item.

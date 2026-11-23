@@ -86,6 +86,22 @@ describe("pages", () => {
     expect(await operator.findByRole("button", { name: "Recheck" })).toBeTruthy();
   });
 
+  test("a repository links to its Dependency Dashboard for everyone", async () => {
+    const url = "https://github.com/acme-web/site/issues/34";
+    const known = mount("/repositories/7", (c) => {
+      c.setQueryData(keys.repository(7), { ...d.repository, dashboard_url: url });
+      c.setQueryData(keys.repositoryEvents(7), d.page([d.event]));
+    });
+    expect((await known.findByRole("button", { name: "Dashboard" })).getAttribute("href")).toBe(url);
+    cleanup();
+
+    const unknown = mount("/repositories/7", (c) => {
+      c.setQueryData(keys.repository(7), d.repository);
+      c.setQueryData(keys.repositoryEvents(7), d.page([d.event]));
+    });
+    expect((await unknown.findByRole("button", { name: "Dashboard" })).getAttribute("href")).toContain("https://github.com/acme-web/site/issues?q=");
+  });
+
   test("a repository's tab is in the URL", async () => {
     const { findByText } = mount("/repositories/7?tab=runs", (c) => {
       c.setQueryData(keys.repository(7), d.repository);

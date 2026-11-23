@@ -1,7 +1,7 @@
 ---
 id: IMPL-0005
 title: "Event store, API and management UI"
-status: Draft
+status: Completed
 author: Donald Gifford
 created: 2026-10-18
 ---
@@ -1314,9 +1314,8 @@ page stops using them.
   - the UI's Tailscale ingress;
   - a walk through every page against the real fleet (proxmox-go-sdk
     first).
-- [ ] 16.6 IMPL status → Completed, with the evidence.
-  `deferred - human required`: the fixes below are released and
-  deployed, and proxmox-go-sdk's waiting items match its dashboard.
+- [x] 16.6 IMPL status → Completed, with the evidence below (0.13.0 on
+  fartlab).
 
 #### Evidence and problems (fartlab, 2026-11-23)
 
@@ -1326,6 +1325,14 @@ On 0.12.0:
   requests.
 - proxmox-go-sdk's open PRs match GitHub (#35–#46).
 - A recheck from the UI ran end to end, and the timeline names the actor.
+
+On 0.13.0, after one `boopd store rebuild` and a discovery pass:
+
+- `next_due` set for 45 of 45 repositories (7 before the rebuild).
+- proxmox-go-sdk's waiting items match Dependency Dashboard #34: the two
+  rate-limited updates, go.yaml.in/yaml/v4 to v4.0.0 and go-vcr.v4 to
+  v4.0.8. Its 12 open PRs match.
+- 49 dashboards and 979 items (from 6 and 231); schema version 6.
 
 Problems found:
 
@@ -1342,6 +1349,14 @@ Problems found:
   changes, so a dashboard last edited before the store existed was never
   seen (6 of 45 recorded). Fixed: the discovery pass's reconcile reads
   the App's open issues and records each dashboard (schema version 6).
+- **Whole-repository boxes stored as items.** "Create all rate-limited
+  PRs", "rebase all open PRs" and the like have no branch, so
+  proxmox-go-sdk showed 3 rate-limited rows for 2 updates. Fixed: the
+  dashboard apply skips boxes without a branch; the next rewrite or a
+  rebuild drops the old rows.
+- **Dashboards for unmanaged repositories.** The reconcile records every
+  open dashboard of the App (49 for 45 repositories). Every read joins
+  `repositories`, so the extras never show; left as is.
 - **Deliveries degraded.** Five `delivery.missed` from before the store
   was enabled. Working as designed: misses are dated by GitHub's
   `delivered_at` and leave the 24 h window on their own.

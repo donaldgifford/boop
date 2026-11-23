@@ -49,11 +49,14 @@ ON CONFLICT (repo_id, number) DO UPDATE SET
 WHERE pull_requests.gh_updated_at <= excluded.gh_updated_at;
 
 -- name: AdvanceDashboard :one
--- AdvanceDashboard moves the dashboard's guard forward. No row means the
+-- AdvanceDashboard moves the dashboard's guard forward and keeps its
+-- issue URL (an update without one keeps the last). No row means the
 -- update is older than the one already applied.
-INSERT INTO dashboards (repo_id, updated_at)
-VALUES (@repo_id, @updated_at)
-ON CONFLICT (repo_id) DO UPDATE SET updated_at = excluded.updated_at
+INSERT INTO dashboards (repo_id, updated_at, issue_url)
+VALUES (@repo_id, @updated_at, sqlc.narg(issue_url))
+ON CONFLICT (repo_id) DO UPDATE SET
+    updated_at = excluded.updated_at,
+    issue_url = coalesce(excluded.issue_url, dashboards.issue_url)
 WHERE dashboards.updated_at <= excluded.updated_at
 RETURNING repo_id;
 

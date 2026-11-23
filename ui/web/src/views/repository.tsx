@@ -10,7 +10,7 @@ import { Timeline } from "@donaldgifford/design-system/blocks/timeline";
 import { Button } from "@donaldgifford/design-system/components/button";
 import { Card, CardContent } from "@donaldgifford/design-system/components/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@donaldgifford/design-system/components/tabs";
-import { IconRefresh } from "@tabler/icons-react";
+import { IconExternalLink, IconRefresh } from "@tabler/icons-react";
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 
 import type { Schemas } from "../api/client";
@@ -30,7 +30,7 @@ import { eventItem } from "../components/events";
 import { ListCard } from "../components/ListCard";
 import { Endpoint, parseScopeSearch, type ScopeSearch } from "../components/PageControls";
 import { repositoryRunColumns } from "../components/runs";
-import { WaitingSections } from "../components/waiting";
+import { dashboardURL, WaitingSections } from "../components/waiting";
 import { prId, pullColumns } from "./pulls";
 
 const TABS = ["timeline", "runs", "pulls", "waiting", "dependencies", "config"] as const;
@@ -71,7 +71,12 @@ function Repository({ repo }: { repo: Schemas["RepositoryDetail"] }) {
           </span>
         }
         description={<Endpoint path={`/api/v1/repositories/${repo.id}`} />}
-        actions={<RecheckButton id={repo.id} />}
+        actions={
+          <span className="flex items-center gap-2">
+            <DashboardButton repo={repo} />
+            <RecheckButton id={repo.id} />
+          </span>
+        }
       />
       <Card className="py-0">
         <StatStrip
@@ -122,6 +127,22 @@ function phaseSub(repo: Schemas["RepositoryDetail"]) {
   if (repo.running_since) return <>since <Time iso={repo.running_since} /></>;
   if (repo.budget_wait_until) return <>until <Time iso={repo.budget_wait_until} /></>;
   return undefined;
+}
+
+// DashboardButton opens the repository's Dependency Dashboard on GitHub,
+// for everyone who can see the repository.
+function DashboardButton({ repo }: { repo: Schemas["RepositoryDetail"] }) {
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      nativeButton={false}
+      render={<a href={dashboardURL(repo.slug, repo.dashboard_url)} target="_blank" rel="noopener noreferrer" />}
+    >
+      <IconExternalLink aria-hidden="true" className="size-3.5" />
+      Dashboard
+    </Button>
+  );
 }
 
 // RecheckButton is for operators only; a viewer never sees it (the API

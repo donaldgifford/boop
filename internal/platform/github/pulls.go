@@ -155,6 +155,7 @@ type Issue struct {
 	RepoID    int64
 	Number    int
 	Title     string
+	URL       string
 	Body      string
 	UpdatedAt time.Time
 }
@@ -172,7 +173,7 @@ const issueSearchQuery = `query($q: String!, $first: Int!, $after: String) {
     pageInfo { hasNextPage endCursor }
     nodes {
       ... on Issue {
-        number title body updatedAt
+        number title url body updatedAt
         repository { databaseId }
       }
     }
@@ -196,7 +197,7 @@ func (c *Client) SearchOpenBotIssues(ctx context.Context, appSlug, account strin
 	out := &IssueSearch{}
 	err := c.search(ctx, issueSearchQuery, OpenBotIssueQuery(appSlug, account), &out.Queries, &out.Cost, func(n *searchNode) {
 		out.Issues = append(out.Issues, Issue{
-			RepoID: n.Repository.DatabaseID, Number: n.Number, Title: n.Title, Body: n.Body, UpdatedAt: n.UpdatedAt,
+			RepoID: n.Repository.DatabaseID, Number: n.Number, Title: n.Title, URL: n.URL, Body: n.Body, UpdatedAt: n.UpdatedAt,
 		})
 	})
 	if err != nil {

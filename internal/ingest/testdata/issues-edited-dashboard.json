@@ -2,14 +2,14 @@
   "action": "edited",
   "changes": {
     "body": {
-      "from": "- [ ] \u003c!-- approve-all --\u003e"
+      "from": "- [ ] \u003c!-- approve-branch=renovate/x --\u003e"
     }
   },
   "installation": {
     "id": 7
   },
   "issue": {
-    "body": "- [x] \u003c!-- approve-all --\u003e",
+    "body": "- [x] \u003c!-- approve-branch=renovate/x --\u003e",
     "number": 1,
     "title": "Dependency Dashboard",
     "user": {

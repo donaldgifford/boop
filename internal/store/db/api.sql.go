@@ -926,6 +926,7 @@ SELECT r.id, r.installation_id, r.owner, r.slug, r.state, r.profile, r.onboarded
        r.next_due, r.last_run_id, r.last_run_at, r.last_outcome,
        (SELECT count(*) FROM pull_requests p WHERE p.repo_id = r.id AND p.state = 'open')::int AS open_prs,
        (SELECT count(*) FROM dashboard_items d WHERE d.repo_id = r.id AND d.ticked_at IS NULL)::int AS waiting,
+       (SELECT dsh.issue_url FROM dashboards dsh WHERE dsh.repo_id = r.id) AS dashboard_url,
        lower(r.slug)::text AS sort_slug
 FROM repositories r
 WHERE ($1::boolean OR lower(r.owner) = ANY($2::text[]))
@@ -969,6 +970,7 @@ type ListRepositoriesRow struct {
 	LastOutcome    *string
 	OpenPrs        int32
 	Waiting        int32
+	DashboardUrl   *string
 	SortSlug       string
 }
 
@@ -1009,6 +1011,7 @@ func (q *Queries) ListRepositories(ctx context.Context, arg ListRepositoriesPara
 			&i.LastOutcome,
 			&i.OpenPrs,
 			&i.Waiting,
+			&i.DashboardUrl,
 			&i.SortSlug,
 		); err != nil {
 			return nil, err

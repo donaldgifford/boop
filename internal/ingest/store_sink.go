@@ -197,7 +197,7 @@ func (s *StoreSink) dashboardEvents(e *github.IssuesEvent, r *Record) []derivedE
 		return []derivedEvent{{
 			at: &at, suffix: string(store.KindDashboardUpdated), kind: store.KindDashboardUpdated,
 			summary: fmt.Sprintf("dashboard #%d rewritten: %d items", issue.GetNumber(), len(after.Items)),
-			data:    &store.DashboardUpdated{V: 1, Items: dashboardItems(&after)},
+			data:    &store.DashboardUpdated{V: 1, Items: dashboardItems(&after), URL: issue.GetHTMLURL()},
 		}}
 	}
 	from := e.GetChanges().GetBody().GetFrom()

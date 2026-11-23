@@ -18,6 +18,7 @@ package fakegithub
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"slices"
 	"strconv"
@@ -190,7 +191,10 @@ func (s *Server) search(w http.ResponseWriter, body []byte) {
 		for i := range s.issues {
 			is := &s.issues[i]
 			if repo := s.repoLocked(is.RepoID); f.ownedBy(is.Author, repo) {
-				n := searchNodeJSON{Number: is.Number, Title: is.Title, Body: is.Body, UpdatedAt: is.UpdatedAt.UTC().Format(time.RFC3339)}
+				n := searchNodeJSON{
+					Number: is.Number, Title: is.Title, Body: is.Body, UpdatedAt: is.UpdatedAt.UTC().Format(time.RFC3339),
+					URL: fmt.Sprintf("https://github.com/%s/issues/%d", repo.Slug, is.Number),
+				}
 				n.Repository.DatabaseID = is.RepoID
 				hits = append(hits, n)
 			}

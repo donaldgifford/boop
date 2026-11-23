@@ -27,13 +27,16 @@ import (
 
 // applyDashboardUpdated replaces the repository's items with the
 // rewrite's, keeping first_seen_at for those that persist. A rewrite
-// older than the one applied is ignored.
+// older than the one applied is ignored. Boxes without a branch act on
+// the whole repository ("create all rate-limited PRs", "rebase all open
+// PRs", the manual run): they are not updates waiting on anyone, so they
+// are not items, and a tick on one stays in the timeline only.
 func applyDashboardUpdated(ctx context.Context, q *db.Queries, e *Event) error {
 	d, err := payload[*DashboardUpdated](e)
 	if err != nil {
 		return err
 	}
-	_, err = q.AdvanceDashboard(ctx, db.AdvanceDashboardParams{RepoID: e.RepoID, UpdatedAt: e.OccurredAt})
+	_, err = q.AdvanceDashboard(ctx, db.AdvanceDashboardParams{RepoID: e.RepoID, UpdatedAt: e.OccurredAt, IssueUrl: nullText(d.URL)})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -41,6 +44,9 @@ func applyDashboardUpdated(ctx context.Context, q *db.Queries, e *Event) error {
 		return err
 	}
 	for _, item := range d.Items {
+		if item.Branch == "" {
+			continue
+		}
 		deps, err := jsonValue(item.Deps, "[]")
 		if err != nil {
 			return err

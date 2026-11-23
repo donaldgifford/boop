@@ -42,11 +42,11 @@ export function groupBySection(items: readonly Item[]): { key: string; label: st
   return [...known, ...unknown];
 }
 
-// dashboardURL finds the repository's Dependency Dashboard issue. The
-// API does not keep the issue number (IMPL-0005 Phase 12 findings), so
-// this is GitHub's issue search on Renovate's title.
-export function dashboardURL(slug: string): string {
-  return `https://github.com/${slug}/issues?q=${encodeURIComponent('is:issue in:title "Dependency Dashboard"')}`;
+// dashboardURL is the repository's Dependency Dashboard issue: the
+// issue itself when the API knows it (dashboard_url), else GitHub's
+// issue search on Renovate's title.
+export function dashboardURL(slug: string, url?: string | null): string {
+  return url ?? `https://github.com/${slug}/issues?q=${encodeURIComponent('is:issue in:title "Dependency Dashboard"')}`;
 }
 
 // WaitingSections is a page of Dependency Dashboard items, one card per
