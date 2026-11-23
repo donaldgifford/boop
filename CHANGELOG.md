@@ -5,6 +5,10 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Features
+
+- *(ui)* Link a repository to its Dependency Dashboard from the header
+
 ### Bug Fixes
 
 - *(store)* Keep whole-repository dashboard boxes out of the items
