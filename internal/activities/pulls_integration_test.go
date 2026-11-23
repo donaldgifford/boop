@@ -232,6 +232,25 @@ func TestReconcilePullRequests_SyncsDashboards(t *testing.T) {
 		return count(t, owner, "SELECT count(*) FROM dashboard_items WHERE repo_id = 1 AND section = 'rate-limited'")
 	}
 
+	// What 0.13.0 recorded from the same GitHub edit: the old key, no URL,
+	// and a whole-repository box among the items.
+	recorded := store.Event{
+		Key: "reconcile:dashboard:1:34:" + t1.Format(time.RFC3339Nano), OccurredAt: t1, Kind: store.KindDashboardUpdated,
+		Source: store.SourceWorker, InstallationID: 1, RepoID: 1,
+		Data: &store.DashboardUpdated{V: 1, Items: []store.DashboardItem{
+			{Marker: "unlimit-branch", Branch: "renovate/yaml-v4", Section: "rate-limited"},
+			{Marker: "create-all-rate-limited-prs", Section: "rate-limited"},
+		}},
+	}
+	if _, err := owner.Exec(t.Context(),
+		"INSERT INTO dashboard_items (repo_id, marker, branch, section, title, first_seen_at, last_seen_at) VALUES (1, 'create-all-rate-limited-prs', '', 'rate-limited', '', $1, $1)",
+		t1); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.New(worker, storetest.RoleWorker, nil).Append(t.Context(), recorded); err != nil {
+		t.Fatal(err)
+	}
+
 	if got := reconcile(); got.Dashboards != 1 {
 		t.Errorf("first pass = %+v, want 1 dashboard", *got)
 	}
@@ -242,8 +261,11 @@ func TestReconcilePullRequests_SyncsDashboards(t *testing.T) {
 		t.Errorf("dashboards with the issue URL = %d, want 1", n)
 	}
 	reconcile()
-	if n := count(t, owner, "SELECT count(*) FROM events WHERE kind = 'dashboard.updated'"); n != 1 {
-		t.Errorf("dashboard.updated events after an unchanged pass = %d, want 1", n)
+	if n := count(t, owner, "SELECT count(*) FROM events WHERE kind = 'dashboard.updated'"); n != 2 {
+		t.Errorf("dashboard.updated events after an unchanged pass = %d, want 2 (0.13.0's and one re-record)", n)
+	}
+	if n := count(t, owner, "SELECT count(*) FROM dashboard_items WHERE repo_id = 1 AND branch = ''"); n != 0 {
+		t.Errorf("whole-repository boxes = %d, want 0", n)
 	}
 
 	gh.SetIssues(fakegithub.Issue{

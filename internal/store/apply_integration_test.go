@@ -472,7 +472,9 @@ func TestApply_ScheduleBeforeOnboarding(t *testing.T) {
 }
 
 // TestApply_DashboardSkipsGlobalBoxes: the boxes that act on the whole
-// repository are not items, and a rewrite drops any recorded before.
+// repository are not items, and a rewrite drops any recorded before,
+// even one recorded from the same GitHub edit (a re-record shares its
+// time).
 func TestApply_DashboardSkipsGlobalBoxes(t *testing.T) {
 	srv := migrated(t)
 	owner := pool(t, srv.OwnerDSN())
@@ -481,7 +483,7 @@ func TestApply_DashboardSkipsGlobalBoxes(t *testing.T) {
 	global := store.DashboardItem{Marker: "create-all-rate-limited-prs", Section: "rate-limited", Title: "Create all rate-limited PRs at once"}
 	if _, err := owner.Exec(t.Context(),
 		"INSERT INTO dashboard_items (repo_id, marker, branch, section, title, first_seen_at, last_seen_at) VALUES (1, $1, '', $2, $3, $4, $4)",
-		global.Marker, global.Section, global.Title, setupAt); err != nil {
+		global.Marker, global.Section, global.Title, base); err != nil {
 		t.Fatal(err)
 	}
 	updated := ev(store.KindDashboardUpdated, "du/global", base, 1, &store.DashboardUpdated{V: 1, Items: []store.DashboardItem{limited, global}})

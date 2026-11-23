@@ -83,7 +83,7 @@ func (q *Queries) DeleteDependencies(ctx context.Context, repoID int64) error {
 
 const deleteStaleDashboardItems = `-- name: DeleteStaleDashboardItems :exec
 DELETE FROM dashboard_items
-WHERE repo_id = $1 AND last_seen_at < $2
+WHERE repo_id = $1 AND (last_seen_at < $2 OR branch = '')
 `
 
 type DeleteStaleDashboardItemsParams struct {
@@ -92,7 +92,9 @@ type DeleteStaleDashboardItemsParams struct {
 }
 
 // DeleteStaleDashboardItems drops the items the latest rewrite no longer
-// lists: every one it lists was just seen at seen_at.
+// lists: every one it lists was just seen at seen_at. It also drops
+// whole-repository boxes (no branch), which are no longer items: a
+// re-record of the same GitHub edit shares their seen_at.
 func (q *Queries) DeleteStaleDashboardItems(ctx context.Context, arg DeleteStaleDashboardItemsParams) error {
 	_, err := q.db.Exec(ctx, deleteStaleDashboardItems, arg.RepoID, arg.SeenAt)
 	return err

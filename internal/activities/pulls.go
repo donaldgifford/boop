@@ -163,6 +163,14 @@ func (a *Activities) reconcileDashboards(
 	return nil
 }
 
+// dashboardRecordVersion is in the reconcile's dashboard key. Raise it
+// when what a dashboard.updated records changes, so the next pass
+// records every dashboard once more instead of skipping it as a
+// duplicate of the same GitHub edit. 2: the issue URL, and no
+// whole-repository boxes (0.14.0 recorded nothing new for an unchanged
+// issue).
+const dashboardRecordVersion = 2
+
 // dashboardEvent is dashboard.updated for a dashboard as GitHub last
 // described it, at GitHub's updated_at: the time ingest orders the same
 // dashboard's webhooks by.
@@ -174,7 +182,8 @@ func dashboardEvent(installationID int64, is *github.Issue, snap *dashboard.Snap
 		})
 	}
 	return store.Event{
-		Key:            fmt.Sprintf("reconcile:dashboard:%d:%d:%s", is.RepoID, is.Number, is.UpdatedAt.UTC().Format(time.RFC3339Nano)),
+		Key: fmt.Sprintf("reconcile:dashboard:v%d:%d:%d:%s",
+			dashboardRecordVersion, is.RepoID, is.Number, is.UpdatedAt.UTC().Format(time.RFC3339Nano)),
 		OccurredAt:     is.UpdatedAt,
 		Kind:           store.KindDashboardUpdated,
 		Source:         store.SourceWorker,
