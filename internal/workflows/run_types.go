@@ -466,7 +466,11 @@ type ReconcilePRsResult struct {
 	Open, Left int
 	// Synced is the pr.synced events appended, duplicates included.
 	Synced int
-	// Cost is the search's GraphQL cost.
+	// Dashboards is the bot's open Dependency Dashboards GitHub listed,
+	// each appended as dashboard.updated (an unchanged one is a
+	// duplicate).
+	Dashboards int
+	// Cost is the searches' GraphQL cost.
 	Cost int
 }
 

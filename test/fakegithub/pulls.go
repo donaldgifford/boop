@@ -49,6 +49,25 @@ type PR struct {
 	ClosedAt  *time.Time
 }
 
+// Issue is one open issue in a repository the fake serves: a bot's
+// Dependency Dashboard, for the issue search.
+type Issue struct {
+	RepoID int64
+	Number int
+	// Author is the login, "<slug>[bot]" for an App.
+	Author    string
+	Title     string
+	Body      string
+	UpdatedAt time.Time
+}
+
+// SetIssues replaces the fake's open issues.
+func (s *Server) SetIssues(issues ...Issue) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.issues = slices.Clone(issues)
+}
+
 // SetPullRequests replaces the fake's pull requests.
 func (s *Server) SetPullRequests(prs ...PR) {
 	s.mu.Lock()
@@ -76,7 +95,7 @@ func isSearch(body []byte) bool { return strings.Contains(string(body), "search(
 // searchFilter is the parsed search query.
 type searchFilter struct {
 	author, owner string
-	open          bool
+	open, issues  bool
 }
 
 func parseSearch(q string) searchFilter {
@@ -85,6 +104,8 @@ func parseSearch(q string) searchFilter {
 		switch {
 		case tok == "is:open":
 			f.open = true
+		case tok == "is:issue":
+			f.issues = true
 		case strings.HasPrefix(tok, "author:app/"):
 			f.author = strings.TrimPrefix(tok, "author:app/") + "[bot]"
 		case strings.HasPrefix(tok, "user:"):
@@ -95,8 +116,11 @@ func parseSearch(q string) searchFilter {
 }
 
 func (f *searchFilter) match(pr *PR, repo *Repo) bool {
-	return repo != nil && pr.Author == f.author && (!f.open || pr.State == PROpen) &&
-		(f.owner == "" || strings.HasPrefix(repo.Slug, f.owner+"/"))
+	return f.ownedBy(pr.Author, repo) && (!f.open || pr.State == PROpen)
+}
+
+func (f *searchFilter) ownedBy(author string, repo *Repo) bool {
+	return repo != nil && author == f.author && (f.owner == "" || strings.HasPrefix(repo.Slug, f.owner+"/"))
 }
 
 type labelJSON struct {
@@ -107,6 +131,7 @@ type searchNodeJSON struct {
 	Number           int    `json:"number"`
 	Title            string `json:"title"`
 	URL              string `json:"url"`
+	Body             string `json:"body,omitempty"`
 	State            string `json:"state"`
 	HeadRefName      string `json:"headRefName"`
 	CreatedAt        any    `json:"createdAt"`
@@ -142,7 +167,7 @@ type searchJSON struct {
 	} `json:"data"`
 }
 
-// search answers the open bot PR search: is:pr is:open author:app/<slug>
+// search answers the open bot PR or issue search: is:pr|is:issue is:open author:app/<slug>
 // [user:<account>], paged by first and after (an index).
 func (s *Server) search(w http.ResponseWriter, body []byte) {
 	var req struct {
@@ -161,9 +186,19 @@ func (s *Server) search(w http.ResponseWriter, body []byte) {
 	defer s.mu.Unlock()
 	s.searchQueries = append(s.searchQueries, req.Variables.Q)
 	var hits []searchNodeJSON
+	if f.issues {
+		for i := range s.issues {
+			is := &s.issues[i]
+			if repo := s.repoLocked(is.RepoID); f.ownedBy(is.Author, repo) {
+				n := searchNodeJSON{Number: is.Number, Title: is.Title, Body: is.Body, UpdatedAt: is.UpdatedAt.UTC().Format(time.RFC3339)}
+				n.Repository.DatabaseID = is.RepoID
+				hits = append(hits, n)
+			}
+		}
+	}
 	for i := range s.pulls {
 		pr := &s.pulls[i]
-		if repo := s.repoLocked(pr.RepoID); f.match(pr, repo) {
+		if repo := s.repoLocked(pr.RepoID); !f.issues && f.match(pr, repo) {
 			hits = append(hits, searchNode(pr, repo))
 		}
 	}

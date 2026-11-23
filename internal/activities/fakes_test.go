@@ -169,6 +169,10 @@ func (*fakeInstall) SearchOpenBotPRs(context.Context, string, string) (*github.P
 	return &github.PRSearch{}, nil
 }
 
+func (*fakeInstall) SearchOpenBotIssues(context.Context, string, string) (*github.IssueSearch, error) {
+	return &github.IssueSearch{}, nil
+}
+
 func (*fakeInstall) GetPullRequest(context.Context, int64, int) (*github.PullRequest, error) {
 	return nil, platform.ErrNotFound
 }
