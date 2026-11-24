@@ -6,7 +6,6 @@ import { LoadMore } from "@donaldgifford/design-system/blocks/load-more";
 import { PageHeader } from "@donaldgifford/design-system/blocks/page-header";
 import { StatStrip } from "@donaldgifford/design-system/blocks/stat-strip";
 import { Time } from "@donaldgifford/design-system/blocks/time";
-import { Timeline } from "@donaldgifford/design-system/blocks/timeline";
 import { Button } from "@donaldgifford/design-system/components/button";
 import { Card, CardContent } from "@donaldgifford/design-system/components/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@donaldgifford/design-system/components/tabs";
@@ -26,12 +25,12 @@ import {
   useRepositoryRuns,
 } from "../api/queries";
 import { StateBadge } from "../components/badges";
-import { eventItem } from "../components/events";
+import { EventTimeline } from "../components/events";
 import { ListCard } from "../components/ListCard";
 import { Endpoint, parseScopeSearch, type ScopeSearch } from "../components/PageControls";
 import { repositoryRunColumns } from "../components/runs";
 import { dashboardURL, WaitingSections } from "../components/waiting";
-import { prId, pullColumns } from "./pulls";
+import { prId, repositoryPullColumns } from "./pulls";
 
 const TABS = ["timeline", "runs", "pulls", "waiting", "dependencies", "config"] as const;
 type Tab = (typeof TABS)[number];
@@ -84,7 +83,9 @@ function Repository({ repo }: { repo: Schemas["RepositoryDetail"] }) {
             { label: "Live phase", value: repo.live ? (repo.phase ?? "—") : "unknown", sub: phaseSub(repo) },
             { label: "Profile", value: repo.profile },
             { label: "Last run", value: repo.last_outcome ?? "—", sub: repo.last_run_at ? <Time iso={repo.last_run_at} /> : undefined },
-            { label: "Next due", value: repo.next_due ? <Time iso={repo.next_due} /> : "—" },
+            // Relative, with the time under it: a date and time is wider
+            // than a stat's value has room for.
+            { label: "Next due", value: repo.next_due ? <Time iso={repo.next_due} style="relative" /> : "—", sub: repo.next_due ? <Time iso={repo.next_due} /> : undefined },
             { label: "Open pull requests", value: repo.open_prs },
             { label: "Waiting", value: repo.waiting },
           ]}
@@ -177,7 +178,7 @@ function TimelineTab({ id, live }: { id: number; live: boolean }) {
           <InlineEmpty>No events yet.</InlineEmpty>
         ) : (
           <>
-            <Timeline items={list.items.map(eventItem)} />
+            <EventTimeline events={list.items} />
             <LoadMore loaded={list.items.length} hasMore={list.hasNextPage} loading={list.isFetchingNextPage} onMore={() => void list.fetchNextPage()} noun="events" />
           </>
         )}
@@ -197,7 +198,7 @@ function PullsTab({ id }: { id: number }) {
   return (
     <ListCard
       list={list}
-      columns={pullColumns}
+      columns={repositoryPullColumns}
       label="Open pull requests, oldest first"
       noun="pull requests"
       getRowId={prId}
