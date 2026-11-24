@@ -8,7 +8,6 @@ import { OptionHeading, OptionItem } from "@donaldgifford/design-system/blocks/o
 import { PageHeader } from "@donaldgifford/design-system/blocks/page-header";
 import { SegmentedControl } from "@donaldgifford/design-system/blocks/segmented-control";
 import { Time } from "@donaldgifford/design-system/blocks/time";
-import { Timeline } from "@donaldgifford/design-system/blocks/timeline";
 import { Badge } from "@donaldgifford/design-system/components/badge";
 import { Button } from "@donaldgifford/design-system/components/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@donaldgifford/design-system/components/popover";
@@ -22,7 +21,7 @@ import { useState } from "react";
 import type { Schemas } from "../api/client";
 import { type PullRequestFilters, usePullRequest, usePullRequests } from "../api/queries";
 import { StateBadge } from "../components/badges";
-import { eventItem } from "../components/events";
+import { EventTimeline } from "../components/events";
 import { ListCard } from "../components/ListCard";
 import { PageControls, parseScopeSearch, type ScopeSearch } from "../components/PageControls";
 import { UpdateRow, UpdateSummary } from "../components/updates";
@@ -93,7 +92,16 @@ function parsePrId(id: string | undefined): { repoId: number; number: number } |
 }
 
 const helper = dataTableColumns<Schemas["PullRequest"]>();
-// pullColumns are the pull request list's, shared with a repository's tab.
+// pullDetailColumns are what a pull request row shows after naming it.
+const pullDetailColumns = [
+  helper.accessor("title", { header: "Update", cell: ({ row }) => <UpdateSummary updates={row.original.updates} fallback={row.original.title} /> }),
+  helper.accessor("state", { header: "State", cell: ({ getValue }) => <StateBadge state={getValue()} />, meta: { hideBelow: "compact" } }),
+  helper.accessor((pr) => pr.updates[0]?.manager ?? "", { id: "manager", header: "Manager", cell: ({ getValue }) => <span className="font-mono text-xs">{getValue()}</span>, meta: { hideBelow: "lg" } }),
+  helper.accessor("opened_at", { header: "Age", cell: ({ getValue }) => <AgeCell iso={getValue()} />, meta: { numeric: true } }),
+];
+
+// pullColumns are the pull request list's: the repository and number
+// first.
 export const pullColumns = helper.columns([
   helper.accessor("slug", {
     header: "Repository",
@@ -103,10 +111,14 @@ export const pullColumns = helper.columns([
       </span>
     ),
   }),
-  helper.accessor("title", { header: "Update", cell: ({ row }) => <UpdateSummary updates={row.original.updates} fallback={row.original.title} /> }),
-  helper.accessor("state", { header: "State", cell: ({ getValue }) => <StateBadge state={getValue()} />, meta: { hideBelow: "compact" } }),
-  helper.accessor((pr) => pr.updates[0]?.manager ?? "", { id: "manager", header: "Manager", cell: ({ getValue }) => <span className="font-mono text-xs">{getValue()}</span>, meta: { hideBelow: "lg" } }),
-  helper.accessor("opened_at", { header: "Age", cell: ({ getValue }) => <AgeCell iso={getValue()} />, meta: { numeric: true } }),
+  ...pullDetailColumns,
+]);
+
+// repositoryPullColumns are a repository's tab: the page names the
+// repository, so a row starts at its number.
+export const repositoryPullColumns = helper.columns([
+  helper.accessor("number", { header: "PR", cell: ({ getValue }) => <span className="font-mono text-xs text-muted-foreground">#{getValue()}</span> }),
+  ...pullDetailColumns,
 ]);
 
 function AgeCell({ iso }: { iso: string | null | undefined }) {
@@ -253,7 +265,7 @@ function PullDetail({ pr }: { pr: Schemas["PullRequestDetail"] }) {
           <InlineEmpty>No updates recorded for this branch yet.</InlineEmpty>
         )}
       </DetailSection>
-      <DetailSection title="Timeline">{pr.timeline.length > 0 ? <Timeline items={pr.timeline.map(eventItem)} /> : <InlineEmpty>No events.</InlineEmpty>}</DetailSection>
+      <DetailSection title="Timeline">{pr.timeline.length > 0 ? <EventTimeline events={pr.timeline} /> : <InlineEmpty>No events.</InlineEmpty>}</DetailSection>
     </>
   );
 }
