@@ -248,12 +248,17 @@ namespace:
 
 # A ResourceQuota on the runs namespace renders whenever
 # boopd.runs.maxConcurrent > 0, a backstop for the worker's capacity
-# lease. Its `pods` is maxConcurrent, plus the worker replicas and the
-# redis pod when they share the namespace; any other pod there takes a
-# slot.
+# lease. Its `pods` is maxConcurrent plus, when the roles share the
+# namespace, each Deployment's replicas and one rolling-update surge pod
+# (worker, redis, ingest, api, ui), the migrate hook's pod and
+# `extraPods`.
 resourceQuota:
   # -- Extra `spec.hard` entries, e.g. `limits.memory`.
   hard: {}
+  # -- Pods the chart does not manage that share the release namespace
+  # (a CNPG instance, a sidecar Deployment), added to the quota's `pods`
+  # when runs share it. Ignored with a dedicated `boopd.runs.namespace`.
+  extraPods: 0
 
 networkPolicies:
   # -- Render one NetworkPolicy per egress class, selecting Job pods by
@@ -728,7 +733,8 @@ secrets:
   existingSecret: ""
 
 serviceMonitor:
-  # -- Create Prometheus ServiceMonitor
+  # -- Create Prometheus ServiceMonitors: the worker's, and ingest's and
+  # the API's when those roles are enabled. The UI serves no metrics.
   enabled: false
   # -- Scrape interval
   interval: 30s
