@@ -114,7 +114,12 @@ func (o *OIDCConfig) tokenSource(ctx context.Context) (oauth2.TokenSource, error
 		cc.EndpointParams = url.Values{"audience": {o.Audience}}
 	}
 
-	ctx = context.WithValue(ctx, oauth2.HTTPClient, &http.Client{Timeout: tokenFetchTimeout})
+	// The source fetches every renewal with this context, for as long as
+	// the client lives. The roles dial with the context SIGTERM cancels
+	// and keep calling Temporal while they drain (the worker for up to a
+	// run's StartToClose), so the renewals must not end with it; each
+	// fetch is bounded by tokenFetchTimeout instead.
+	ctx = context.WithValue(context.WithoutCancel(ctx), oauth2.HTTPClient, &http.Client{Timeout: tokenFetchTimeout})
 
 	return oauth2.ReuseTokenSourceWithExpiry(nil, cc.TokenSource(ctx), tokenRefreshEarly), nil
 }
