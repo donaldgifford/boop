@@ -37,21 +37,48 @@ tests:
           path: metadata.labels["pod-security.kubernetes.io/warn"]
           value: restricted
 
-  - it: sizes the quota from maxConcurrent plus the worker and redis pods
+  - it: sizes the quota from maxConcurrent plus the worker and redis pods, each with a surge pod
     template: templates/resourcequota.yaml
     asserts:
       - equal:
           path: spec.hard.pods
-          value: "23"
+          value: "25"
 
-  - it: adds the ingest replicas to the quota when they share the namespace
+  - it: adds the ingest replicas and a surge pod to the quota when they share the namespace
     template: templates/resourcequota.yaml
     set:
       ingest.enabled: true
     asserts:
       - equal:
           path: spec.hard.pods
-          value: "25"
+          value: "28"
+
+  - it: adds the api, ui and migrate pods and extraPods when they share the namespace
+    template: templates/resourcequota.yaml
+    set:
+      ingest.enabled: true
+      store.enabled: true
+      api.enabled: true
+      ui.enabled: true
+      resourceQuota.extraPods: 1
+    asserts:
+      # 20 runs + worker 3 + redis 2 + ingest 3 + api 3 + ui 3 + migrate 1 + extra 1
+      - equal:
+          path: spec.hard.pods
+          value: "36"
+
+  - it: leaves the roles and extraPods out of a dedicated runs namespace's quota
+    template: templates/resourcequota.yaml
+    set:
+      api.enabled: true
+      ui.enabled: true
+      store.enabled: true
+      resourceQuota.extraPods: 3
+      boopd.runs.namespace: boopd-runs
+    asserts:
+      - equal:
+          path: spec.hard.pods
+          value: "20"
 
   - it: leaves ingest out of a dedicated runs namespace's quota
     template: templates/resourcequota.yaml
@@ -71,7 +98,7 @@ tests:
     asserts:
       - equal:
           path: spec.hard.pods
-          value: "22"
+          value: "23"
 
   - it: counts only Job pods when runs live in their own namespace
     template: templates/resourcequota.yaml

@@ -715,6 +715,10 @@
       "properties": {
         "hard": {
           "type": "object"
+        },
+        "extraPods": {
+          "type": "integer",
+          "minimum": 0
         }
       }
     },

@@ -189,6 +189,7 @@ renders with an existing Secret are identical.
 | redis.maxmemory | string | `"256mb"` | Memory cap; keys are evicted least-recently-used beyond it. |
 | redis.resources | object | `{"limits":{"cpu":"500m","memory":"300Mi"},"requests":{"cpu":"50m","memory":"300Mi"}}` | Resources; keep the memory limit above maxmemory. |
 | replicaCount | int | `2` | Worker replicas. A fixed, small count (ADR-0008 as amended by ADR-0009): runs are Jobs, so the worker never scales with load. |
+| resourceQuota.extraPods | int | `0` | Pods the chart does not manage that share the release namespace (a CNPG instance, a sidecar Deployment), added to the quota's `pods` when runs share it. Ignored with a dedicated `boopd.runs.namespace`. |
 | resourceQuota.hard | object | `{}` | Extra `spec.hard` entries, e.g. `limits.memory`. |
 | resources | object | `{"limits":{"cpu":"500m","memory":"256Mi"},"requests":{"cpu":"100m","memory":"128Mi"}}` | Container resource requests and limits |
 | revisionHistoryLimit | int | `3` | Number of old ReplicaSets retained for rollback. Defaults to 3 to keep the kubectl `get rs` view tidy; bump if you need more rollback headroom. Kubernetes default is 10. |
@@ -220,7 +221,7 @@ renders with an existing Secret are identical.
 | serviceAccount.annotations | object | `{}` | Annotations for the ServiceAccount |
 | serviceAccount.create | bool | `true` | Create a ServiceAccount |
 | serviceAccount.name | string | `""` | Override the ServiceAccount name |
-| serviceMonitor.enabled | bool | `false` | Create Prometheus ServiceMonitor |
+| serviceMonitor.enabled | bool | `false` | Create Prometheus ServiceMonitors: the worker's, and ingest's and the API's when those roles are enabled. The UI serves no metrics. |
 | serviceMonitor.interval | string | `"30s"` | Scrape interval |
 | serviceMonitor.labels | object | `{}` | Additional labels for ServiceMonitor |
 | store.enabled | bool | `false` | Record events and projections from the worker and ingest; needed by the API. |

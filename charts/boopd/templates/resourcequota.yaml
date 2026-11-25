@@ -2,21 +2,36 @@
 {{- if gt $pods 0 -}}
 {{- $ns := .Values.boopd.runs.namespace | default .Release.Namespace -}}
 {{- if eq $ns .Release.Namespace -}}
-{{- $pods = add $pods .Values.replicaCount -}}
+{{- /* Each Deployment sharing the namespace counts its replicas plus one
+       surge pod for a rolling update. */ -}}
+{{- $pods = add $pods .Values.replicaCount 1 -}}
 {{- if .Values.redis.enabled -}}
-{{- $pods = add $pods 1 -}}
+{{- $pods = add $pods 1 1 -}}
 {{- end -}}
 {{- if .Values.ingest.enabled -}}
-{{- $pods = add $pods .Values.ingest.replicaCount -}}
+{{- $pods = add $pods .Values.ingest.replicaCount 1 -}}
 {{- end -}}
+{{- if .Values.api.enabled -}}
+{{- $pods = add $pods .Values.api.replicaCount 1 -}}
+{{- end -}}
+{{- if .Values.ui.enabled -}}
+{{- $pods = add $pods .Values.ui.replicaCount 1 -}}
+{{- end -}}
+{{- /* The migrate hook's pod, or a one-off store rebuild. */ -}}
+{{- if .Values.store.enabled -}}
+{{- $pods = add $pods 1 -}}
+{{- end -}}
+{{- $pods = add $pods (int (.Values.resourceQuota.extraPods | default 0)) -}}
 {{- end -}}
 # A cluster-side backstop for runs.max_concurrent (IMPL-0001 OQ12). The
 # worker enforces the cap with a CapacityWorkflow lease; this quota only
 # matters if that is bypassed. It limits pods, not Jobs, so a Job past it
 # is created and its pod refused, and the run waits pending_timeout.
-# It covers every pod in the namespace: the worker and ingest replicas
-# and the redis pod are added when they share it, and any other pod there takes a slot,
-# so a dedicated runs namespace is the clean setup. Rendered whenever
+# It covers every pod in the namespace. When the roles share it, each
+# Deployment's replicas plus one surge pod for a rolling update (worker,
+# redis, ingest, api, ui) are added, and the migrate hook's pod with the
+# store. Pods the chart does not manage there (a CNPG instance) need
+# resourceQuota.extraPods. A dedicated runs namespace is the clean setup. Rendered whenever
 # boopd.runs.maxConcurrent > 0 (IMPL-0002 OQ7). With the sandbox, its
 # cpu and memory entries gain sandbox.overhead per run (IMPL-0006 10.5).
 apiVersion: v1

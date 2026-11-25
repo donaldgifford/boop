@@ -598,6 +598,12 @@ What the chart adds:
   instead. `boopd.renovate.configPath` became `configPaths` after v0.1.0.
   `resourceQuota.enabled` went after v0.2.1: the runs quota renders
   whenever `runs.maxConcurrent > 0`.
+- **The runs quota's `pods`:** `runs.maxConcurrent`, plus, when the runs
+  share the release namespace, each Deployment's replicas with one
+  rolling-update surge pod (worker, redis, ingest, api, ui), the migrate
+  hook's pod with `store.enabled`, and `resourceQuota.extraPods` for pods
+  the chart does not manage there, such as a CNPG instance. A pod past
+  the quota is refused, so an undercount stalls runs or a rollout.
 - **The sandbox:** `sandbox.enabled` also renders the `boopd-sandbox`
   ServiceAccount (`sandbox.serviceAccount.create`), an egress policy per
   sandboxed profile for `networkPolicies.provider` (`cilium`,
