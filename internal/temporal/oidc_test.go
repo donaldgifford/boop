@@ -121,6 +121,40 @@ func TestTokenCallback_RenewsShortLivedTokens(t *testing.T) {
 	}
 }
 
+// TestTokenSource_RenewsAfterItsContextEnds: the roles dial Temporal
+// with the context SIGTERM cancels, then keep using the client while
+// they drain (the worker for up to a run's StartToClose). A renewal after
+// the signal must still reach the token endpoint, or every completion the
+// draining worker reports is refused.
+func TestTokenSource_RenewsAfterItsContextEnds(t *testing.T) {
+	t.Parallel()
+
+	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	// Inside tokenRefreshEarly, so every call renews.
+	url, requests := tokenServer(t, 30)
+
+	ctx, sigterm := context.WithCancel(t.Context())
+
+	ts, err := testOIDC(t, url).tokenSource(ctx)
+	if err != nil {
+		t.Fatalf("tokenSource: %v", err)
+	}
+
+	cb := tokenCallback(ts, quiet)
+
+	if _, err := cb(t.Context()); err != nil {
+		t.Fatalf("before the signal: %v", err)
+	}
+
+	sigterm()
+
+	tok, err := cb(t.Context())
+	if err != nil || tok != "tok-2" {
+		t.Errorf("after the signal = %q, %v; want tok-2 (requests: %d)", tok, err, requests.Load())
+	}
+}
+
 func TestTokenCallback_EndpointError(t *testing.T) {
 	t.Parallel()
 
